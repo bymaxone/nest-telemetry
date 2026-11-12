@@ -10,7 +10,7 @@ applyTo: '**/*.spec.ts,**/*.e2e-spec.ts'
 
 ## Mutation testing threshold
 
-Break gate: **100%** (`thresholds.break: 100`), with the mutation inventory gate in `enforce` mode. A mutant no test can kill carries a `// Stryker disable next-line <Mutator>: <reason>` on its line, validated by `pnpm check:mutants`. Flag tests that use generic matchers (`toBeDefined()`, `toBeTruthy()`) where a value assertion is possible — they survive mutants.
+Break gate: **100%** (`thresholds.break: 100`). A mutant no test can kill carries a `// Stryker disable next-line <Mutator>: <reason>` on its line, validated by `pnpm check:mutants`. Flag tests that use generic matchers (`toBeDefined()`, `toBeTruthy()`) where a value assertion is possible — they survive mutants.
 
 ## Test structure
 

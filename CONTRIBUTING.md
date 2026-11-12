@@ -44,10 +44,9 @@ All of the following must pass:
 - **Lint** — ESLint (zero `any`, import order, security rules)
 - **Coverage** — 100% statements / branches / functions / lines, unit and e2e
 - **Build** — tsup produces ESM + CJS + `.d.ts` for every subpath
-- **Size** — every subpath stays within the budget in `scripts/check-size.mjs`
+- **Size** — every subpath stays within its size budget
 
-Mutation testing (`pnpm mutation`) must score 100. It runs on `main` through the shared
-workflow and on demand locally, not on every PR.
+Mutation testing (`pnpm mutation`) must score 100.
 
 ## Commits — Conventional Commits
 

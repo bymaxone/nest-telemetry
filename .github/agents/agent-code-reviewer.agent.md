@@ -72,7 +72,7 @@ You are a **senior code reviewer** for `@bymax-one/nest-telemetry`, a public npm
 ## Project Context (quick reference)
 
 - **Zero `dependencies`** — every runtime dep is an optional peer.
-- **Three subpaths**: `.` (SDK, no Nest), `./register` (`node --import` preload), `./nest` (module and shutdown flush).
+- **Subpaths**: `.` (SDK, no Nest), `./register` (`node --import` preload), `./nest` (module and shutdown flush).
 - **Library = mechanism, host = policy** — service name, sampling, probe paths and instrumentation choices are host options with safe defaults.
 - **100% coverage (unit and e2e) + 100% mutation score** — both are hard gates.
 - See `.github/copilot-instructions.md` for the command reference and rule list.

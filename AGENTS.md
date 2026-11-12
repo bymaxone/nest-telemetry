@@ -15,9 +15,8 @@ nothing normative belongs behind it.
   endpoints, probe-path filtering and which instrumentations run are options of the host, with safe
   defaults. The library never reads them from anywhere but the one documented environment boundary.
 - **Every `@opentelemetry/*` package is an optional peer.** A boot that is disabled loads none of them.
-  `pnpm check:runtime` proves it from the packed tarball, in ESM and in CommonJS.
 - **The SDK part does not require Nest.** The `.` entry and `./register` import no `@nestjs/*` package;
-  only `./nest` does. `pnpm check:runtime` loads `.` in plain Node with no `@nestjs/*` installed.
+  only `./nest` does.
 - **Environment reads happen in one place.** No other module touches `process.env`.
 
 ## 4. Security Specification
@@ -30,16 +29,12 @@ nothing normative belongs behind it.
 
 ## 5. Testing Strategy
 
-**100% statements / branches / functions / lines — unit and e2e, no exclusions.** Enforced by
-`jest.config.ts` (`pnpm test:cov`), `jest.e2e.config.ts` (`pnpm test:e2e`) and
-`jest.coverage.config.ts` (`pnpm test:cov:all`, unit and e2e together). `passWithNoTests` is off in
-all of them. Stryker (`break: 100`) is the deeper gate against weak tests, and the mutation
-inventory gate runs in `enforce` mode.
+**100% statements / branches / functions / lines — unit and e2e, no exclusions.** Enforced by the Jest
+configs (`pnpm test:cov`, `pnpm test:e2e`, `pnpm test:cov:all`); `passWithNoTests` is off. Stryker
+(`break: 100`) is the deeper gate against weak tests.
 
 A unit spec opens no socket and starts no server (`pnpm check:socket-gate`); a spec that needs an
-OTLP receiver or a child process lives in `test/e2e`. The `--import` preload cannot be loaded by Jest
-as a real preload, so its logic sits in a function that a unit spec reaches through
-`jest.isolateModules`, and `test/e2e` spawns a real `node --import` process to prove the ordering.
+OTLP receiver or a child process lives in `test/e2e`.
 
 An equivalent mutant is documented in the source as
 `// Stryker disable next-line <Mutator>: <reason>` and enforced by `pnpm check:mutants`; a reason
@@ -56,8 +51,7 @@ Subpaths also need a `typesVersions` entry: the `moduleResolution: node` algorit
 mode — never weaken it with `--profile` to silence a row.
 
 Each subpath is a separate bundle, so a module reached from two of them by a relative path is
-copied into each, and a copied class is a different injection token. `pnpm check:runtime` boots the
-packed tarball to catch it.
+copied into each, and a copied class is a different injection token.
 
 ## 7. Common Pitfalls
 

@@ -45,7 +45,7 @@
 **7. Testing — TDD, 100% Coverage (hard gate)**
 
 - Co-located unit tests (`*.spec.ts`), end-to-end tests in `test/e2e/` (`*.e2e-spec.ts`). A scenario comment on every `it()`.
-- **100% statements / branches / functions / lines** in the unit suite, in the e2e suite and in both together; `passWithNoTests` is off; nothing is excluded. Stryker runs at 100 with the mutation inventory gate in `enforce` mode.
+- **100% statements / branches / functions / lines** in the unit suite, in the e2e suite and in both together; `passWithNoTests` is off; nothing is excluded. Stryker runs at 100.
 
 **8. Build** — tsup → ESM (.mjs) + CJS (.cjs) + .d.ts/.d.cts per subpath. `sideEffects: false` except where a subpath is a preload. Peer deps always external.
 
@@ -62,9 +62,6 @@ Before a release: `pnpm test:cov:all`, `pnpm mutation`, `pnpm check:published`, 
 
 Equivalent mutants are documented **in the source** as
 `// Stryker disable next-line <Mutator>: <reason>`; `pnpm check:mutants` enforces the grammar.
-Mutation testing does not run in `prepublishOnly` or on pull requests — it runs on `main` through the
-shared reusable (`bymaxone/.github`) and on demand with `pnpm mutation`.
-
 ---
 
 ## Documentation changes ship

@@ -65,8 +65,6 @@ These are not vulnerabilities in `@bymax-one/nest-telemetry` itself:
 
 ## Security best practices for consumers
 
-The README's threat-model section lists what span data can carry and what the library redacts.
-
 Pin the package to an exact version in production, verify the publish provenance (`npm audit signatures`), and subscribe to the repository's security advisories so you receive notifications when a CVE is published.
 
 ## Acknowledgements

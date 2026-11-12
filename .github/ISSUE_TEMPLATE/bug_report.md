@@ -11,7 +11,7 @@ labels: bug
 
 ## Reproduction
 
-<!-- Minimal steps or a repo link. Include the subpath you were using (server / shared). -->
+<!-- Minimal steps or a repo link. Include the subpath you were using (`.`, `./register` or `./nest`). -->
 
 1.
 2.
@@ -37,6 +37,6 @@ labels: bug
 
 ## Sensitive-data impact
 
-- [ ] This bug causes PII / credentials to be logged unredacted (e.g. a redact path that does not match).
+- [ ] This bug causes PII / credentials to reach a span attribute unredacted (e.g. a redact path that does not match).
 
 > If **Yes**, please **STOP** and email `support@bymax.one` instead of opening a public issue — an unredacted-secret leak is a security report, not a public bug.

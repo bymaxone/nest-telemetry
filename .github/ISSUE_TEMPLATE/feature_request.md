@@ -11,7 +11,7 @@ labels: enhancement
 
 ## Proposed solution
 
-<!-- API shape, subpath it belongs to (server / shared), and how it would compose with existing primitives. -->
+<!-- API shape, subpath it belongs to (root / register / nest), and how it would compose with existing primitives. -->
 
 ## Alternatives considered
 
@@ -19,11 +19,11 @@ labels: enhancement
 
 ## Scope
 
-- Affects subpath(s): server / shared
+- Affects subpath(s): root / register / nest
 - Breaking change: yes / no
 - Requires a new peer dependency: yes / no
 
-## Logging / privacy considerations
+## Span data / privacy considerations
 
-<!-- If the feature touches the log pipeline, describe how it preserves existing invariants
-(default PII redaction, size-bounded entries, no secrets in messages, low-cardinality log keys). -->
+<!-- If the feature touches span data, describe how it preserves existing invariants
+(default redaction, no secrets in attributes or error messages). -->
