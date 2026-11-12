@@ -1,11 +1,9 @@
 import * as entry from './index'
 
-describe('register entry point', () => {
-  it('exposes exactly the scaffold marker, and it works', () => {
-    // Scenario: the barrel is loaded the way a consumer loads it; its export list is the
-    // public surface of this subpath, so an added or dropped name must change this test, and
-    // calling the export proves the re-export resolves to the real function.
-    expect(Object.keys(entry)).toEqual(['scaffoldMarker'])
-    expect(entry.scaffoldMarker()).toBe('nest-telemetry')
+describe('register entry point types', () => {
+  it('exports nothing, because the subpath is a preload', () => {
+    // Scenario: `./register` is imported for its effect, so its type surface is empty; an added
+    // export would change what a consumer can import from it.
+    expect(Object.keys(entry)).toEqual([])
   })
 })

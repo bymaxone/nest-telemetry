@@ -45,6 +45,8 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { runInstrumentationProofs } from './runtime-instrumentation-proofs.mjs'
+
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 // Read from the manifest rather than hard-coded: this gate exists to inspect
 // the packed artifact, so a rename must not leave it silently checking a
@@ -79,10 +81,14 @@ const PROBES = [
   {
     label: 'sdk without Nest or any OpenTelemetry package, disabled by the host',
     deny: ['@nestjs/', ...OTEL_PACKAGES],
+    // The preload runs when it is imported, so this group disables it through the standard switch.
+    env: { OTEL_SDK_DISABLED: 'true' },
+    expectNoWarnings: true,
     entries: {
       '.': ['startTelemetry', 'shutdownTelemetry', 'ignorePaths', 'DEFAULT_REDACTED_QUERY_PARAMS'],
-      './register': ['scaffoldMarker']
+      './register': []
     },
+    esmOnly: ['./register'],
     calls: [
       { entry: '.', fn: 'startTelemetry', args: [{ enabled: false }], expect: { enabled: false } },
       { entry: '.', fn: 'shutdownTelemetry', args: [], expect: {} }
@@ -92,6 +98,7 @@ const PROBES = [
     label: 'sdk without any OpenTelemetry package, disabled by OTEL_SDK_DISABLED',
     deny: ['@nestjs/', ...OTEL_PACKAGES],
     env: { OTEL_SDK_DISABLED: 'true' },
+    expectNoWarnings: true,
     entries: { '.': ['startTelemetry'] },
     calls: [{ entry: '.', fn: 'startTelemetry', args: [], expect: { enabled: false } }]
   },
@@ -101,6 +108,17 @@ const PROBES = [
     entries: { '.': ['startTelemetry'] },
     calls: [{ entry: '.', fn: 'startTelemetry', args: [{}], expect: { enabled: true } }],
     expectDenied: true
+  },
+  {
+    // The preload turns a start that cannot load its packages into a warning, so the host still
+    // boots; the denial is therefore seen as that warning rather than as a crash.
+    label: 'positive control: the preload, enabled, reaches the denied packages and only warns',
+    deny: ['@nestjs/', ...OTEL_PACKAGES],
+    entries: { './register': [] },
+    esmOnly: ['./register'],
+    calls: [],
+    files: ['probe.mjs'],
+    expectOutput: ['BYMAX_TELEMETRY_START_FAILED', 'denied resolution of @opentelemetry']
   },
   {
     label: 'nest without any OpenTelemetry package',
@@ -126,14 +144,29 @@ registerHooks({
 `
 
 const probeBody = (format) => `
+// A warning is printed, so a probe can assert on what the library reported.
+process.on('warning', (warning) => console.log('  warning ' + warning.code + ': ' + warning.message))
 const ENTRIES = JSON.parse(process.env.PROBE_ENTRIES)
 const CALLS = JSON.parse(process.env.PROBE_CALLS)
+const ESM_ONLY = JSON.parse(process.env.PROBE_ESM_ONLY)
 const load = (specifier) => ${format === 'ESM' ? 'import(specifier)' : 'Promise.resolve(require(specifier))'}
 const specifierOf = (subpath) => '${packageName}' + subpath.slice(1)
 
 async function run() {
   const failures = []
   for (const [subpath, names] of Object.entries(ENTRIES)) {
+    if (${format === 'CJS'} && ESM_ONLY.includes(subpath)) {
+      // The CommonJS face of an ES-module-only entry must refuse, and say how to use it.
+      try {
+        await load(specifierOf(subpath))
+        failures.push(subpath + ' loaded from CommonJS, but it must refuse')
+      } catch (error) {
+        if (!String(error.message).includes('node --import')) {
+          failures.push(subpath + ' refused with something else: ' + error.message)
+        }
+      }
+      continue
+    }
     const loaded = await load(specifierOf(subpath))
     const absent = names.filter((name) => !(name in loaded))
     if (absent.length > 0) failures.push(subpath + ' does not export: ' + absent.join(', '))
@@ -239,7 +272,7 @@ try {
 
   for (const probe of PROBES) {
     console.log(`  ${probe.label}`)
-    for (const file of ['probe.mjs', 'probe.cjs']) {
+    for (const file of probe.files ?? ['probe.mjs', 'probe.cjs']) {
       try {
         const output = run('node', ['--import', './deny.mjs', file], {
           cwd: consumerDir,
@@ -248,10 +281,26 @@ try {
             ...probe.env,
             DENY_PREFIXES: JSON.stringify(probe.deny),
             PROBE_ENTRIES: JSON.stringify(probe.entries),
-            PROBE_CALLS: JSON.stringify(probe.calls)
+            PROBE_CALLS: JSON.stringify(probe.calls),
+            PROBE_ESM_ONLY: JSON.stringify(probe.esmOnly ?? [])
           }
         })
-        if (probe.expectDenied) {
+        if (probe.expectOutput) {
+          const missing = probe.expectOutput.filter((text) => !output.includes(text))
+          if (missing.length > 0) {
+            console.error(`  ✗ ${file}: the output lacks ${missing.join(', ')}`)
+            failed = true
+          } else {
+            console.log(
+              `  ✓ ${file}: the library warned and the boot went on, as the control requires`
+            )
+          }
+        } else if (probe.expectNoWarnings && output.includes('  warning ')) {
+          // A disabled boot has nothing to warn about. The preload turns a failed start into a
+          // warning, so a disabled boot that wrongly loaded a denied package would otherwise pass.
+          console.error(`  ✗ ${file}: a disabled boot printed a warning: ${output.trim()}`)
+          failed = true
+        } else if (probe.expectDenied) {
           console.error(`  ✗ ${file}: the positive control passed, so the denial cannot see a load`)
           failed = true
         } else {
@@ -269,6 +318,11 @@ try {
       }
     }
   }
+
+  console.log('  real node --import processes against the unpacked tarball')
+  const proofFailures = await runInstrumentationProofs({ consumerDir, packageName })
+  for (const failure of proofFailures) console.error(`  ✗ ${failure}`)
+  if (proofFailures.length > 0) failed = true
 } catch (error) {
   console.error(`✗ gate setup failed: ${error.message}`)
   if (error.stderr) process.stderr.write(error.stderr)
