@@ -16,7 +16,7 @@ Documentation only; the built files are the same as in 1.0.0.
 
 - The changelog dates 1.0.0, which the published package still lists as unreleased.
 - The README follows the structure of the other `@bymax-one` libraries. Its claims are those of 1.0.0,
-  plus one: a `service.name` set only in `OTEL_RESOURCE_ATTRIBUTES` reaches the spans while the `env`
+  and a `service.name` set only in `OTEL_RESOURCE_ATTRIBUTES` reaches the spans while the `env`
   or `service` resource detector is enabled, and the missing-service-name warning still fires.
 - `docs/mutation_testing_results.md` records the cold mutation run that gated 1.0.0.
 
