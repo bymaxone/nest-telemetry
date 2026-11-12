@@ -15,6 +15,7 @@ import {
   buildInstrumentationConfig,
   buildResourceAttributes,
   planSignals,
+  warnAboutMissingServiceName,
   warnAboutUnsafeOptions
 } from './assembly'
 import { readTelemetryEnvironment } from './environment'
@@ -150,6 +151,7 @@ function buildSdk(
  */
 async function boot(options: TelemetryOptions, env: TelemetryEnvironment): Promise<RunningHandle> {
   warnAboutUnsafeOptions(options)
+  warnAboutMissingServiceName(options, env)
   const sdk = buildSdk(await loadPackages(), options, env)
   sdk.start()
   const handle = createHandle(() => sdk.shutdown())

@@ -165,16 +165,32 @@ describe('startTelemetry', () => {
     it('omits the redacting processor and warns when URL redaction is opted out', async () => {
       // Scenario: the explicit opt-out removes the processor and says so on the warning channel.
       const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
-      await startTelemetry({ unsafe: { disableUrlRedaction: true }, env: {} })
+      await startTelemetry({ serviceName: 'api', unsafe: { disableUrlRedaction: true }, env: {} })
       const [options] = mockNodeSdk.mock.calls[0] as unknown as [Record<string, unknown>]
       expect(options['spanProcessors']).toEqual([{ kind: 'batch' }])
       expect(emitWarning).toHaveBeenCalledTimes(1)
     })
 
+    it('warns once about the missing service name, and not when a name is given', async () => {
+      // Scenario: a start with no name warns, with the library code; a start that names the
+      // service does not.
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      await startTelemetry({ env: {} })
+      expect(emitWarning).toHaveBeenCalledTimes(1)
+      expect(emitWarning).toHaveBeenCalledWith(expect.stringContaining('No service name is set'), {
+        type: 'Warning',
+        code: 'BYMAX_TELEMETRY_SERVICE_NAME_MISSING'
+      })
+      clearHandle()
+      emitWarning.mockClear()
+      await startTelemetry({ serviceName: 'api', env: {} })
+      expect(emitWarning).not.toHaveBeenCalled()
+    })
+
     it('does not warn when nothing is opted out', async () => {
       // Scenario: the default boot is silent.
       const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
-      await startTelemetry({ env: {} })
+      await startTelemetry({ serviceName: 'api', env: {} })
       expect(emitWarning).not.toHaveBeenCalled()
     })
 

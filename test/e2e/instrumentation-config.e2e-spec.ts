@@ -24,6 +24,9 @@ const PINO = '@opentelemetry/instrumentation-pino'
 let collector: Collector
 
 beforeEach(async () => {
+  // A start with no service name warns on the process; the suites that do not assert on it keep
+  // the output quiet.
+  jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
   collector = await startCollector()
   process.env['OTEL_EXPORTER_OTLP_ENDPOINT'] = collector.endpoint
 })
