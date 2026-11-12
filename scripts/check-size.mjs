@@ -38,12 +38,13 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //     command line out of the exported resource, the start cache and the handle lifecycle.
 //   - register: 3.50 KiB real -> 3.7 KiB budget (~5% headroom). The preload bundles its own copy
 //     of the start logic: the copies share their state through `globalThis`, not through a module.
-//   - nest: 1.21 KiB real -> 1.3 KiB budget (~7% headroom), the module and the shutdown hook. A
+//   - nest: 1.30 KiB real -> 1.4 KiB budget (~7% headroom), the module and the shutdown hook with
+//     every step of failure reporting guarded. A
 //     budget is re-derived from the built artifact with modest headroom, never nudged.
 const BUDGETS = [
   { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 3.5 * 1024 },
   { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 3.7 * 1024 },
-  { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 1.3 * 1024 }
+  { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 1.4 * 1024 }
 ]
 
 const fmt = (n) => `${(n / 1024).toFixed(2)} kB`
