@@ -132,6 +132,24 @@ export function buildInstrumentationConfig(
 }
 
 /**
+ * Emits one process warning when no service name is set and the specification default applies.
+ *
+ * @param options - The start options.
+ * @param env - The parsed environment.
+ */
+export function warnAboutMissingServiceName(
+  options: TelemetryOptions,
+  env: TelemetryEnvironment
+): void {
+  if (env.serviceName === undefined && nonBlank(options.serviceName) === undefined) {
+    process.emitWarning(
+      'No service name is set, so spans are exported as unknown_service:node. Set OTEL_SERVICE_NAME or the serviceName option.',
+      { type: 'Warning', code: 'BYMAX_TELEMETRY_SERVICE_NAME_MISSING' }
+    )
+  }
+}
+
+/**
  * Emits one process warning per redaction that was turned off.
  *
  * @param options - The start options.

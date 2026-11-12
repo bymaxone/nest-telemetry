@@ -2,6 +2,7 @@ import {
   buildInstrumentationConfig,
   buildResourceAttributes,
   planSignals,
+  warnAboutMissingServiceName,
   warnAboutUnsafeOptions
 } from './assembly'
 import { readTelemetryEnvironment } from './environment'
@@ -362,4 +363,45 @@ describe('warnAboutUnsafeOptions', () => {
     )
     expect(emitWarning).toHaveBeenCalledTimes(3)
   })
+})
+
+describe('warnAboutMissingServiceName', () => {
+  let emitWarning: jest.SpyInstance
+
+  beforeEach(() => {
+    emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+  })
+
+  it('warns once, with the library code, when no service name is set', () => {
+    // Scenario: every span would be exported as unknown_service:node, which groups unrelated
+    // services under one name; the host is told how to fix it, and the start is not refused.
+    warnAboutMissingServiceName({}, environment())
+    expect(emitWarning).toHaveBeenCalledTimes(1)
+    expect(emitWarning).toHaveBeenCalledWith(
+      'No service name is set, so spans are exported as unknown_service:node. Set OTEL_SERVICE_NAME or the serviceName option.',
+      { type: 'Warning', code: 'BYMAX_TELEMETRY_SERVICE_NAME_MISSING' }
+    )
+  })
+
+  it.each([
+    ['the serviceName option', { serviceName: 'api' }, {}],
+    ['OTEL_SERVICE_NAME', {}, { OTEL_SERVICE_NAME: 'api' }],
+    ['both', { serviceName: 'api' }, { OTEL_SERVICE_NAME: 'billing' }]
+  ] satisfies [string, TelemetryOptions, NodeJS.ProcessEnv][])(
+    'stays silent when the name comes from %s',
+    (_source, options, raw) => {
+      // Scenario: a name from either source means the specification default is not used.
+      warnAboutMissingServiceName(options, environment(raw))
+      expect(emitWarning).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([{ serviceName: '' }, { serviceName: '   ' }])(
+    'warns when the host name is blank: %p',
+    (options) => {
+      // Scenario: a blank name counts as absent, exactly as it does for the resource.
+      warnAboutMissingServiceName(options, environment({ OTEL_SERVICE_NAME: '  ' }))
+      expect(emitWarning).toHaveBeenCalledTimes(1)
+    }
+  )
 })

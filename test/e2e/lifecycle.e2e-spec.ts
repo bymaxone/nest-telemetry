@@ -9,6 +9,9 @@ import type { Collector } from './fixtures/collector'
 let collector: Collector
 
 beforeEach(async () => {
+  // A start with no service name warns on the process; the suites that do not assert on it keep
+  // the output quiet.
+  jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
   collector = await startCollector()
   process.env['OTEL_EXPORTER_OTLP_ENDPOINT'] = collector.endpoint
 })
@@ -106,6 +109,29 @@ describe('service identity on the exported resource', () => {
     const attributes = resourceAttributes(collector.bodies[0] ?? '')
     expect(attributes['service.name']).toBe('unknown_service:node')
     expect(attributes).not.toHaveProperty(['service.version'])
+  })
+})
+
+describe('the service name warning', () => {
+  it('warns once, with the library code, when no service name is set, and the start goes ahead', async () => {
+    // Scenario: tracing must never take down a boot, so a missing name warns and starts anyway.
+    const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    const handle = await startTelemetry({ env: {} })
+    expect(handle.enabled).toBe(true)
+    expect(emitWarning).toHaveBeenCalledTimes(1)
+    expect(emitWarning).toHaveBeenCalledWith(expect.stringContaining('OTEL_SERVICE_NAME'), {
+      type: 'Warning',
+      code: 'BYMAX_TELEMETRY_SERVICE_NAME_MISSING'
+    })
+    await handle.shutdown()
+  })
+
+  it('stays silent when the service is named', async () => {
+    // Scenario: a named service has nothing to warn about.
+    const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    const handle = await startTelemetry({ serviceName: 'api', env: {} })
+    expect(emitWarning).not.toHaveBeenCalled()
+    await handle.shutdown()
   })
 })
 
