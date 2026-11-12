@@ -38,28 +38,23 @@ Every `@opentelemetry/*` package is an **optional peer dependency**, and a boot 
 
 ### Support matrix
 
-| Part                     | Supported                                                                                                              |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| Node.js                  | 24 or newer                                                                                                            |
-| NestJS (`./nest` only)   | 11                                                                                                                     |
-| Applications             | CommonJS and native ES modules                                                                                         |
-| OpenTelemetry generation | `sdk-node` and exporters 0.301.x, `sdk-trace` and `resources` 3.1.x, `api` 1.10.x, `auto-instrumentations-node` 0.83.x |
-
-The OpenTelemetry generation is the one the tests run against; how a range is widened, and how the next release is checked, is in [OpenTelemetry Versions](#-opentelemetry-versions).
+| Part                     | Supported                                                     |
+| ------------------------ | ------------------------------------------------------------- |
+| Node.js                  | 24 or newer                                                   |
+| NestJS (`./nest` only)   | 11                                                            |
+| Applications             | CommonJS and native ES modules                                |
+| OpenTelemetry generation | The one in [OpenTelemetry Versions](#-opentelemetry-versions) |
 
 **Native ES modules.** Auto-instrumentation patches CommonJS modules as they load, and native ES modules only through a loader hook. The preload registers that hook, and it needs the optional peer `@opentelemetry/instrumentation`. Without that package, a native-ESM application gets no auto-instrumentation at all; CommonJS code is unaffected, and the start warns (`BYMAX_TELEMETRY_ESM_HOOK_UNAVAILABLE`) so the gap is not silent. Measured on real consumers: an ESM application with the SDK started and no hook exported no HTTP span; with the hook it did.
 
 ### Why nest-telemetry?
 
-- **💤 Zero cost when disabled** — A boot with `OTEL_SDK_DISABLED=true` registers no loader hook and loads no OpenTelemetry package, `@opentelemetry/api` included. This is checked from the packed tarball in ESM and CommonJS, with a positive control that proves the check can fail.
-- **🔒 Secret-safe by default** — Span data is a leak surface: a magic-link token in a query string, a Redis `EVAL` payload, a secret in a command line. Each is redacted by default, and turning one off takes an explicit option that also emits a warning. There is no environment variable that turns redaction off.
-- **🚦 Preload ordering done right** — The SDK has to start before the libraries it instruments are loaded, and starting it from `main.ts` is too late. A `node --import` preload runs first, and this package ships one that reads only the standard `OTEL_*` variables.
-- **🛡️ Never takes the host down** — Each failure the preload can meet is a warning and the application still starts; a flush the collector refuses is reported by the Nest module, never thrown into your shutdown path.
-- **🔌 Your policy, your rules** — Enabling, probe paths, service name and version, extra redacted parameters and the structured logger are all passed in. Nothing is hardcoded to one deployment.
+- **💤 Zero cost when disabled** — A boot with `OTEL_SDK_DISABLED=true` registers no loader hook and loads no OpenTelemetry package, `@opentelemetry/api` included; this is checked from the packed tarball in ESM and CommonJS, with a positive control that proves the check can fail.
+- **🔒 Secret-safe by default** — Span data is a leak surface, so URL query strings, Redis arguments and the process command line are redacted unless an explicit option, which also warns, turns one off. No environment variable does.
+- **🚦 Preload ordering done right** — The SDK has to start before the libraries it instruments load, and `main.ts` is too late; a `node --import` preload runs first and reads only the standard `OTEL_*` variables.
+- **🔌 Your policy, your rules** — Enabling, probe paths, service name and version, extra redacted parameters and the structured logger are passed in.
 
-```
-pnpm add @bymax-one/nest-telemetry
-```
+Install it with the OpenTelemetry peers you use: the command is in [Quick Start](#-quick-start).
 
 ---
 
@@ -68,10 +63,9 @@ pnpm add @bymax-one/nest-telemetry
 ### 🚦 Boot and lifecycle
 
 - ✅ **`node --import` preload** — Registers the ES-module loader hook, starts the SDK from the standard variables and flushes on a natural exit
-- ✅ **Programmatic start** — `startTelemetry(options)` for plain Node, and `shutdownTelemetry()` to drain it
 - ✅ **One SDK per process** — The handle lives under a `Symbol.for` key on `globalThis`, so an ES-module preload and a CommonJS application share it, and a second start returns the one already running
-- ✅ **One shared flush** — Overlapping shutdown callers wait for the same flush, and a shutdown that arrives while the SDK is still starting waits for the start and then stops what it built
 - ✅ **Graceful Nest shutdown** — `TelemetryModule` awaits the flush as part of the application's own shutdown, under the stable failure key `TRACING_FLUSH_FAILED`
+- ✅ **Never takes the host down** — Each failure the preload can meet is a warning and the application still starts; a flush the collector refuses is reported by the Nest module, never thrown into your shutdown path
 
 ### 🔐 Redaction
 
@@ -81,30 +75,17 @@ pnpm add @bymax-one/nest-telemetry
 - ✅ **Command line kept out of the resource** — `process.command_args` and `process.command_line` are dropped
 - ✅ **Explicit, loud opt-outs** — Each off switch is a literal `unsafe.*: true` and emits a `SecurityWarning`
 
-### 🎛️ Policy knobs
-
-- ✅ **`ignorePaths(patterns)`** — Keeps probe and metrics paths out of the traces, matching the path with its query cut
-- ✅ **Traces only by default** — Metrics and logs stay off unless the standard variables name an exporter
-- ✅ **Resource detector selection** — `OTEL_NODE_RESOURCE_DETECTORS`, under the specification's names and the SDK's older ones
-- ✅ **Batch processor mapping** — `OTEL_BSP_*` are mapped onto the batch span processor the library passes
-
 ---
 
 ## 📦 Subpath Exports
 
 One package, separate entry points. Import only what your app needs:
 
-| Subpath      | Import                               | Purpose                                                                                      |    Dependencies     |
-| ------------ | ------------------------------------ | -------------------------------------------------------------------------------------------- | :-----------------: |
-| **SDK**      | `@bymax-one/nest-telemetry`          | `startTelemetry`, `shutdownTelemetry`, `ignorePaths`, `DEFAULT_REDACTED_QUERY_PARAMS`, types | OpenTelemetry peers |
-| **Register** | `@bymax-one/nest-telemetry/register` | The preload for `node --import`; importing it runs it, and it exports nothing                | OpenTelemetry peers |
-| **Nest**     | `@bymax-one/nest-telemetry/nest`     | `TelemetryModule`, `TelemetryShutdownHook`, `TELEMETRY_LOGGER`, `TELEMETRY_FLUSH_FAILED_KEY` |      NestJS 11      |
-
-```
-SDK (no @nestjs/*)
-   ↑            ↑
-Register      Nest
-```
+| Subpath      | Import                               | Purpose                                                                                                                      |    Dependencies     |
+| ------------ | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | :-----------------: |
+| **SDK**      | `@bymax-one/nest-telemetry`          | `startTelemetry`, `shutdownTelemetry`, `ignorePaths`, `DEFAULT_REDACTED_QUERY_PARAMS`, types                                 | OpenTelemetry peers |
+| **Register** | `@bymax-one/nest-telemetry/register` | The preload for `node --import`; importing it runs it, and it exports nothing                                                | OpenTelemetry peers |
+| **Nest**     | `@bymax-one/nest-telemetry/nest`     | `TelemetryModule`, `TelemetryShutdownHook`, `TELEMETRY_LOGGER`, `TELEMETRY_FLUSH_FAILED_KEY`, `ITelemetryErrorLogger` (type) |      NestJS 11      |
 
 The SDK entry and `./register` import no `@nestjs/*` package; only `./nest` does. Requiring `./register` from CommonJS throws and names `node --import`.
 
@@ -174,35 +155,6 @@ await telemetry.shutdown()
 
 This package installs no signal handler and shows none, because handling signals belongs to the application: a `SIGTERM` listener replaces Node's default termination, so it has to end the process itself once its work is done. `startTelemetry` resolves to a handle with `enabled` and `shutdown()`. Starting twice returns the handle already running, including across two copies of the module (an ES-module preload and a CommonJS application share the handle through `globalThis`).
 
-### Using with the bymax-one template
-
-If you build on the bymax-one backend template, this package is its tracing library, selected by default and optional: a derivation that does not select it deletes the dependency and its wiring together. The template keeps the policy and passes it in:
-
-- its own `OTEL_ENABLED` switch becomes `enabled`;
-- its probe paths become `ignoreIncomingRequest: ignorePaths(...)`;
-- its service name and version variables become `serviceName` and `serviceVersion`, with `OTEL_SERVICE_NAME` still overriding;
-- `TELEMETRY_LOGGER` is bound to its structured logger, so a failed flush keeps arriving under the key `TRACING_FLUSH_FAILED` that alerts already match.
-
-Some behaviours differ from the code the template used before: the service name has no library default (the template passes its own), the handle is shared under a `Symbol.for` key instead of a string, and turning a redaction off now warns.
-
-```ts
-import { Module } from '@nestjs/common'
-
-import { TELEMETRY_LOGGER, TelemetryModule } from '@bymax-one/nest-telemetry/nest'
-
-class AppLogger {
-  errorStructured(logKey: string, error: Error): void {
-    console.error(logKey, error.message)
-  }
-}
-
-@Module({
-  imports: [TelemetryModule],
-  providers: [AppLogger, { provide: TELEMETRY_LOGGER, useExisting: AppLogger }]
-})
-export class AppModule {}
-```
-
 ---
 
 ## ⚙️ Configuration
@@ -230,13 +182,13 @@ Every field is the host's policy, and none is required.
 
 The library reads these in one source file, and a test fails if any other file names `process.env`:
 
-| Variable                                                                                                          | Effect                                                                                                               |
-| ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `OTEL_SDK_DISABLED`                                                                                               | `true` (any letter case) disables the SDK.                                                                           |
-| `OTEL_SERVICE_NAME`                                                                                               | Service name; overrides the option.                                                                                  |
-| `OTEL_METRICS_EXPORTER`, `OTEL_LOGS_EXPORTER`                                                                     | Metrics and logs are exported only when these name an exporter.                                                      |
-| `OTEL_BSP_MAX_QUEUE_SIZE`, `OTEL_BSP_SCHEDULE_DELAY`, `OTEL_BSP_EXPORT_TIMEOUT`, `OTEL_BSP_MAX_EXPORT_BATCH_SIZE` | Mapped onto the batch span processor the library passes; the SDK applies them only to one it builds itself.          |
-| `OTEL_NODE_RESOURCE_DETECTORS`                                                                                    | Selects resource detectors, under the specification's names (`service`, `host`, `process`) and the SDK's older ones. |
+| Variable                                                                                                          | Effect                                                                                                                                    |
+| ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `OTEL_SDK_DISABLED`                                                                                               | `true` (any letter case) disables the SDK.                                                                                                |
+| `OTEL_SERVICE_NAME`                                                                                               | Service name; overrides the option, because the operator's standard variable wins over what the code chose. Blank values count as absent. |
+| `OTEL_METRICS_EXPORTER`, `OTEL_LOGS_EXPORTER`                                                                     | Metrics and logs are exported only when these name an exporter.                                                                           |
+| `OTEL_BSP_MAX_QUEUE_SIZE`, `OTEL_BSP_SCHEDULE_DELAY`, `OTEL_BSP_EXPORT_TIMEOUT`, `OTEL_BSP_MAX_EXPORT_BATCH_SIZE` | Mapped onto the batch span processor the library passes; the SDK applies them only to one it builds itself.                               |
+| `OTEL_NODE_RESOURCE_DETECTORS`                                                                                    | Selects resource detectors, under the specification's names (`service`, `host`, `process`) and the SDK's older ones.                      |
 
 The OpenTelemetry SDK reads these itself, and the library never touches them: `OTEL_EXPORTER_OTLP_*`, `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG`, `OTEL_RESOURCE_ATTRIBUTES`.
 
@@ -244,15 +196,11 @@ The OpenTelemetry SDK reads these itself, and the library never touches them: `O
 
 ## 🧭 How It Behaves
 
-### Enabling and disabling
-
-The SDK starts unless something says no, and `OTEL_SDK_DISABLED=true` always says no, whatever the code passes. `enabled: false` also disables it. `OTEL_SERVICE_NAME` overrides the `serviceName` option, because the operator's standard variable should win over what the code chose. Blank values count as absent.
-
 ### The preload
 
 `./register` is for `node --import`. It registers the loader hook, starts the SDK from the standard variables and flushes on a natural exit. It is ES-module only in substance: requiring it from CommonJS throws and names `node --import`, because starting the SDK is asynchronous and a `--require` preload cannot wait for it, which would let the application load first, unnoticed.
 
-Tracing never takes down a boot. Each failure the preload can meet is a warning, and the application still starts:
+The preload reports each failure it can meet as one of these warnings:
 
 | Code                                        | Meaning                                                                        |
 | ------------------------------------------- | ------------------------------------------------------------------------------ |
@@ -293,24 +241,6 @@ A caret on a `0.x` version allows patch releases only, so each OpenTelemetry min
 
 ---
 
-## ⚖️ Comparison with Wiring the SDK by Hand
-
-| You would otherwise write and maintain                                   | This package                                                                            |
-| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| A preload that starts the SDK before the application loads               | `node --import @bymax-one/nest-telemetry/register`, reading the standard variables      |
-| The loader hook for native-ESM applications                              | Registered by the preload, with a warning when its peer is missing                      |
-| Query-string redaction for every span, and the credential parameter list | On by default; the list is checked against the SDK's own                                |
-| A Redis serializer that keeps `EVAL` payloads out of spans               | On by default                                                                           |
-| Keeping the command line out of the resource                             | On by default                                                                           |
-| Mapping `OTEL_BSP_*` onto the batch processor you pass                   | Done                                                                                    |
-| Sharing the SDK between a preload and the application                    | A handle under a `Symbol.for` key, one SDK even across module copies                    |
-| Flushing on shutdown without racing the framework's own shutdown         | `TelemetryModule` flushes through Nest's hook; a failed flush is reported, never thrown |
-| Making sure a telemetry failure cannot stop the host from booting        | Each failure the preload can meet is a warning                                          |
-
-What it does not do for you: choose a sampler, run a collector, or decide your span names. Those stay standard OpenTelemetry configuration.
-
----
-
 ## 🩺 Troubleshooting
 
 | You see                                                  | Look at                                                                                                                                                                                                                                                              |
@@ -330,30 +260,21 @@ What it does not do for you: choose a sampler, run a collector, or decide your s
 
 ```
 node --import @bymax-one/nest-telemetry/register
-    │
-    ▼
-Preload (register)               ← registers the ES-module loader hook, then starts the SDK
-    │                               from the standard OTEL_* variables; a failure is a warning
-    ▼
-startTelemetry(options)          ← disabled? returns a no-op handle and loads no OpenTelemetry package
-    │
-    ▼
-Assembly                         ← resource attributes, instrumentation configuration with the
-    │                               redaction applied on top of the host's overrides, signal
-    │                               plan (traces only unless an exporter is named)
-    ▼
-NodeSDK                          ← resource detectors (OTEL_NODE_RESOURCE_DETECTORS), a batch
-    │                               span processor and a span processor that redacts URL
-    │                               attributes as each span ends
-    ▼
-Handle                           ← stored under a Symbol.for key on globalThis: one SDK per
-    │                               process, one shared flush
-    ▼
-Application code (traced)
-    │
-    ▼
-TelemetryShutdownHook            ← Nest's OnApplicationShutdown awaits shutdownTelemetry();
-                                    a refused flush is reported under TRACING_FLUSH_FAILED
+  → Preload       registers the ES-module loader hook, then starts the SDK from the
+                  standard OTEL_* variables; a failure is a warning
+  → startTelemetry(options)
+                  disabled? returns a no-op handle and loads no OpenTelemetry package
+  → Assembly      resource attributes, instrumentation configuration with the redaction
+                  applied on top of the host's overrides, signal plan (traces only unless
+                  an exporter is named)
+  → NodeSDK       resource detectors (OTEL_NODE_RESOURCE_DETECTORS), a batch span processor
+                  and a span processor that redacts URL attributes as each span ends
+  → Handle        stored under a Symbol.for key on globalThis: one SDK per process,
+                  one shared flush
+  → Application code (traced)
+  → TelemetryShutdownHook
+                  Nest's OnApplicationShutdown awaits shutdownTelemetry(); a refused flush
+                  is reported under TRACING_FLUSH_FAILED
 ```
 
 The SDK part is plain functions over the OpenTelemetry packages, loaded on demand with dynamic imports so a disabled boot touches none of them. The environment is read in one module and handed to everything else as a parameter.
@@ -364,14 +285,7 @@ The SDK part is plain functions over the OpenTelemetry packages, loaded on deman
 
 A span can carry whatever an instrumentation or your code records on it. This package redacts what it can know is dangerous, by default, and says plainly what it does not cover.
 
-### Redacted by default
-
-| Layer                 | What it removes                                                                                                                                                                                                                                                                            |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Span end, every span  | `url.query` is replaced by `[redacted]`, and the query is cut from `url.full`, `http.url` and `http.target`. It runs on spans from any instrumentation, not only HTTP.                                                                                                                     |
-| Outgoing request URLs | The HTTP instrumentation redacts a list of credential-bearing parameters (`token`, `code`, `access_token`, `signature`, `X-Amz-*`, and more). A host can add names, not drop them. The list is compared in a test with the SDK's own default list, so a name the SDK adds later is caught. |
-| Redis                 | `db.query.text` holds the command name only. `EVAL` and `EVALSHA` payloads, which carry `KEYS` and `ARGV`, never leave the process.                                                                                                                                                        |
-| Resource              | `process.command_args` and `process.command_line` are left out, because command-line arguments are a common carrier of secrets.                                                                                                                                                            |
+The layers are in the [Security Table](#-security-table) below.
 
 Each layer except the outgoing request URL list has one off switch, an `unsafe` option set to the literal `true`, and each one emits a process warning of type `SecurityWarning` with the code `BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED`. `instrumentations.overrides` cannot undo a layer: a list of parameters you supply is added to the library's, and the Redis serializer stays the library's.
 
@@ -389,18 +303,16 @@ What is **not** redacted is listed flat in [What This Library Does NOT Do](#-wha
 
 ## 🛡️ Security Table
 
-| Layer                | Implementation                                                                                                                  |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Query redaction      | `url.query` replaced and the query cut from `url.full`, `http.url`, `http.target` as each span ends, for any instrumentation    |
-| Outgoing URLs        | Credential-parameter list in the HTTP instrumentation; hosts add names, never drop them; compared with the SDK's list in a test |
-| Redis                | Command name only; `EVAL` and `EVALSHA` payloads never exported                                                                 |
-| Process command line | `process.command_args` and `process.command_line` dropped from the resource                                                     |
-| Opt-outs             | Literal `unsafe.*: true` options only, each emitting a `SecurityWarning`; no environment variable turns redaction off           |
-| Overrides            | `instrumentations.overrides` is merged under the library's redaction, which is applied again on top                             |
-| Environment          | Read in one module; a test fails if any other file names `process.env`                                                          |
-| Boot failure         | The preload turns a failed start or hook into a warning; the host application still boots                                       |
-| Flush failure        | The Nest hook reports a refused flush under `TRACING_FLUSH_FAILED` and never rejects                                            |
-| Supply chain         | `"dependencies": {}`; every OpenTelemetry package is an optional peer                                                           |
+| Layer                | Implementation                                                                                                                                                                                                                                          |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Query redaction      | `url.query` is replaced by `[redacted]` and the query is cut from `url.full`, `http.url` and `http.target` as each span ends, for any instrumentation                                                                                                   |
+| Outgoing URLs        | The HTTP instrumentation redacts a credential-parameter list (`token`, `code`, `access_token`, `signature`, `X-Amz-*`, and more); hosts add names, never drop them; a test compares the list with the SDK's own, so a name the SDK adds later is caught |
+| Redis                | `db.query.text` holds the command name only; `EVAL` and `EVALSHA` payloads, which carry `KEYS` and `ARGV`, never leave the process                                                                                                                      |
+| Process command line | `process.command_args` and `process.command_line` are dropped from the resource, because command-line arguments are a common carrier of secrets                                                                                                         |
+| Opt-outs             | Literal `unsafe.*: true` options only, each emitting a `SecurityWarning`; no environment variable turns redaction off                                                                                                                                   |
+| Overrides            | `instrumentations.overrides` is merged under the library's redaction, which is applied again on top                                                                                                                                                     |
+| Environment          | Read in one module; a test fails if any other file names `process.env`                                                                                                                                                                                  |
+| Supply chain         | `"dependencies": {}`; every OpenTelemetry package is an optional peer                                                                                                                                                                                   |
 
 > [!IMPORTANT]
 > Redaction protects the attributes it knows about. Secrets that reach a span some other way, such as a token inside a URL path or a value written into SQL text, are yours to keep out. The flat list is in [What This Library Does NOT Do](#-what-this-library-does-not-do).
@@ -426,18 +338,13 @@ A tracing library sits on the boot path of every service that installs it, and i
 
 - ✅ **100% coverage** — statements, branches, functions and lines, enforced in the unit suite, in the end-to-end suite and in both together, with no exclusions
 - ✅ **100% mutation score** — verified with [Stryker](https://stryker-mutator.io/) on a cold run against a `break` threshold of 100, and every unit test confirmed to have run in the mutation run (see the [report](./docs/mutation_testing_results.md))
-- ✅ **Proof from the packed tarball** — real `node --import` processes in a CommonJS and a native-ESM application, a local OTLP receiver, a fake Redis, planted secrets and negative controls, so a regression in the shipped bundle fails a check
-- ✅ **No `any`, no suppressions** — strict TypeScript, and no `@ts-ignore`, `eslint-disable` or coverage-ignore comment anywhere
 
 ```bash
 pnpm test              # unit tests (Jest)
-pnpm test:cov          # unit coverage report
 pnpm test:e2e          # end-to-end tests
 pnpm test:cov:all      # full coverage gate (unit + e2e together)
 pnpm mutation          # Stryker mutation testing (100% break gate)
 pnpm check:runtime     # packed-tarball consumer proofs
-pnpm typecheck         # tsc strict check (all tsconfig variants)
-pnpm lint              # ESLint
 ```
 
 > [!NOTE]
@@ -500,31 +407,7 @@ By design, the following are out of scope:
 
 ## 🤝 Contributing
 
-Development follows the Bymax coding standards, set out in [CONTRIBUTING.md](./CONTRIBUTING.md):
-
-- TypeScript strict, with no `any` and no suppression comments
-- 100% coverage and a 100% mutation score
-- Conventional Commits enforced by commitlint + husky
-- No direct dependencies: peer dependencies only
-- Everything that reaches GitHub, including this README, is written in English
-
-```bash
-# Clone the repository
-git clone https://github.com/bymaxone/nest-telemetry.git
-cd nest-telemetry
-
-# Install dependencies
-pnpm install
-
-# Run tests
-pnpm test
-
-# Build
-pnpm build
-
-# Type check
-pnpm typecheck
-```
+The workflow, the commit convention and the checks to run before a pull request are in [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ---
 
