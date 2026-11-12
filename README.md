@@ -78,11 +78,12 @@ const telemetry = await startTelemetry({
 })
 
 process.once('SIGTERM', () => {
-  void telemetry.shutdown()
+  // Close your own resources first; then flush the SDK and end the process.
+  void telemetry.shutdown().finally(() => process.exit(0))
 })
 ```
 
-`startTelemetry` resolves to a handle with `enabled` and `shutdown()`. Starting twice returns the handle already running, including across two copies of the module (an ES-module preload and a CommonJS application share the handle through `globalThis`).
+A listener for `SIGTERM` replaces Node's default termination, which is why the handler above ends the process itself once the flush settles. `startTelemetry` resolves to a handle with `enabled` and `shutdown()`. Starting twice returns the handle already running, including across two copies of the module (an ES-module preload and a CommonJS application share the handle through `globalThis`).
 
 ## Using with the bymax-one template
 
