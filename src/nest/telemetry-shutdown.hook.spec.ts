@@ -79,6 +79,50 @@ describe('TelemetryShutdownHook', () => {
       expect(error.message).toBe('The telemetry SDK failed to shut down.')
     })
 
+    it.each([
+      ['has no errorStructured method', {}],
+      ['has an errorStructured that is not a function', { errorStructured: 'not callable' }]
+    ])('falls back to the Nest logger when the provided logger %s', async (_what, provided) => {
+      // Scenario: the host binds the public TELEMETRY_LOGGER token to the wrong value. Reporting must
+      // still end in a resolved shutdown, with the failure on the Nest logger.
+      const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+      registerHandle(createHandle(() => Promise.reject(new Error('collector refused'))))
+      const ref: IProviderLookup = { get: () => provided }
+      await expect(new TelemetryShutdownHook(ref).onApplicationShutdown()).resolves.toBeUndefined()
+      expect(error).toHaveBeenCalledWith(
+        'TRACING_FLUSH_FAILED: collector refused',
+        expect.any(String)
+      )
+    })
+
+    it('falls back to the Nest logger when the structured logger throws', async () => {
+      // Scenario: the application's logger fails while writing the entry.
+      const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+      const errorStructured = jest.fn(() => {
+        throw new Error('logger failed')
+      })
+      registerHandle(createHandle(() => Promise.reject(new Error('collector refused'))))
+      await expect(
+        new TelemetryShutdownHook(moduleRef({ errorStructured })).onApplicationShutdown()
+      ).resolves.toBeUndefined()
+      expect(errorStructured).toHaveBeenCalledTimes(1)
+      expect(error).toHaveBeenCalledWith(
+        'TRACING_FLUSH_FAILED: collector refused',
+        expect.any(String)
+      )
+    })
+
+    it('still resolves when the Nest logger throws too', async () => {
+      // Scenario: nothing is left to report through, and the shutdown still must not fail.
+      jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {
+        throw new Error('nest logger failed')
+      })
+      registerHandle(createHandle(() => Promise.reject(new Error('collector refused'))))
+      await expect(
+        new TelemetryShutdownHook(moduleRef()).onApplicationShutdown()
+      ).resolves.toBeUndefined()
+    })
+
     it('falls back to the Nest logger, with the key in the message, when no structured logger is provided', async () => {
       // Scenario: a host that did not provide TELEMETRY_LOGGER still gets the failure, on the
       // logger Nest routes through app.useLogger().

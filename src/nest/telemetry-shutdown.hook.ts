@@ -64,23 +64,34 @@ export class TelemetryShutdownHook implements OnApplicationShutdown {
   }
 
   /**
-   * Reports a failed flush: through the structured logger when the application provides one, else
-   * through the Nest logger with the key in the message.
+   * Reports a failed flush: through the structured logger when the application provides a usable
+   * one, else through the Nest logger with the key in the message. Reporting is itself guarded at
+   * every step, because the hook's one job is to keep shutdown from failing: a logger the
+   * application bound to the token that is the wrong value, or that throws, falls through to the
+   * Nest logger, and a Nest logger that throws ends the report.
    *
    * @param error - The rejection. A value that is not an `Error` is not stringified, since its
-   *   `toString` could throw here, inside the one place whose job is to keep shutdown from failing.
+   *   `toString` could throw here.
    */
   private report(error: unknown): void {
     const failure =
       error instanceof Error ? error : new Error('The telemetry SDK failed to shut down.')
-    const logger = this.structuredLogger()
-    if (logger === undefined) {
+    try {
+      const logger = this.structuredLogger()
+      if (typeof logger?.errorStructured === 'function') {
+        logger.errorStructured(TELEMETRY_FLUSH_FAILED_KEY, failure)
+        return
+      }
+    } catch {
+      // Falls through to the Nest logger below.
+    }
+    try {
       new Logger('Telemetry').error(
         `${TELEMETRY_FLUSH_FAILED_KEY}: ${failure.message}`,
         failure.stack
       )
-    } else {
-      logger.errorStructured(TELEMETRY_FLUSH_FAILED_KEY, failure)
+    } catch {
+      // Nothing is left to report through, and the shutdown must still not fail.
     }
   }
 

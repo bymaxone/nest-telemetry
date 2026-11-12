@@ -40,4 +40,44 @@ describe('TelemetryModule when the flush fails, in a real Nest application', () 
       expect.any(String)
     )
   })
+
+  it.each([
+    ['a value without errorStructured', { provide: TELEMETRY_LOGGER, useValue: {} }],
+    [
+      'a logger that throws',
+      {
+        provide: TELEMETRY_LOGGER,
+        useValue: {
+          errorStructured: () => {
+            throw new Error('logger failed')
+          }
+        }
+      }
+    ]
+  ])('closes cleanly and falls back to the Nest logger for %s', async (_what, provider) => {
+    // Scenario: the application binds the public logger token to something that cannot report.
+    mockShutdown.mockRejectedValueOnce(new Error('collector refused'))
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+    const app = await Test.createTestingModule({
+      imports: [TelemetryModule],
+      providers: [provider]
+    }).compile()
+    await app.init()
+    await expect(app.close()).resolves.toBeUndefined()
+    expect(error).toHaveBeenCalledWith(
+      'TRACING_FLUSH_FAILED: collector refused',
+      expect.any(String)
+    )
+  })
+
+  it('closes cleanly even when the Nest logger throws', async () => {
+    // Scenario: every way of reporting has failed, and the application still shuts down.
+    mockShutdown.mockRejectedValueOnce(new Error('collector refused'))
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {
+      throw new Error('nest logger failed')
+    })
+    const app = await Test.createTestingModule({ imports: [TelemetryModule] }).compile()
+    await app.init()
+    await expect(app.close()).resolves.toBeUndefined()
+  })
 })
