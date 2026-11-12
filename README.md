@@ -69,6 +69,8 @@ Things to know before you rely on it:
 The SDK part never imports `@nestjs/*`. Start it from your own preload, or from the first lines of your entry point if nothing instrumented has been imported yet:
 
 ```ts
+import { createServer } from 'node:http'
+
 import { ignorePaths, startTelemetry } from '@bymax-one/nest-telemetry'
 
 const telemetry = await startTelemetry({
@@ -77,13 +79,17 @@ const telemetry = await startTelemetry({
   ignoreIncomingRequest: ignorePaths([/^\/health\/(live|ready)\/?$/, /^\/metrics\/?$/])
 })
 
+const server = createServer((_request, response) => response.end('ok')).listen(3000)
+
 process.once('SIGTERM', () => {
-  // Close your own resources first; then flush the SDK and end the process.
-  void telemetry.shutdown().finally(() => process.exit(0))
+  // Stop accepting work, then flush the SDK. The process ends once nothing holds it open.
+  server.close(() => {
+    void telemetry.shutdown()
+  })
 })
 ```
 
-A listener for `SIGTERM` replaces Node's default termination, which is why the handler above ends the process itself once the flush settles. `startTelemetry` resolves to a handle with `enabled` and `shutdown()`. Starting twice returns the handle already running, including across two copies of the module (an ES-module preload and a CommonJS application share the handle through `globalThis`).
+A listener for `SIGTERM` replaces Node's default termination, so the handler above closes the server and flushes, and the process ends once nothing holds it open. `startTelemetry` resolves to a handle with `enabled` and `shutdown()`. Starting twice returns the handle already running, including across two copies of the module (an ES-module preload and a CommonJS application share the handle through `globalThis`).
 
 ## Using with the bymax-one template
 
