@@ -23,3 +23,11 @@ overrides:
   # express under @nestjs/platform-express and through supertest. Dev-only: `dependencies` is empty
   # and `files` ships only dist, LICENSE, README.md and CHANGELOG.md.
   'qs': '^6.16.1'
+  # minimatch 10.x: denial of service through globparts amplification (GHSA-g3hv-75wg-m249),
+  # vulnerable from 7.0.0 up to 11.0.1 and patched only there, with no backport. Four consumers
+  # reach the 10.x copy: @stryker-mutator/core, typescript-estree, glob 13 and test-exclude. All
+  # accept 11, so it is floored for them. The 9.x copy comes through glob 10 under the optional
+  # OpenTelemetry resource detectors and is deliberately NOT floored: glob 10 on minimatch 11
+  # matches nothing and says nothing. Dev-only. REMOVE when `pnpm why minimatch` shows no consumer
+  # of 10.x asking for a range below 11.0.1.
+  'minimatch@10': '^11.0.1'
