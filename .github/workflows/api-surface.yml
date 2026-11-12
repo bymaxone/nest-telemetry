@@ -41,7 +41,13 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          BASE_VERSION=$(git show "$BASE_SHA:package.json" | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")
+          # A base without a manifest is the pull request that introduces the package: there is no
+          # version to read, and the comparison step handles a package that was never published.
+          if git cat-file -e "$BASE_SHA:package.json" 2>/dev/null; then
+            BASE_VERSION=$(git show "$BASE_SHA:package.json" | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")
+          else
+            BASE_VERSION=none
+          fi
           HEAD_VERSION=$(node -p "require('./package.json').version")
           if [ "$BASE_VERSION" = "$HEAD_VERSION" ]; then
             echo "bumped=false" >> "$GITHUB_OUTPUT"
