@@ -29,9 +29,22 @@ jest.mock('@opentelemetry/exporter-trace-otlp-http', () => ({
 jest.mock('@opentelemetry/auto-instrumentations-node', () => ({
   getNodeAutoInstrumentations: (...args: unknown[]) => mockAutoInstrumentations(...args)
 }))
-jest.mock('@opentelemetry/resources', () => ({
-  resourceFromAttributes: (...args: unknown[]) => mockResourceFromAttributes(...args)
-}))
+jest.mock('@opentelemetry/resources', () => {
+  const detector = (name: string): { name: string; detect: () => { attributes: object } } => ({
+    name,
+    detect: () => ({
+      attributes: { [`${name}.id`]: 1, 'process.command_args': ['node', '--api-key=secret'] }
+    })
+  })
+  return {
+    resourceFromAttributes: (...args: unknown[]) => mockResourceFromAttributes(...args),
+    envDetector: detector('env'),
+    hostDetector: detector('host'),
+    osDetector: detector('os'),
+    processDetector: detector('process'),
+    serviceInstanceIdDetector: detector('serviceinstance')
+  }
+})
 
 beforeEach(() => {
   mockSdkInstance.shutdown.mockResolvedValue(undefined)
@@ -160,6 +173,64 @@ describe('startTelemetry', () => {
       // Scenario: the zero-argument form, as a bare preload calls it, uses the defaults.
       const handle = await startTelemetry()
       expect(handle.enabled).toBe(true)
+    })
+
+    it('starts one SDK when two calls overlap', async () => {
+      // Scenario: a preload and an application bootstrap that do not await each other both call
+      // start while the dynamic imports are still pending; only one SDK may start.
+      const [first, second] = await Promise.all([
+        startTelemetry({ env: {} }),
+        startTelemetry({ env: {} })
+      ])
+      expect(second).toBe(first)
+      expect(mockNodeSdk).toHaveBeenCalledTimes(1)
+      expect(mockSdkInstance.start).toHaveBeenCalledTimes(1)
+    })
+
+    it('starts again after a start that failed', async () => {
+      // Scenario: a failed start must not leave the in-flight marker behind and block every later
+      // attempt.
+      mockNodeSdk.mockImplementationOnce(() => {
+        throw new Error('constructor failed')
+      })
+      await expect(startTelemetry({ env: {} })).rejects.toThrow('constructor failed')
+      const handle = await startTelemetry({ env: {} })
+      expect(handle.enabled).toBe(true)
+    })
+
+    it('selects the resource detectors and removes the process command line by default', async () => {
+      // Scenario: the five built-in detectors run in the SDK's default order, and what the process
+      // detector reports no longer includes the command-line arguments.
+      await startTelemetry({ env: {} })
+      const [options] = mockNodeSdk.mock.calls[0] as unknown as [
+        { resourceDetectors: { detect: () => { attributes: Record<string, unknown> } }[] }
+      ]
+      const reports = options.resourceDetectors.map((detector) => detector.detect().attributes)
+      expect(reports.map((attributes) => Object.keys(attributes)[0])).toEqual([
+        'serviceinstance.id',
+        'process.id',
+        'host.id',
+        'os.id',
+        'env.id'
+      ])
+      expect(reports[1]).not.toHaveProperty(['process.command_args'])
+    })
+
+    it('honours OTEL_NODE_RESOURCE_DETECTORS and keeps the command line on explicit opt-in', async () => {
+      // Scenario: the operator selects only the process detector, and the host exports the command
+      // line on purpose.
+      jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      await startTelemetry({
+        env: { OTEL_NODE_RESOURCE_DETECTORS: 'process' },
+        unsafe: { exportProcessCommandArgs: true }
+      })
+      const [options] = mockNodeSdk.mock.calls[0] as unknown as [
+        { resourceDetectors: { detect: () => { attributes: Record<string, unknown> } }[] }
+      ]
+      expect(options.resourceDetectors).toHaveLength(1)
+      expect(options.resourceDetectors[0]?.detect().attributes).toHaveProperty([
+        'process.command_args'
+      ])
     })
 
     it('registers the handle for the application to drain', async () => {

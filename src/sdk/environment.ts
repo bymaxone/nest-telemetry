@@ -31,6 +31,8 @@ export interface TelemetryEnvironment {
   readonly logsExporters: readonly string[]
   /** The `OTEL_BSP_*` values mapped onto the batch span processor. */
   readonly batchSpanProcessor: BatchSpanProcessorTuning
+  /** Names in `OTEL_NODE_RESOURCE_DETECTORS`, or `undefined` when it is unset or blank. */
+  readonly resourceDetectors: readonly string[] | undefined
 }
 
 /**
@@ -77,12 +79,15 @@ export function readTelemetryEnvironment(
   if (exportTimeoutMillis !== undefined) tuning.exportTimeoutMillis = exportTimeoutMillis
   const maxExportBatchSize = readPositiveNumber(source['OTEL_BSP_MAX_EXPORT_BATCH_SIZE'])
   if (maxExportBatchSize !== undefined) tuning.maxExportBatchSize = maxExportBatchSize
-  const serviceName = source['OTEL_SERVICE_NAME']
+  const serviceName = source['OTEL_SERVICE_NAME']?.trim()
+  const detectors = source['OTEL_NODE_RESOURCE_DETECTORS']
   return {
     sdkDisabled: source['OTEL_SDK_DISABLED']?.toLowerCase() === 'true',
     serviceName: serviceName === '' ? undefined : serviceName,
     metricsExporters: readExporterList(source['OTEL_METRICS_EXPORTER']),
     logsExporters: readExporterList(source['OTEL_LOGS_EXPORTER']),
-    batchSpanProcessor: tuning
+    batchSpanProcessor: tuning,
+    resourceDetectors:
+      detectors === undefined || detectors.trim() === '' ? undefined : readExporterList(detectors)
   }
 }

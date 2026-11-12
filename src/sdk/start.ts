@@ -12,8 +12,10 @@ import {
   warnAboutUnsafeOptions
 } from './assembly'
 import { readTelemetryEnvironment } from './environment'
+import type { TelemetryEnvironment } from './environment'
 import { clearHandle, currentHandle, registerHandle } from './handle'
 import { createUrlQueryRedactor } from './redaction'
+import { selectResourceDetectors } from './resource-detectors'
 import type { TelemetryHandle, TelemetryOptions } from './types'
 
 /** The handle of a boot that started nothing. */
@@ -40,6 +42,28 @@ export async function startTelemetry(options: TelemetryOptions = {}): Promise<Te
   if (running !== undefined) {
     return running
   }
+  // A second caller that arrives while the first is still loading gets the same start, so two
+  // overlapping calls never build two SDKs.
+  starting ??= boot(options, env).finally(() => {
+    starting = undefined
+  })
+  return starting
+}
+
+/** The start in progress, if any. */
+let starting: Promise<TelemetryHandle> | undefined
+
+/**
+ * Loads the SDK packages, builds the SDK and starts it.
+ *
+ * @param options - The host's policy.
+ * @param env - The parsed environment.
+ * @returns The handle of the started SDK.
+ */
+async function boot(
+  options: TelemetryOptions,
+  env: TelemetryEnvironment
+): Promise<TelemetryHandle> {
   warnAboutUnsafeOptions(options)
 
   const [
@@ -60,6 +84,17 @@ export async function startTelemetry(options: TelemetryOptions = {}): Promise<Te
   const sdk = new NodeSDK({
     ...signals.overrides,
     resource: resources.resourceFromAttributes(buildResourceAttributes(options, env)),
+    resourceDetectors: selectResourceDetectors(
+      env.resourceDetectors,
+      {
+        env: resources.envDetector,
+        host: resources.hostDetector,
+        os: resources.osDetector,
+        process: resources.processDetector,
+        serviceinstance: resources.serviceInstanceIdDetector
+      },
+      options.unsafe?.exportProcessCommandArgs === true
+    ),
     spanProcessors: [
       // Ordered before the batch processor, so each span is redacted in place before it is exported.
       ...(options.unsafe?.disableUrlRedaction === true ? [] : [createUrlQueryRedactor()]),

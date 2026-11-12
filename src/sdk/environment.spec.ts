@@ -23,9 +23,43 @@ describe('readTelemetryEnvironment', () => {
       expect(readTelemetryEnvironment({ OTEL_SERVICE_NAME: 'billing' }).serviceName).toBe('billing')
     })
 
-    it.each([undefined, ''])('is undefined when OTEL_SERVICE_NAME is %p', (value) => {
+    it('trims the name', () => {
+      // Scenario: stray whitespace around a real name is not part of the name.
+      expect(readTelemetryEnvironment({ OTEL_SERVICE_NAME: ' billing ' }).serviceName).toBe(
+        'billing'
+      )
+    })
+
+    it.each([undefined, '', '   '])('is undefined when OTEL_SERVICE_NAME is %p', (value) => {
       // Scenario: a blank value is absent, so it never overrides the host's own name.
       expect(readTelemetryEnvironment({ OTEL_SERVICE_NAME: value }).serviceName).toBeUndefined()
+    })
+  })
+
+  describe('resourceDetectors', () => {
+    it.each([undefined, '', '   '])(
+      'is undefined when OTEL_NODE_RESOURCE_DETECTORS is %p',
+      (value) => {
+        // Scenario: unset or blank means the SDK default, which is not a list.
+        expect(
+          readTelemetryEnvironment({ OTEL_NODE_RESOURCE_DETECTORS: value }).resourceDetectors
+        ).toBeUndefined()
+      }
+    )
+
+    it('splits, trims and keeps the names in order', () => {
+      // Scenario: the comma-separated form the OTel SDK accepts.
+      expect(
+        readTelemetryEnvironment({ OTEL_NODE_RESOURCE_DETECTORS: 'process, host ,os' })
+          .resourceDetectors
+      ).toEqual(['process', 'host', 'os'])
+    })
+
+    it('is an empty list, not undefined, when only separators are given', () => {
+      // Scenario: a set but empty selection selects nothing, as in the SDK.
+      expect(
+        readTelemetryEnvironment({ OTEL_NODE_RESOURCE_DETECTORS: ',,' }).resourceDetectors
+      ).toEqual([])
     })
   })
 

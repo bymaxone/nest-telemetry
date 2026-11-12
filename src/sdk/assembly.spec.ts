@@ -82,6 +82,9 @@ describe('buildResourceAttributes', () => {
     expect(buildResourceAttributes({ serviceName: '' }, environment())).toEqual({
       'service.name': 'unknown_service:node'
     })
+    expect(
+      buildResourceAttributes({ serviceName: '  ', serviceVersion: '  ' }, environment())
+    ).toEqual({ 'service.name': 'unknown_service:node' })
   })
 })
 
@@ -164,7 +167,7 @@ describe('buildInstrumentationConfig', () => {
       { unsafe: { disableRedisArgumentRedaction: true } },
       noLogs
     )
-    expect(config).not.toHaveProperty(IOREDIS)
+    expect(config).not.toHaveProperty([IOREDIS])
   })
 
   describe('host overrides', () => {
@@ -338,11 +341,25 @@ describe('warnAboutUnsafeOptions', () => {
     )
   })
 
-  it('warns for each flag when both are set', () => {
-    // Scenario: two opt-outs, two warnings.
-    warnAboutUnsafeOptions(
-      options({ disableUrlRedaction: true, disableRedisArgumentRedaction: true })
+  it('warns once, with the library code, when the process command line is exported', () => {
+    // Scenario: keeping process.command_args in the resource is loud, like the other opt-outs.
+    warnAboutUnsafeOptions(options({ exportProcessCommandArgs: true }))
+    expect(emitWarning).toHaveBeenCalledTimes(1)
+    expect(emitWarning).toHaveBeenCalledWith(
+      'Process command-line redaction is disabled: process.command_args and process.command_line are exported in the resource, and command-line arguments can carry secrets.',
+      { type: 'SecurityWarning', code: 'BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED' }
     )
-    expect(emitWarning).toHaveBeenCalledTimes(2)
+  })
+
+  it('warns for each flag when all are set', () => {
+    // Scenario: three opt-outs, three warnings.
+    warnAboutUnsafeOptions(
+      options({
+        disableUrlRedaction: true,
+        disableRedisArgumentRedaction: true,
+        exportProcessCommandArgs: true
+      })
+    )
+    expect(emitWarning).toHaveBeenCalledTimes(3)
   })
 })

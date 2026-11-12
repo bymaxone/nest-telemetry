@@ -23,6 +23,11 @@ export interface UnsafeOptions {
   readonly disableUrlRedaction?: true
   /** Keeps Redis command arguments in `db.query.text`, including `EVAL` and `EVALSHA` payloads. */
   readonly disableRedisArgumentRedaction?: true
+  /**
+   * Keeps `process.command_args` and `process.command_line` in the exported resource. They are
+   * removed by default, because command-line arguments are a common carrier of secrets.
+   */
+  readonly exportProcessCommandArgs?: true
 }
 
 /** Instrumentation choices that are the host's policy, with their safe defaults. */

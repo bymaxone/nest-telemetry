@@ -50,6 +50,17 @@ export function planSignals(env: TelemetryEnvironment): SignalPlan {
 }
 
 /**
+ * Reads an optional string option, treating a blank value as absent.
+ *
+ * @param value - The option value.
+ * @returns The trimmed value, or `undefined` when it is absent or blank.
+ */
+function nonBlank(value: string | undefined): string | undefined {
+  const trimmed = value?.trim()
+  return trimmed === '' ? undefined : trimmed
+}
+
+/**
  * Builds the resource attributes.
  *
  * @param options - The start options.
@@ -62,11 +73,10 @@ export function buildResourceAttributes(
 ): Record<string, string> {
   const attributes: Record<string, string> = {}
   // The operator's standard override wins over the name the code passed; blanks count as absent.
-  const name = env.serviceName ?? (options.serviceName === '' ? undefined : options.serviceName)
+  const name = env.serviceName ?? nonBlank(options.serviceName)
   attributes['service.name'] = name ?? UNKNOWN_SERVICE_NAME
-  if (options.serviceVersion !== undefined && options.serviceVersion !== '') {
-    attributes['service.version'] = options.serviceVersion
-  }
+  const version = nonBlank(options.serviceVersion)
+  if (version !== undefined) attributes['service.version'] = version
   return attributes
 }
 
@@ -130,6 +140,12 @@ export function warnAboutUnsafeOptions(options: TelemetryOptions): void {
   if (options.unsafe?.disableUrlRedaction === true) {
     process.emitWarning(
       'URL redaction is disabled: url.query, url.full, http.url and http.target are exported as recorded.',
+      WARNING_OPTIONS
+    )
+  }
+  if (options.unsafe?.exportProcessCommandArgs === true) {
+    process.emitWarning(
+      'Process command-line redaction is disabled: process.command_args and process.command_line are exported in the resource, and command-line arguments can carry secrets.',
       WARNING_OPTIONS
     )
   }

@@ -105,7 +105,7 @@ describe('service identity on the exported resource', () => {
     await handle.shutdown()
     const attributes = resourceAttributes(collector.bodies[0] ?? '')
     expect(attributes['service.name']).toBe('unknown_service:node')
-    expect(attributes).not.toHaveProperty('service.version')
+    expect(attributes).not.toHaveProperty(['service.version'])
   })
 })
 
@@ -170,5 +170,72 @@ describe('enabling and disabling', () => {
     expect(second).toBe(first)
     await shutdownTelemetry()
     expect(collector.bodies).toHaveLength(1)
+  })
+})
+
+describe('the process command line in the exported resource', () => {
+  const ARGV_SECRET = 'ARGV-SECRET-7731'
+  let added: string
+
+  beforeEach(() => {
+    added = `--api-key=${ARGV_SECRET}`
+    process.argv.push(added)
+  })
+
+  afterEach(() => {
+    process.argv.splice(process.argv.indexOf(added), 1)
+  })
+
+  it('exports no byte of a secret in argv, and keeps the other process facts', async () => {
+    // Scenario: command-line arguments are a common carrier of secrets, so by default the whole
+    // exported body is free of them while the pid, runtime and executable stay.
+    const handle = await startAndRecord({ env: {} })
+    await handle.shutdown()
+    expect(collector.bodies.join('\n')).not.toContain(ARGV_SECRET)
+    const attributes = resourceAttributes(collector.bodies[0] ?? '')
+    expect(attributes).toHaveProperty(['process.pid'])
+    expect(attributes).toHaveProperty(['process.runtime.name'], 'nodejs')
+    expect(attributes).toHaveProperty(['process.executable.name'])
+    expect(attributes).not.toHaveProperty(['process.command_args'])
+  })
+
+  it('exports the command line, with a warning, when the host opts in', async () => {
+    // Scenario: the explicit opt-out does something and is loud.
+    const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    const handle = await startAndRecord({ env: {}, unsafe: { exportProcessCommandArgs: true } })
+    await handle.shutdown()
+    expect(collector.bodies.join('\n')).toContain(ARGV_SECRET)
+    expect(emitWarning).toHaveBeenCalledWith(
+      expect.stringContaining('Process command-line redaction is disabled'),
+      { type: 'SecurityWarning', code: 'BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED' }
+    )
+  })
+
+  it.each([
+    ['host', ['host.name'], ['process.pid', 'os.type']],
+    ['none', [], ['host.name', 'process.pid', 'os.type']],
+    ['all', ['host.name', 'process.pid', 'os.type'], []],
+    ['bogus,process', ['process.pid'], ['host.name', 'os.type']]
+  ])('honours OTEL_NODE_RESOURCE_DETECTORS=%s', async (selection, present, absent) => {
+    // Scenario: the operator picks the resource detectors with the standard variable, and the
+    // command line stays out of whichever process detector runs.
+    const handle = await startAndRecord({ env: { OTEL_NODE_RESOURCE_DETECTORS: selection } })
+    await handle.shutdown()
+    const attributes = resourceAttributes(collector.bodies[0] ?? '')
+    for (const name of present) expect(attributes).toHaveProperty([name])
+    for (const name of absent) expect(attributes).not.toHaveProperty([name])
+    expect(collector.bodies.join('\n')).not.toContain(ARGV_SECRET)
+  })
+})
+
+describe('overlapping starts', () => {
+  it('start one SDK and hand every caller the same handle', async () => {
+    // Scenario: a preload and an application bootstrap both call start before either finishes.
+    const [first, second] = await Promise.all([
+      startTelemetry({ env: {} }),
+      startTelemetry({ env: {} })
+    ])
+    expect(second).toBe(first)
+    await shutdownTelemetry()
   })
 })

@@ -141,6 +141,6 @@ describe('the configuration handed to the real auto-instrumentations', () => {
     context.disable()
     propagation.disable()
     const alone = await configFor({ env: {}, unsafe: { disableRedisArgumentRedaction: true } })
-    expect(alone).not.toHaveProperty(IOREDIS)
+    expect(alone).not.toHaveProperty([IOREDIS])
   })
 })
