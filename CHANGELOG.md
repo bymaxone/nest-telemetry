@@ -28,7 +28,7 @@ First release.
 - **Redaction on by default**: `url.query`, `url.full`, `http.url` and `http.target` on every span; a
   credential-parameter list for outgoing request URLs that a host can add to and not replace; Redis
   command arguments, `EVAL` payloads included; the process command line in the exported resource. Each
-  has one explicit `unsafe` off switch that emits a `SecurityWarning`. `instrumentations.overrides`
+  of the others has an explicit `unsafe` off switch that emits a `SecurityWarning`; the credential-parameter list has none. `instrumentations.overrides`
   cannot undo a layer.
 - **Zero cost when disabled**: a boot with `OTEL_SDK_DISABLED=true` registers no hook and loads no
   OpenTelemetry package, `@opentelemetry/api` included.
@@ -41,6 +41,6 @@ First release.
   `auto-instrumentations-node`, `instrumentation`, and `@nestjs/common`, `@nestjs/core`,
   `reflect-metadata`, `rxjs` for `./nest`.
 - Verification from the packed tarball: real `node --import` processes in a CommonJS and a native-ESM
-  application, with planted secrets absent from the exported body and four negative controls.
+  application, with planted secrets absent from the exported body and negative controls.
 
 [1.0.0]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.0

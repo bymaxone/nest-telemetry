@@ -58,7 +58,7 @@ import { TelemetryModule } from '@bymax-one/nest-telemetry/nest'
 export class AppModule {}
 ```
 
-Three things to know before you rely on it:
+Things to know before you rely on it:
 
 1. **Traces only, by default.** Metrics and logs stay off unless `OTEL_METRICS_EXPORTER` or `OTEL_LOGS_EXPORTER` names an exporter. This departs from the OpenTelemetry default, which exports both through OTLP, and it does so on purpose: otherwise a host that already ships metrics and logs another way would send them twice.
 2. **Name your service.** With neither `OTEL_SERVICE_NAME` nor a `serviceName` option, the start warns once (`BYMAX_TELEMETRY_SERVICE_NAME_MISSING`) and spans are exported as `unknown_service:node`, which groups unrelated services under one name. The start is never refused.
@@ -93,7 +93,7 @@ If you build on the bymax-one backend template, this package is its tracing libr
 - its service name and version variables become `serviceName` and `serviceVersion`, with `OTEL_SERVICE_NAME` still overriding;
 - `TELEMETRY_LOGGER` is bound to its structured logger, so a failed flush keeps arriving under the key `TRACING_FLUSH_FAILED` that alerts already match.
 
-Three behaviours differ from the code the template used before: the service name has no library default (the template passes its own), the handle is shared under a `Symbol.for` key instead of a string, and turning a redaction off now warns.
+Some behaviours differ from the code the template used before: the service name has no library default (the template passes its own), the handle is shared under a `Symbol.for` key instead of a string, and turning a redaction off now warns.
 
 ```ts
 import { Module } from '@nestjs/common'
@@ -198,7 +198,7 @@ A span can carry whatever an instrumentation or your code records on it. This pa
 | Redis                 | `db.query.text` holds the command name only. `EVAL` and `EVALSHA` payloads, which carry `KEYS` and `ARGV`, never leave the process.                                                                                                                                                        |
 | Resource              | `process.command_args` and `process.command_line` are left out, because command-line arguments are a common carrier of secrets.                                                                                                                                                            |
 
-Each layer has one off switch, an `unsafe` option set to the literal `true`, and each one emits a process warning of type `SecurityWarning` with the code `BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED`. `instrumentations.overrides` cannot undo a layer: a list of parameters you supply is added to the library's, and the Redis serializer stays the library's.
+Each layer except the outgoing request URL list has one off switch, an `unsafe` option set to the literal `true`, and each one emits a process warning of type `SecurityWarning` with the code `BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED`. `instrumentations.overrides` cannot undo a layer: a list of parameters you supply is added to the library's, and the Redis serializer stays the library's.
 
 ### Not covered
 
