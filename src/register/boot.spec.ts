@@ -158,6 +158,47 @@ describe('bootFromEnvironment', () => {
     )
   })
 
+  describe('when the SDK cannot be started', () => {
+    it.each([
+      ['rejects', () => Promise.reject(new Error('exporter initialization failed'))],
+      [
+        'throws before returning a promise',
+        (): Promise<TelemetryHandle> => {
+          throw new Error('constructor failed')
+        }
+      ]
+    ])('warns, and returns a disabled handle, when the start %s', async (_how, start) => {
+      // Scenario: a package is missing or the SDK constructor throws. The preload is a top-level
+      // await, so letting the failure out would stop Node before the application loads; tracing
+      // must never take down a boot, so the host is told and the application goes on.
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      const { registerHook } = dependencies(handle(true))
+      const result = await bootFromEnvironment(PARENT, { env: {}, registerHook, start })
+      expect(result.enabled).toBe(false)
+      await expect(result.shutdown()).resolves.toBeUndefined()
+      expect(emitWarning).toHaveBeenCalledTimes(1)
+      expect(emitWarning).toHaveBeenCalledWith(
+        expect.stringMatching(
+          /^Telemetry could not be started \(Error: (exporter initialization failed|constructor failed)\), so the application continues without it\.$/
+        ),
+        { type: 'Warning', code: 'BYMAX_TELEMETRY_START_FAILED' }
+      )
+    })
+
+    it('installs no exit listener for a start that failed', async () => {
+      // Scenario: there is no SDK to flush.
+      jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      const once = jest.spyOn(process, 'once').mockImplementation(() => process)
+      const { registerHook } = dependencies(handle(true))
+      await bootFromEnvironment(PARENT, {
+        env: {},
+        registerHook,
+        start: () => Promise.reject(new Error('failed'))
+      })
+      expect(once).not.toHaveBeenCalled()
+    })
+  })
+
   describe('flushing on exit', () => {
     it('flushes on a natural exit when the SDK started', async () => {
       // Scenario: a process that ends by running out of work must still deliver its last spans;

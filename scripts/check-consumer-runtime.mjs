@@ -108,13 +108,15 @@ const PROBES = [
     expectDenied: true
   },
   {
-    label: 'positive control: the preload, enabled, reaches the denied packages',
+    // The preload turns a start that cannot load its packages into a warning, so the host still
+    // boots; the denial is therefore seen as that warning rather than as a crash.
+    label: 'positive control: the preload, enabled, reaches the denied packages and only warns',
     deny: ['@nestjs/', ...OTEL_PACKAGES],
     entries: { './register': [] },
     esmOnly: ['./register'],
     calls: [],
     files: ['probe.mjs'],
-    expectDenied: true
+    expectOutput: ['BYMAX_TELEMETRY_START_FAILED', 'denied resolution of @opentelemetry']
   },
   {
     label: 'nest without any OpenTelemetry package',
@@ -140,6 +142,8 @@ registerHooks({
 `
 
 const probeBody = (format) => `
+// A warning is printed, so a probe can assert on what the library reported.
+process.on('warning', (warning) => console.log('  warning ' + warning.code + ': ' + warning.message))
 const ENTRIES = JSON.parse(process.env.PROBE_ENTRIES)
 const CALLS = JSON.parse(process.env.PROBE_CALLS)
 const ESM_ONLY = JSON.parse(process.env.PROBE_ESM_ONLY)
@@ -279,7 +283,17 @@ try {
             PROBE_ESM_ONLY: JSON.stringify(probe.esmOnly ?? [])
           }
         })
-        if (probe.expectDenied) {
+        if (probe.expectOutput) {
+          const missing = probe.expectOutput.filter((text) => !output.includes(text))
+          if (missing.length > 0) {
+            console.error(`  ✗ ${file}: the output lacks ${missing.join(', ')}`)
+            failed = true
+          } else {
+            console.log(
+              `  ✓ ${file}: the library warned and the boot went on, as the control requires`
+            )
+          }
+        } else if (probe.expectDenied) {
           console.error(`  ✗ ${file}: the positive control passed, so the denial cannot see a load`)
           failed = true
         } else {

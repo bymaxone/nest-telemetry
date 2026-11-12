@@ -30,8 +30,8 @@ const HOOK_WARNING_CODE = 'BYMAX_TELEMETRY_ESM_HOOK_UNAVAILABLE'
  *
  * The loader hook is registered first, so native ES modules loaded later are instrumented; a hook
  * that cannot be registered is a warning, not a failure, because CommonJS code is instrumented
- * without it and tracing must never take down a boot. A disabled boot registers no hook and loads
- * nothing. When the SDK starts, it is flushed as the process runs out of work; signals are the
+ * without it, and so is an SDK that cannot start: tracing must never take down a boot. A disabled
+ * boot registers no hook and loads nothing. When the SDK starts, it is flushed as the process runs out of work; signals are the
  * application's to handle.
  *
  * @param parentUrl - URL of the module the loader hook is resolved from.
@@ -46,7 +46,8 @@ export async function bootFromEnvironment(
   if (!env.sdkDisabled) {
     registerLoaderHook(dependencies.registerHook ?? registerModuleHook, parentUrl)
   }
-  const handle = await (dependencies.start ?? startTelemetry)(
+  const handle = await startOrWarn(
+    dependencies.start ?? startTelemetry,
     dependencies.env === undefined ? {} : { env: dependencies.env }
   )
   if (handle.enabled) {
@@ -56,6 +57,33 @@ export async function bootFromEnvironment(
     })
   }
   return handle
+}
+
+/**
+ * Starts the SDK, turning a failure into a warning and a disabled handle.
+ *
+ * The preload is a top-level `await`: a failure that escaped here, such as an optional peer that is
+ * not installed, would stop Node before the application loads. Tracing must never take down a
+ * boot, so the host is told and the application goes on; the programmatic `startTelemetry` keeps
+ * its rejection for callers that want it.
+ *
+ * @param start - Starts the SDK.
+ * @param options - The start options.
+ * @returns The handle of the SDK, or a disabled one.
+ */
+async function startOrWarn(
+  start: (options: TelemetryOptions) => Promise<TelemetryHandle>,
+  options: TelemetryOptions
+): Promise<TelemetryHandle> {
+  try {
+    return await start(options)
+  } catch (error) {
+    process.emitWarning(
+      `Telemetry could not be started (${String(error)}), so the application continues without it.`,
+      { type: 'Warning', code: 'BYMAX_TELEMETRY_START_FAILED' }
+    )
+    return { enabled: false, shutdown: () => Promise.resolve() }
+  }
 }
 
 /**
