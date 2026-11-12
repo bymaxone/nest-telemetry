@@ -2,7 +2,7 @@
 
 > **Last run:** 2026-11-12, `pnpm mutation:full` semantics: cold, with no incremental baseline, run by the `Mutation (full)` workflow on `main` at `a590d9b`
 > **Command:** Stryker 9, jest runner, `coverageAnalysis: perTest`, `ignoreStatic: true`, TypeScript checker
-> **Report:** `reports/mutation/mutation.html`, uploaded by the workflow as the `mutation-full` artifact
+> **Report:** `reports/mutation/mutation.html`
 
 ## Summary
 
@@ -23,7 +23,7 @@
 Score = `(killed + timeout) / (killed + timeout + survived)` = `239 / 239 = 100.00 %`.
 
 The workflow then runs the inventory gate in `enforce` mode: every unit test must have run in the
-mutation run. It printed `all 214 unit tests ran in the mutation run, 1 exempt spec files left out`.
+mutation run.
 The one exempt spec reads the text of the source files to check which of them names `process.env`;
 it imports nothing from `src/`, so it executes no mutated code and judges no mutant. The reason is
 recorded next to the file name in `scripts/mutation-inventory.exempt.json`.
