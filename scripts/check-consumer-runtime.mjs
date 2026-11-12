@@ -21,7 +21,8 @@
  *
  * Entry points are separate bundles, so a module reached from two of them by a
  * relative path is copied into each, and a copied class is a different injection
- * token. Phase 1 extends the probes with the identity checks that catch that.
+ * token. These probes verify loading and export names; they do not verify instance
+ * identity across entries.
  *
  * It shells out to `npm pack` and `tar`, both of which have to be on PATH. That is
  * deliberate: packing through npm itself is what makes the gate inspect the same

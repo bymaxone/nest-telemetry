@@ -33,8 +33,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
-//   - scaffold — sdk / register / nest: placeholder modules only, so each budget is a floor of
-//     1.0 KiB. Phase 1 re-derives every number from the real artifact, with modest headroom.
+//   - scaffold — sdk / register / nest: placeholder modules only, so each budget is a 1.0 KiB
+//     floor. A budget is re-derived from the built artifact with modest headroom, never nudged.
 const BUDGETS = [
   { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 1.0 * 1024 },
   { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 1.0 * 1024 },

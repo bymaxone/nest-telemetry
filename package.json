@@ -82,7 +82,7 @@
     "mutation:full": "node -e \"require('node:fs').rmSync('reports/stryker-incremental.json',{force:true,recursive:true})\" && stryker run",
     "mutation:dry-run": "stryker run --dryRunOnly",
     "prepare": "husky",
-    "prepublishOnly": "pnpm clean && pnpm typecheck && pnpm lint && pnpm check:mutants && pnpm check:docs && pnpm test:cov:all && pnpm build && pnpm check:published",
+    "prepublishOnly": "pnpm clean && pnpm typecheck && pnpm lint && pnpm check:mutants && pnpm check:docs && pnpm test:cov && pnpm test:e2e && pnpm test:cov:all && pnpm build && pnpm check:published",
     "release": "npm publish --provenance --access public",
     "size": "node scripts/check-size.mjs",
     "test": "jest",

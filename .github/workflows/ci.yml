@@ -84,6 +84,12 @@ jobs:
           else
             pnpm check:file-length
           fi
+      - name: Each suite alone meets the coverage gate
+        # The `ci` job measures the unit and e2e suites combined, which passes when each covers
+        # what the other misses. The two commands below hold each suite to 100 on its own.
+        run: |
+          pnpm test:cov
+          pnpm test:e2e
       - name: Build all subpaths
         run: pnpm build
       - name: Verify build output integrity

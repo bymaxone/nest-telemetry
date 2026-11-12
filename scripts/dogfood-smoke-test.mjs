@@ -31,8 +31,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 // build-artifact check can `process.exit(2)` without leaking a temp dir.
 let consumerDir
 
-// Every published subpath and the names it must export. Phase 1 replaces the scaffold
-// placeholder with each entry's real public API.
+// Every published subpath and the names it must export; each list is the public API of
+// its entry point.
 const EXPECTED_EXPORTS = {
   sdk: ['scaffoldMarker'],
   register: ['scaffoldMarker'],

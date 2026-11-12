@@ -12,7 +12,6 @@ heading here.
 
 ### Added
 
-- Repository scaffold: build, test, mutation and packaging gates. The library itself lands in the
-  first feature release; this section is rewritten with the published API before 1.0.0 is tagged.
+- Repository scaffold: build, test, mutation and packaging gates.
 
 [1.0.0]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.0
