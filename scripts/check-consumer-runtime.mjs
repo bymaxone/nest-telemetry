@@ -123,7 +123,14 @@ const PROBES = [
   {
     label: 'nest without any OpenTelemetry package',
     deny: OTEL_PACKAGES,
-    entries: { './nest': ['scaffoldMarker'] },
+    entries: {
+      './nest': [
+        'TelemetryModule',
+        'TelemetryShutdownHook',
+        'TELEMETRY_LOGGER',
+        'TELEMETRY_FLUSH_FAILED_KEY'
+      ]
+    },
     calls: []
   }
 ]

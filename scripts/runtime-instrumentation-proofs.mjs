@@ -120,6 +120,31 @@ function writeFixtures(consumerDir, packageName) {
     join(consumerDir, 'no-hook-preload.mjs'),
     `const { startTelemetry } = await import('${packageName}')\nawait startTelemetry({ env: process.env })\n`
   )
+  // A Nest application that makes one HTTP request, closes, and ends the process at once. A natural
+  // exit would let the preload flush; `process.exit` does not, so the spans leave only if the
+  // Nest module's shutdown hook flushes them.
+  const NEST_APP = `
+const server = http.createServer((request, response) => response.end('ok'))
+await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+await new Promise((resolve, reject) => {
+  http.get('http://127.0.0.1:' + server.address().port + '/', (response) => { response.resume(); response.on('end', resolve) }).on('error', reject)
+})
+server.close()
+const imports = process.env.PROBE_WITH_MODULE === 'yes' ? [TelemetryModule] : []
+class AppModule {}
+Module({ imports })(AppModule)
+const app = await NestFactory.createApplicationContext(AppModule, { logger: false })
+await app.close()
+process.exit(0)
+`
+  writeFileSync(
+    join(consumerDir, 'nest-app.mjs'),
+    `import 'reflect-metadata'\nimport http from 'node:http'\nimport { Module } from '@nestjs/common'\nimport { NestFactory } from '@nestjs/core'\nimport { TelemetryModule } from '${packageName}/nest'\n${NEST_APP}`
+  )
+  writeFileSync(
+    join(consumerDir, 'nest-app.cjs'),
+    `require('reflect-metadata')\nconst http = require('node:http')\nconst { Module } = require('@nestjs/common')\nconst { NestFactory } = require('@nestjs/core')\nconst { TelemetryModule } = require('${packageName}/nest')\n;(async () => {${NEST_APP}})()\n`
+  )
   // An application that loads `ioredis` first and the preload after it, the order that must not work.
   writeFileSync(
     join(consumerDir, 'late-app.cjs'),
@@ -193,6 +218,32 @@ export async function runInstrumentationProofs({ consumerDir, packageName }) {
       failures
     )
     console.log('  ✓ native-ESM app with the preload: spans exported, no secret, command name kept')
+
+    // The Nest module's hook is what flushes the spans of an application that ends with
+    // `process.exit`, in both module formats; without the module the same application loses them.
+    for (const [label, app] of [
+      ['CommonJS Nest application', 'nest-app.cjs'],
+      ['native-ESM Nest application', 'nest-app.mjs']
+    ]) {
+      const before = failures.length
+      const withModule = await run(['--import', register, app], { PROBE_WITH_MODULE: 'yes' })
+      if (withModule.code !== 0)
+        failures.push(
+          `${label}: exited ${withModule.code}: ${withModule.output.trim().slice(0, 300)}`
+        )
+      if (!withModule.body.includes(HTTP_SCOPE))
+        failures.push(`${label} with TelemetryModule: the spans were not flushed on close`)
+      const without = await run(['--import', register, app], { PROBE_WITH_MODULE: 'no' })
+      if (without.body.includes(HTTP_SCOPE))
+        failures.push(
+          `${label} without TelemetryModule: spans were exported, so the control proves nothing`
+        )
+      if (failures.length === before) {
+        console.log(
+          `  ✓ ${label}: TelemetryModule flushes on close, and without it process.exit loses the spans`
+        )
+      }
+    }
 
     // Each control names the span that must be missing, which is what the check can lose without
     // the property it guards. The core `http` module is patched even when the preload loads late,
