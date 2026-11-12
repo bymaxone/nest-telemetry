@@ -27,8 +27,7 @@ nothing normative belongs behind it.
 - Redaction is applied by a span processor on span end, so it covers spans created by any
   instrumentation, not only those the library configures.
 - A failure in the telemetry path (exporter down, flush timeout) never crashes or blocks the host.
-  The application's shutdown hook logs a failed flush under a stable key and never rejects; the
-  programmatic `shutdownTelemetry()` rejects so that its caller decides what a refused flush means.
+  `shutdownTelemetry()` rejects so that its caller decides what a refused flush means.
 
 ## 5. Testing Strategy
 
