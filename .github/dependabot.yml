@@ -1,0 +1,103 @@
+# Dependabot keeps dependencies and GitHub Actions up to date.
+#
+# Updates are proposed as PRs only — they never merge automatically — so peer-range
+# and major-bump decisions are always made by a human before anything lands.
+version: 2
+
+updates:
+  # npm devDependencies and peerDependencies. Production `dependencies` is empty by
+  # design (zero direct deps), so this effectively tracks tooling and peer ranges.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    versioning-strategy: increase-if-necessary
+    labels:
+      - dependencies
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      # ORDER MATTERS: a dependency joins only the FIRST group whose conditions it
+      # matches, so any narrower group must precede the catch-all below.
+
+      # The commitlint CLI and its shared config are released in lockstep and are
+      # only compatible pairwise. Split across two PRs, merging either one alone
+      # leaves a mismatched pair that breaks the `commit-msg` hook for every
+      # contributor — locally, where no CI check ever runs it. Grouping all update
+      # types (major included) keeps them in one reviewable change.
+      commitlint:
+        patterns:
+          - '@commitlint/*'
+        update-types:
+          - major
+          - minor
+          - patch
+
+      # Batch low-risk dev tooling bumps into a single PR to cut review noise.
+      # Majors stay out: each one needs its own verification and its own revert.
+      dev-dependencies:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # Peer dependencies define the supported consumer range — bumping them is a
+      # breaking-change decision made deliberately, not by an automated minor bump.
+      - dependency-name: '@nestjs/*'
+        update-types: [version-update:semver-major]
+      - dependency-name: reflect-metadata
+        update-types: [version-update:semver-major]
+      - dependency-name: rxjs
+        update-types: [version-update:semver-major]
+      - dependency-name: '@opentelemetry/*'
+        update-types: [version-update:semver-major]
+      # TypeScript 6 and ESLint 10 are known to break the lint/typecheck gate and
+      # are intentionally held back until revisited.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      - dependency-name: eslint
+        update-types: [version-update:semver-major]
+      # `@types/node` majors track the Node release line. `engines` declares
+      # `>=24`, so typechecking against a newer major would let code compile
+      # against APIs absent from the oldest runtime this package claims to
+      # support. Raise the floor in `engines` first, then lift this hold.
+      - dependency-name: '@types/node'
+        update-types: [version-update:semver-major]
+
+  # The workflow actions themselves (checkout, setup-node, pnpm, etc.).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: ci
+      include: scope
+    groups:
+      # The CodeQL sub-actions are one product with one version. `init` writes a config
+      # that `analyze` reads back, and the reader refuses a config written by a
+      # different version:
+      #
+      #   Loaded a configuration file for version '<older>', but running version '<newer>'
+      #
+      # Bumped one at a time — which is what Dependabot does by default, since each
+      # sub-action is a separate action reference — merging one leaves the default branch
+      # mismatched until its siblings land, and CodeQL runs on push to main. Which
+      # sub-actions a repository uses varies (`upload-sarif` lives in scorecard.yml, and
+      # `autobuild` only where the analysis needs it), so the pattern covers them all
+      # rather than naming a count. Grouping every update type keeps the set in a single
+      # reviewable change that is consistent by construction.
+      codeql:
+        patterns:
+          - 'github/codeql-action/*'
+        update-types:
+          - major
+          - minor
+          - patch

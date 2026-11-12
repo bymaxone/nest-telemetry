@@ -1,0 +1,32 @@
+#!/usr/bin/env sh
+# Global hooks run via ~/.config/husky/init.sh
+
+# Refuse to publish a commit that carries no completed review receipt.
+#
+# This lives in the tracked hook rather than in `.husky/_/pre-push` because
+# husky rewrites every stub under `_/` on each `prepare` run, unconditionally
+# and without reading what was there. `prepare` is this project's own script,
+# and pnpm runs it whenever it decides node_modules is stale — so a check
+# installed in the stub disappears during an ordinary `pnpm install`, with
+# nobody having touched it. Husky never rewrites this file, and the stub it
+# does rewrite delegates here with git's stdin intact.
+#
+# git hands a pre-push hook one record per pushed ref on stdin, so the check
+# sees the actual commits regardless of how the push command was spelled.
+#
+# Skipped when the reviewer runtime is absent. The receipt protocol is a local
+# workflow that a given clone may never have opted into, and a tracked hook
+# that hard-fails without it would make the repository unpushable for everyone
+# else. That is a deliberate limit, not an oversight: this hook raises the
+# floor for the machines that run the protocol, and enforcement that must hold
+# for every contributor belongs in CI or in a branch protection rule, which is
+# where a hook the developer can edit could never provide it anyway.
+#
+# git also hands the hook the remote's name and URL as arguments. They are forwarded because
+# the check reads them to recognise a push of tags only, whose commits the remote's default
+# branch already holds: a release tag on the squash commit GitHub wrote when it merged a
+# reviewed pull request, for which no receipt can exist. Without them that case is refused.
+receipts="$HOME/.claude/bymax-review/review_prepush.py"
+if [ -f "$receipts" ]; then
+  python3 "$receipts" "$@" || exit $?
+fi

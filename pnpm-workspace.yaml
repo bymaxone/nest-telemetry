@@ -1,0 +1,22 @@
+# Build scripts are denied by default; an unlisted package counts as unreviewed.
+# `allowBuilds` is the only spelling pnpm 11 reads: onlyBuiltDependencies,
+# neverBuiltDependencies and their siblings were removed in v11 and replaced by
+# this map. Without an entry, `pnpm install` exits with ERR_PNPM_IGNORED_BUILDS
+# rather than warning.
+allowBuilds:
+  esbuild: true
+  unrs-resolver: true
+  # Denied explicitly, because an unlisted package fails the install. Reached
+  # through jest-haste-map. Its install script compiles from source only when
+  # npm_config_build_from_source=true and otherwise does nothing; the prebuilt
+  # binary arrives as a platform-specific optional dependency.
+  '@parcel/watcher': false
+
+# Forced versions for vulnerable transitive dev dependencies. These live here and NOT in
+# package.json: pnpm 11 no longer reads the `pnpm` field of package.json.
+overrides:
+  # qs: minimum secure 6.16.1. Four advisories (GHSA-q8mj-m7cp-5q26, GHSA-x5fp-wj9c-mxmx,
+  # GHSA-4mjr-xmp4-gh2g, GHSA-6pq8-jhm2-2vcw), the last of which sets the floor. Reached through
+  # express under @nestjs/platform-express and through supertest. Dev-only: `dependencies` is empty
+  # and `files` ships only dist, LICENSE, README.md and CHANGELOG.md.
+  'qs': '^6.16.1'

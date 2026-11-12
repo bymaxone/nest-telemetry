@@ -1,0 +1,9 @@
+# Generated lockfile — pnpm owns its format; Prettier must never reformat it.
+# Reformatting churns thousands of lines and breaks `pnpm install --frozen-lockfile`
+# in CI (the on-disk lockfile no longer matches what pnpm generates).
+pnpm-lock.yaml
+
+# Build / coverage / report output (also gitignored) — never source-format.
+dist/
+coverage/
+reports/

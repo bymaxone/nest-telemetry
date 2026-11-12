@@ -1,0 +1,178 @@
+# CI — thin caller of the org-wide reusable pipeline (bymaxone/.github).
+#
+# The generic library jobs (lint, typecheck, unit+coverage, mutation) run via
+# node-lib-ci.yml. This library's build-output integrity and bundle-size budget
+# stay here. Mutation runs only on a push to main / manual dispatch, never on PRs.
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: bymaxone/.github/.github/workflows/node-lib-ci.yml@v1
+    with:
+      # No `format:check` script exists, so the shared job has nothing to call.
+      #
+      # Formatting of CODE is gated by lint instead: `prettier/prettier` is an
+      # error on every path `pnpm lint` passes — src, unit and e2e specs, bench,
+      # scripts and the root config files — so a badly formatted source file fails
+      # the Lint job.
+      #
+      # What that does NOT cover, stated because the gap is the reason this input
+      # stays `false` rather than a claim that nothing is missing: Markdown, JSON
+      # and YAML are formatted by prettier through lint-staged at commit time and
+      # by nothing in CI. `README.md` and `CHANGELOG.md` ship in the package, so
+      # closing that needs a real `format:check` script and this input flipped to
+      # `true`, not a wider eslint glob — eslint does not format those file types.
+      run-format-check: false
+      run-build: false # build + integrity + size verified in the `verify` job below
+      unit-command: pnpm test:cov:all
+      run-mutation: true
+      mutation-source-globs: '^(src/)'
+      # The per-push run is incremental and finishes in minutes; this ceiling is for the cold
+      # one — the first run after enabling incremental, and any run whose baseline expired.
+      # The job is CANCELLED rather than failed when the ceiling lands, which reads as an
+      # infrastructure blip instead of a budget.
+      mutation-timeout-minutes: 150
+
+  # Library-specific verification: full build, output integrity across every
+  # subpath, and the brotli bundle-size budget.
+  verify:
+    name: Verify build + size
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # `check:published` cross-checks every release tag against a CHANGELOG
+          # section. The default checkout is shallow and carries no tags, so the
+          # check would find nothing and pass — the silent no-op it exists to
+          # prevent.
+          fetch-depth: 0
+          # The steps below run the pull request's own scripts; the read-only token must
+          # not stay in the repository's git configuration for them to read.
+          persist-credentials: false
+      - uses: bymaxone/.github/.github/actions/setup-node-pnpm@v1
+      - name: Mutation directives parse and carry their reason
+        run: pnpm check:mutants
+      - name: Documentation snippets reference symbols that exist
+        # Runs here rather than only before publishing: the defect it catches is
+        # introduced by editing a document, so the pull request that edits one is
+        # where it has to fail.
+        run: pnpm check:docs
+      - name: Source files stay within the length limit
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # A pull request is also compared with the baseline on its base branch, so the baseline
+          # it carries cannot admit the offender it adds. The checkout above is not shallow.
+          if [ -n "$BASE_REF" ]; then
+            pnpm check:file-length --base "origin/$BASE_REF"
+          else
+            pnpm check:file-length
+          fi
+      - name: Each suite alone meets the coverage gate
+        # The `ci` job measures the unit and e2e suites combined, which passes when each covers
+        # what the other misses. The two commands below hold each suite to 100 on its own.
+        run: |
+          pnpm test:cov
+          pnpm test:e2e
+      - name: Build all subpaths
+        run: pnpm build
+      - name: Verify build output integrity
+        run: |
+          for subpath in sdk register nest; do
+            for ext in mjs cjs d.ts d.cts; do
+              if [ ! -f "dist/$subpath/index.$ext" ]; then
+                echo "Missing dist/$subpath/index.$ext"
+                exit 1
+              fi
+            done
+          done
+          echo "Every subpath produced ESM + CJS + .d.ts + .d.cts"
+      - name: Verify published type resolution
+        # Compiling `src` cannot catch a broken `exports` map: a consumer
+        # resolving the package through the packed tarball may still land on
+        # declarations for the wrong module format. `attw` packs the tarball and
+        # resolves every entrypoint the way each module resolution mode would.
+        run: pnpm check:exports
+      - name: Verify the published surface matches the documentation
+        # Three checks, each guarding a defect that would otherwise reach npm:
+        # the README's links resolve; its TypeScript snippets and the type tests
+        # compile against `dist/` resolved through the `exports` map (`test:types`
+        # maps the package to `./src`, so it cannot see a divergence between the
+        # source and the shipped `.d.ts`); and every `v*.*.*` tag has a CHANGELOG
+        # section, the tags being the outside source of truth a file cannot
+        # contradict about itself.
+        run: pnpm check:published
+      - name: Entry points load from the packed tarball
+        # Packs the tarball and loads every entry in ESM and CommonJS under the dependency
+        # denials: `.` and `./register` with no Nest and no OpenTelemetry SDK graph, `./nest`
+        # with no OpenTelemetry SDK graph. Source-based suites cannot see a bundling defect.
+        run: pnpm check:runtime
+      - name: Bundle size budget
+        run: pnpm size
+
+  security:
+    if: github.event_name == 'pull_request' && github.event.repository.visibility == 'public'
+    uses: bymaxone/.github/.github/workflows/security.yml@v1
+    with:
+      fail-on-severity: high
+
+  # Single check the org ruleset can require, in every repo, under one name.
+  #
+  # A required status check is matched by literal name, and this repo's jobs are
+  # named nothing like the next repo's — so there is no list of contexts that
+  # works org-wide. One aggregate per repo, always spelled `CI passed`, is what
+  # makes a single rule at the organisation level possible, and what makes every
+  # repository created from now on inherit the gate without being configured.
+  #
+  # `always()` is what makes this a gate rather than decoration: without it the
+  # job is skipped the moment a dependency fails, and a skipped check reports
+  # neutral — the pull request would look unblocked precisely when it is broken.
+  # `cancelled` is named explicitly for the same reason; a cancelled job is not
+  # a passing one, and a queue timeout produces exactly that.
+  #
+  # A skipped dependency is accepted on purpose: jobs here are conditional on the
+  # event, and failing on skip would break every push that legitimately runs a
+  # subset.
+  ci-pass:
+    name: CI passed
+    if: always()
+    needs: [ci, verify, security]
+    runs-on: ubuntu-latest
+    # Once this is the required check, a hung runner holds every merge behind it
+    # for GitHub's default of six hours. The job is one comparison, so a short
+    # ceiling costs nothing and bounds that.
+    timeout-minutes: 5
+    steps:
+      # Printed on success as well as failure. Without it the check reports a bare
+      # red X and the reader has to open each dependency to find which one broke.
+      - name: Report the result of every dependency
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          {
+            echo "| Job | Result |"
+            echo "| --- | --- |"
+            echo "$NEEDS" | jq -r 'to_entries[] | "| \(.key) | \(.value.result) |"' | sort
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Named for what the condition does: `skipped` is deliberately not a failure
+      # here, so "did not succeed" would describe a stricter gate than this is.
+      - name: Fail when any dependency failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
