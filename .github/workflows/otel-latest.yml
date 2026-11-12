@@ -70,9 +70,11 @@ jobs:
           body="The weekly run against the newest release of every OpenTelemetry package failed: $RUN_URL
 
           The peer ranges name only the generations the tests have run against. Read the failing step, fix the library for the new generation, and widen the ranges in a pull request once this job passes."
+          # No label: this repository holds only GitHub's default labels, and a label that does not
+          # exist makes `gh issue create` fail, which would lose the alert this step exists to raise.
           existing=$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')
           if [ -n "$existing" ]; then
             gh issue comment "$existing" --body "$body"
           else
-            gh issue create --title "$title" --body "$body" --label dependencies
+            gh issue create --title "$title" --body "$body"
           fi
