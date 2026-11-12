@@ -75,25 +75,55 @@ describe('withoutAttributes', () => {
 })
 
 describe('selectResourceDetectors', () => {
-  it('runs the SDK default detectors, in its order, when nothing is selected', () => {
-    // Scenario: OTEL_NODE_RESOURCE_DETECTORS is unset, so the five built-in detectors run in the
-    // order the SDK itself uses.
-    const selected = selectResourceDetectors(undefined, detectors, false)
-    expect(selected.map((detector) => reported(detector)[0])).toEqual([
-      'serviceinstance.id',
-      'process.id',
-      'host.id',
-      'os.id',
-      'env.id'
-    ])
+  /** The names of the detectors a selection runs, read from what each one reports first. */
+  function selected(selection: readonly string[] | undefined, keepCommandLine = true): string[] {
+    return selectResourceDetectors(selection, detectors, keepCommandLine).map(
+      (detector) => reported(detector)[0]?.replace('.id', '') ?? ''
+    )
+  }
+
+  const DEFAULT = ['serviceinstance', 'process', 'host', 'os', 'env']
+  const ALL = ['host', 'os', 'serviceinstance', 'process', 'env']
+
+  it.each<[string, readonly string[] | undefined, string[]]>([
+    ['nothing selected: the SDK default order', undefined, DEFAULT],
+    ['a set but empty selection', [], []],
+    ['"all": the order of the SDK table', ['all'], ALL],
+    ['"none"', ['none'], []],
+    ['"none" named alongside others', ['process', 'none'], []],
+    ['"all" named alongside "none"', ['none', 'all'], ALL],
+    ['the specification name "process"', ['process'], ['process']],
+    ['the specification name "host", which covers the os attributes', ['host'], ['host', 'os']],
+    [
+      'the specification name "service", which covers the instance id and the environment',
+      ['service'],
+      ['serviceinstance', 'env']
+    ],
+    ['the legacy name "os"', ['os'], ['os']],
+    ['the legacy name "serviceinstance"', ['serviceinstance'], ['serviceinstance']],
+    ['the legacy name "env"', ['env'], ['env']],
+    ['both "host" and "os", each detector once', ['host', 'os'], ['host', 'os']],
+    ['"os" before "host", each detector once', ['os', 'host'], ['os', 'host']],
+    ['names in the order given', ['process', 'host'], ['process', 'host', 'os']],
+    ['an unknown name, skipped', ['bogus', 'process'], ['process']],
+    ['a name in another letter case, which is unknown', ['Process'], []],
+    [
+      'names that are members of Object.prototype',
+      ['constructor', '__proto__', 'toString', 'hasOwnProperty'],
+      []
+    ]
+  ])('selects for %s', (_label, selection, expected) => {
+    // Scenario: every way OTEL_NODE_RESOURCE_DETECTORS can name detectors, under the specification's
+    // names and the SDK's legacy ones; whatever the name, the result is a list of detectors.
+    expect(selected(selection)).toEqual(expected)
   })
 
   it('removes the process command line from the process detector only', () => {
     // Scenario: the command line goes by default, and the other detectors, whose attributes the
     // operator chose, are not touched.
-    const selected = selectResourceDetectors(undefined, detectors, false)
-    expect(reported(selected[1])).toEqual(['process.id'])
-    expect(reported(selected[0])).toEqual([
+    const run = selectResourceDetectors(undefined, detectors, false)
+    expect(reported(run[1])).toEqual(['process.id'])
+    expect(reported(run[0])).toEqual([
       'serviceinstance.id',
       'process.command_args',
       'process.command_line'
@@ -102,46 +132,18 @@ describe('selectResourceDetectors', () => {
 
   it('keeps the process command line when the host exports it explicitly', () => {
     // Scenario: with exportProcessCommandArgs the process detector is the SDK's own.
-    const selected = selectResourceDetectors(undefined, detectors, true)
-    expect(selected[1]).toBe(detectors.process)
-  })
-
-  it('runs every detector for "all", in the order of the SDK\'s own table', () => {
-    // Scenario: the SDK maps "all" to its table order, which differs from its default list.
-    const selected = selectResourceDetectors(['all'], detectors, true)
-    expect(selected).toEqual([
-      detectors.host,
-      detectors.os,
-      detectors.serviceinstance,
-      detectors.process,
-      detectors.env
-    ])
-  })
-
-  it('lets "all" win over "none" when both are named', () => {
-    // Scenario: the SDK checks for "all" first.
-    expect(selectResourceDetectors(['none', 'all'], detectors, true)).toHaveLength(5)
-  })
-
-  it('runs no detector when "none" is named alongside others', () => {
-    // Scenario: the SDK returns nothing as soon as "none" appears, unless "all" does too.
-    expect(selectResourceDetectors(['process', 'none'], detectors, false)).toEqual([])
-  })
-
-  it('runs no detector for "none"', () => {
-    // Scenario: the operator turns resource detection off.
-    expect(selectResourceDetectors(['none'], detectors, false)).toEqual([])
-  })
-
-  it('runs the named detectors in the order given, ignoring unknown names', () => {
-    // Scenario: a subset selection, with a name the SDK would skip with a warning.
-    const selected = selectResourceDetectors(['process', 'bogus', 'host'], detectors, true)
-    expect(selected).toEqual([detectors.process, detectors.host])
+    expect(selectResourceDetectors(undefined, detectors, true)[1]).toBe(detectors.process)
   })
 
   it('still removes the command line from a process detector selected by name', () => {
     // Scenario: choosing the detector explicitly does not bring the command line back.
-    const [selected] = selectResourceDetectors(['process'], detectors, false)
-    expect(reported(selected)).toEqual(['process.id'])
+    const [only] = selectResourceDetectors(['process'], detectors, false)
+    expect(reported(only)).toEqual(['process.id'])
+  })
+
+  it('does not return a detector that was not selected', () => {
+    // Scenario: the list holds the detector objects themselves, not copies, so a selection of one
+    // name never carries another.
+    expect(selectResourceDetectors(['os'], detectors, true)).toEqual([detectors.os])
   })
 })

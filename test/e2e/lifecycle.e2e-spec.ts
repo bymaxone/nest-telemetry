@@ -212,10 +212,15 @@ describe('the process command line in the exported resource', () => {
   })
 
   it.each([
-    ['host', ['host.name'], ['process.pid', 'os.type']],
-    ['none', [], ['host.name', 'process.pid', 'os.type']],
-    ['all', ['host.name', 'process.pid', 'os.type'], []],
-    ['bogus,process', ['process.pid'], ['host.name', 'os.type']]
+    ['host', ['host.name', 'os.type'], ['process.pid', 'service.instance.id']],
+    ['os', ['os.type'], ['host.name', 'process.pid']],
+    ['process', ['process.pid'], ['host.name', 'os.type']],
+    ['service', ['service.instance.id'], ['host.name', 'os.type', 'process.pid']],
+    ['serviceinstance', ['service.instance.id'], ['host.name', 'process.pid']],
+    ['none', [], ['host.name', 'process.pid', 'os.type', 'service.instance.id']],
+    ['all', ['host.name', 'process.pid', 'os.type', 'service.instance.id'], []],
+    ['bogus,process', ['process.pid'], ['host.name', 'os.type']],
+    ['constructor,process', ['process.pid'], ['host.name', 'os.type']]
   ])('honours OTEL_NODE_RESOURCE_DETECTORS=%s', async (selection, present, absent) => {
     // Scenario: the operator picks the resource detectors with the standard variable, and the
     // command line stays out of whichever process detector runs.

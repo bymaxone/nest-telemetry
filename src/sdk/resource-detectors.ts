@@ -21,11 +21,35 @@ export interface DetectorMap {
 /** The attributes that carry the command line of the process. */
 const COMMAND_LINE_ATTRIBUTES = ['process.command_args', 'process.command_line'] as const
 
-/** The order the SDK runs its detectors in when `OTEL_NODE_RESOURCE_DETECTORS` is unset. */
-const DEFAULT_ORDER = ['serviceinstance', 'process', 'host', 'os', 'env'] as const
+/** The name of one of the detectors. */
+type DetectorName = keyof DetectorMap
 
-/** The order the SDK's own table lists them in, which `all` selects. */
-const ALL_ORDER = ['host', 'os', 'serviceinstance', 'process', 'env'] as const
+/**
+ * What each name in `OTEL_NODE_RESOURCE_DETECTORS` selects. The OpenTelemetry specification names
+ * `process`, `host` (the host and os attributes) and `service` (the instance id and the
+ * environment); the SDK's `NodeSDK` class still accepts the older `os`, `serviceinstance` and
+ * `env`. Both sets are accepted. A `Map`, so that no name can match a member of `Object.prototype`.
+ */
+const NAMED = new Map<string, readonly DetectorName[]>([
+  ['process', ['process']],
+  ['host', ['host', 'os']],
+  ['os', ['os']],
+  ['service', ['serviceinstance', 'env']],
+  ['serviceinstance', ['serviceinstance']],
+  ['env', ['env']]
+])
+
+/** The detectors the SDK runs when `OTEL_NODE_RESOURCE_DETECTORS` is unset, in its order. */
+const DEFAULT_DETECTORS: readonly DetectorName[] = [
+  'serviceinstance',
+  'process',
+  'host',
+  'os',
+  'env'
+]
+
+/** The detectors `all` selects, in the order of the SDK's own table. */
+const ALL_DETECTORS: readonly DetectorName[] = ['host', 'os', 'serviceinstance', 'process', 'env']
 
 /**
  * Wraps a detector so the named attributes are left out of what it reports.
@@ -54,12 +78,13 @@ export function withoutAttributes(
 }
 
 /**
- * Chooses the resource detectors, the way `OTEL_NODE_RESOURCE_DETECTORS` selects them for the SDK.
+ * Chooses the resource detectors, the way `OTEL_NODE_RESOURCE_DETECTORS` selects them for the SDK,
+ * under the specification's names and the SDK's older ones.
  *
  * @param selection - The names in `OTEL_NODE_RESOURCE_DETECTORS`, or `undefined` when it is unset.
  * @param detectors - The detectors by name.
  * @param keepCommandLine - Whether the process command line stays in the resource.
- * @returns The detectors to run, in order. Unknown names are skipped, as the SDK skips them.
+ * @returns The detectors to run, in order, each once. Unknown names are skipped, as the SDK skips them.
  */
 export function selectResourceDetectors(
   selection: readonly string[] | undefined,
@@ -72,11 +97,11 @@ export function selectResourceDetectors(
   if (selection?.includes('none') === true && !selection.includes('all')) {
     return []
   }
-  let names: readonly string[] = DEFAULT_ORDER
+  let chosen: readonly DetectorName[] = DEFAULT_DETECTORS
   if (selection?.includes('all') === true) {
-    names = ALL_ORDER
+    chosen = ALL_DETECTORS
   } else if (selection !== undefined) {
-    names = selection
+    chosen = selection.flatMap((name) => NAMED.get(name) ?? [])
   }
-  return names.flatMap((name) => (name in available ? [available[name as keyof DetectorMap]] : []))
+  return [...new Set(chosen)].map((name) => available[name])
 }
