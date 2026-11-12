@@ -1,1 +1,6 @@
-[]
+[
+  {
+    "file": "src/sdk/process-env-boundary.spec.ts",
+    "reason": "Reads the text of the source files to check which one names process.env and imports nothing from src/, so it executes no mutated code and judges no mutant."
+  }
+]
