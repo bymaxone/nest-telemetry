@@ -225,6 +225,8 @@ constraint it supports, however it was obtained. What ages is the part that cann
 what a previous version of this code did, a version number, a registry state, a review round, a
 failure that has since been fixed. Flag those; keep the measurement.
 
+A test's title states only what its assertions establish; a title that names a behaviour no assertion checks is a finding.
+
 ### Size and layering
 
 Functions over **50 lines** and nesting deeper than four levels are findings **for what a change
