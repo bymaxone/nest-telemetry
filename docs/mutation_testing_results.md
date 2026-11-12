@@ -26,8 +26,7 @@ The workflow then runs the inventory gate in `enforce` mode: every unit test mus
 mutation run. It printed `all 214 unit tests ran in the mutation run, 1 exempt spec files left out`.
 The one exempt spec reads the text of the source files to check which of them names `process.env`;
 it imports nothing from `src/`, so it executes no mutated code and judges no mutant. The reason is
-recorded next to the file name in `scripts/mutation-inventory.exempt.json`, and the checker fails the
-run if an exempt spec is no longer in the suite or if the run did execute it.
+recorded next to the file name in `scripts/mutation-inventory.exempt.json`.
 
 ## What the number means
 
@@ -55,6 +54,4 @@ pnpm mutation        # the incremental run used on every push
 
 `stryker.config.json` sets `incremental: true`, so the per-push run re-tests only what changed. An
 incremental run reuses stored verdicts, and reused verdicts for static mutants can be stale, which is
-why the score is re-measured cold by the weekly `Mutation (full)` workflow. The measurement above is
-the cold run taken on `main` before `1.0.0` was published; the source files it covers are unchanged
-in `1.0.1`.
+why the score is re-measured cold by the weekly `Mutation (full)` workflow.
