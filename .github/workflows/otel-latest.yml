@@ -1,0 +1,82 @@
+# Runs the suites against the newest release of every OpenTelemetry package, ignoring the lockfile.
+#
+# The peer ranges of this library name only the OpenTelemetry generations its tests have run against,
+# and the SDK's 0.x packages break between minors, so a new release can break the library before any
+# consumer reports it. This job finds that out within a week. A failure opens an issue, or adds to the
+# open one; it never changes a range. Widening a range is a human pull request, after this job passes
+# against the new generation.
+name: OTel latest
+
+on:
+  schedule:
+    # Tuesday, which carries no other scheduled job in this repository.
+    - cron: '41 5 * * 2'
+  workflow_dispatch:
+
+concurrency:
+  group: otel-latest
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  newest:
+    name: Newest OpenTelemetry releases
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: bymaxone/.github/.github/actions/setup-node-pnpm@v1
+
+      - name: Install the newest release of every OpenTelemetry package
+        # Rewrites package.json and the lockfile on this runner only; nothing is committed. The set
+        # is read from the manifest, so a package added later is covered without editing this job.
+        run: |
+          mapfile -t packages < <(node -e "
+            const dev = require('./package.json').devDependencies
+            for (const name of Object.keys(dev)) {
+              if (name.startsWith('@opentelemetry/')) console.log(name + '@latest')
+            }
+          ")
+          pnpm add --save-dev "${packages[@]}"
+
+      - name: Record the versions under test
+        run: pnpm ls --depth 0 | grep '@opentelemetry' | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Unit suite
+        run: pnpm test:cov
+
+      - name: End-to-end suite
+        run: pnpm test:e2e
+
+      - name: Build
+        run: pnpm build
+
+      - name: Packed-tarball runtime gate
+        run: pnpm check:runtime
+
+      - name: Open or update an issue when the newest releases break the library
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title='The newest OpenTelemetry releases break the library'
+          body="The weekly run against the newest release of every OpenTelemetry package failed: $RUN_URL
+
+          The peer ranges name only the generations the tests have run against. Read the failing step, fix the library for the new generation, and widen the ranges in a pull request once this job passes."
+          # No label: this repository holds only GitHub's default labels, and a label that does not
+          # exist makes `gh issue create` fail, which would lose the alert this step exists to raise.
+          existing=$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
