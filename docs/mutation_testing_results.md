@@ -49,9 +49,9 @@ the whole suite still passes.
 
 ```bash
 pnpm mutation:full   # deletes the incremental baseline, then runs Stryker cold
-pnpm mutation        # the incremental run used on every push
+pnpm mutation        # the incremental run, which the CI workflow runs on a push to main
 ```
 
-`stryker.config.json` sets `incremental: true`, so the per-push run re-tests only what changed. An
+`stryker.config.json` sets `incremental: true`, so the incremental run re-tests only what changed. An
 incremental run reuses stored verdicts, and reused verdicts for static mutants can be stale, which is
 why the score is re-measured cold by the weekly `Mutation (full)` workflow.
