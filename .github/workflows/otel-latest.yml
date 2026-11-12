@@ -39,11 +39,13 @@ jobs:
         # Rewrites package.json and the lockfile on this runner only; nothing is committed. The set
         # is read from the manifest, so a package added later is covered without editing this job.
         run: |
-          packages=$(node -e "
+          mapfile -t packages < <(node -e "
             const dev = require('./package.json').devDependencies
-            console.log(Object.keys(dev).filter((name) => name.startsWith('@opentelemetry/')).map((name) => name + '@latest').join(' '))
+            for (const name of Object.keys(dev)) {
+              if (name.startsWith('@opentelemetry/')) console.log(name + '@latest')
+            }
           ")
-          pnpm add --save-dev $packages
+          pnpm add --save-dev "${packages[@]}"
 
       - name: Record the versions under test
         run: pnpm ls --depth 0 | grep '@opentelemetry' | tee -a "$GITHUB_STEP_SUMMARY"
