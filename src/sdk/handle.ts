@@ -17,8 +17,14 @@ export interface RunningHandle extends TelemetryHandle {
 /** The registry symbol under which the handle is published. */
 const HANDLE_KEY = Symbol.for('@bymax-one/nest-telemetry/handle')
 
-/** `globalThis` seen as the store of the handle. */
-const store = globalThis as typeof globalThis & { [HANDLE_KEY]?: RunningHandle }
+/** The registry symbol under which the start in progress is published. */
+const PENDING_KEY = Symbol.for('@bymax-one/nest-telemetry/pending-start')
+
+/** `globalThis` seen as the store of the handle and of the start in progress. */
+const store = globalThis as typeof globalThis & {
+  [HANDLE_KEY]?: RunningHandle
+  [PENDING_KEY]?: Promise<RunningHandle>
+}
 
 /**
  * Registers a started SDK's handle.
@@ -41,6 +47,32 @@ export function currentHandle(): RunningHandle | undefined {
 /** Clears the registered handle. */
 export function clearHandle(): void {
   delete store[HANDLE_KEY]
+}
+
+/**
+ * Reads the start in progress, if any.
+ *
+ * Kept beside the handle, under its own registry symbol, so that two copies of the library, such as
+ * an ESM preload and a CommonJS application, join one start instead of each beginning their own.
+ *
+ * @returns The pending start, or `undefined` when none is under way.
+ */
+export function pendingStart(): Promise<RunningHandle> | undefined {
+  return store[PENDING_KEY]
+}
+
+/**
+ * Publishes the start in progress.
+ *
+ * @param start - The pending start.
+ */
+export function setPendingStart(start: Promise<RunningHandle>): void {
+  store[PENDING_KEY] = start
+}
+
+/** Clears the start in progress. */
+export function clearPendingStart(): void {
+  delete store[PENDING_KEY]
 }
 
 /**
@@ -82,11 +114,14 @@ export function createHandle(stopSdk: () => Promise<void>): RunningHandle {
  * Flushes and stops the SDK the preload registered, if any.
  *
  * Awaiting this guarantees buffered spans are exported before the process exits, including when
- * another caller started the flush. With nothing registered, which is the case when telemetry is
+ * another caller started the flush or the start is still in progress. With nothing registered, which is the case when telemetry is
  * disabled, it resolves immediately.
  *
  * @returns A promise that resolves once buffered spans are exported.
  */
 export async function shutdownTelemetry(): Promise<void> {
+  // A start still loading the packages has no handle to drain yet. Wait for it, so the SDK it
+  // builds is stopped rather than left running; whether the start succeeded is its caller's concern.
+  await Promise.allSettled([pendingStart()])
   await currentHandle()?.shutdown()
 }

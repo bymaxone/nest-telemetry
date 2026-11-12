@@ -19,7 +19,14 @@ import {
 } from './assembly'
 import { readTelemetryEnvironment } from './environment'
 import type { TelemetryEnvironment } from './environment'
-import { createHandle, currentHandle, registerHandle } from './handle'
+import {
+  clearPendingStart,
+  createHandle,
+  currentHandle,
+  pendingStart,
+  registerHandle,
+  setPendingStart
+} from './handle'
 import type { RunningHandle } from './handle'
 import { createUrlQueryRedactor } from './redaction'
 import { selectResourceDetectors } from './resource-detectors'
@@ -55,16 +62,16 @@ export async function startTelemetry(options: TelemetryOptions = {}): Promise<Te
   if (running !== undefined) {
     return running
   }
-  // A second caller that arrives while the first is still loading gets the same start, so two
-  // overlapping calls never build two SDKs.
-  starting ??= boot(options, env).finally(() => {
-    starting = undefined
-  })
-  return starting
+  // A second caller that arrives while the first is still loading gets the same start, whichever
+  // copy of the library it runs in, so two overlapping calls never build two SDKs.
+  const joined = pendingStart()
+  if (joined !== undefined) {
+    return joined
+  }
+  const start = boot(options, env).finally(clearPendingStart)
+  setPendingStart(start)
+  return start
 }
-
-/** The start in progress, if any. */
-let starting: Promise<RunningHandle> | undefined
 
 /** The OpenTelemetry packages a start loads, all of them behind dynamic imports. */
 interface LoadedPackages {

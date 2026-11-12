@@ -1,8 +1,11 @@
 import {
   clearHandle,
+  clearPendingStart,
   createHandle,
   currentHandle,
+  pendingStart,
   registerHandle,
+  setPendingStart,
   shutdownTelemetry
 } from './handle'
 import type { RunningHandle } from './handle'
@@ -32,6 +35,30 @@ async function settle(): Promise<void> {
 
 afterEach(() => {
   clearHandle()
+  clearPendingStart()
+})
+
+describe('pendingStart', () => {
+  it('is undefined when no start is under way', () => {
+    // Scenario: nothing started, so a caller has no start to join.
+    expect(pendingStart()).toBeUndefined()
+  })
+
+  it('returns the start that was published, through the global symbol registry', async () => {
+    // Scenario: two copies of the library share only globalThis, so the start in progress is
+    // published there, under a registry symbol, until it is cleared.
+    const handle = createHandle(() => Promise.resolve())
+    const start = Promise.resolve(handle)
+    setPendingStart(start)
+    expect(pendingStart()).toBe(start)
+    const slot = (globalThis as Record<symbol, unknown>)[
+      Symbol.for('@bymax-one/nest-telemetry/pending-start')
+    ]
+    expect(slot).toBe(start)
+    clearPendingStart()
+    expect(pendingStart()).toBeUndefined()
+    await start
+  })
 })
 
 describe('registerHandle and currentHandle', () => {

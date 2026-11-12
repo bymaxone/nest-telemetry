@@ -1,4 +1,12 @@
-import { clearHandle, currentHandle, shutdownTelemetry } from './handle'
+import {
+  clearHandle,
+  clearPendingStart,
+  createHandle,
+  currentHandle,
+  pendingStart,
+  setPendingStart,
+  shutdownTelemetry
+} from './handle'
 import { startTelemetry } from './start'
 
 const mockSdkInstance = {
@@ -52,6 +60,7 @@ beforeEach(() => {
 
 afterEach(() => {
   clearHandle()
+  clearPendingStart()
 })
 
 describe('startTelemetry', () => {
@@ -187,6 +196,26 @@ describe('startTelemetry', () => {
       expect(mockSdkInstance.start).toHaveBeenCalledTimes(1)
     })
 
+    it('joins a start that another copy of the module began', async () => {
+      // Scenario: an ESM preload and a CommonJS application each load their own copy of the
+      // library and share only globalThis. The other copy's start is in progress there, so this
+      // copy hands back its handle and builds nothing.
+      const otherHandle = createHandle(() => Promise.resolve())
+      setPendingStart(Promise.resolve(otherHandle))
+      const handle = await startTelemetry({ env: {} })
+      expect(handle).toBe(otherHandle)
+      expect(mockNodeSdk).not.toHaveBeenCalled()
+    })
+
+    it('publishes its own start where another copy can join it', async () => {
+      // Scenario: while this copy is loading, the registry holds the start another copy would join.
+      const starting = startTelemetry({ env: {} })
+      const published = pendingStart()
+      expect(published).toBeDefined()
+      expect(await published).toBe(await starting)
+      expect(pendingStart()).toBeUndefined()
+    })
+
     it('starts again after a start that failed', async () => {
       // Scenario: a failed start must not leave the in-flight marker behind and block every later
       // attempt.
@@ -249,6 +278,29 @@ describe('startTelemetry', () => {
   })
 
   describe('shutdown', () => {
+    it('waits for a start in progress and then drains the SDK it started', async () => {
+      // Scenario: a shutdown arrives while the packages are still loading; with no handle yet it
+      // must not resolve and leave the SDK to start afterwards with nobody to stop it.
+      const starting = startTelemetry({ env: {} })
+      const stopping = shutdownTelemetry()
+      await Promise.all([starting, stopping])
+      expect(mockSdkInstance.start).toHaveBeenCalledTimes(1)
+      expect(mockSdkInstance.shutdown).toHaveBeenCalledTimes(1)
+      expect(currentHandle()).toBeUndefined()
+    })
+
+    it('does not fail a shutdown because the start it waited for failed', async () => {
+      // Scenario: the start in progress throws; the shutdown has nothing to drain and resolves,
+      // and the failure belongs to the caller of start.
+      mockNodeSdk.mockImplementationOnce(() => {
+        throw new Error('constructor failed')
+      })
+      const starting = startTelemetry({ env: {} })
+      const stopping = shutdownTelemetry()
+      await expect(starting).rejects.toThrow('constructor failed')
+      await expect(stopping).resolves.toBeUndefined()
+    })
+
     it('stops the SDK once and clears the registry', async () => {
       // Scenario: the handle flushes the SDK and later calls are no-ops.
       const handle = await startTelemetry({ env: {} })

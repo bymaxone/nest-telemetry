@@ -250,6 +250,22 @@ describe('overlapping shutdowns', () => {
   })
 })
 
+describe('a shutdown during a start', () => {
+  it('waits for the start and stops the SDK it began', async () => {
+    // Scenario: the application shuts down while the preload is still loading the packages; the
+    // shutdown must not resolve with no handle and leave an SDK running afterwards.
+    const starting = startTelemetry({ env: {} })
+    const stopping = shutdownTelemetry()
+    const handle = await starting
+    await stopping
+    expect(handle.enabled).toBe(true)
+    // The SDK was stopped, so the registry is empty and a new start builds a fresh one.
+    const again = await startTelemetry({ env: {} })
+    expect(again).not.toBe(handle)
+    await again.shutdown()
+  })
+})
+
 describe('overlapping starts', () => {
   it('start one SDK and hand every caller the same handle', async () => {
     // Scenario: a preload and an application bootstrap both call start before either finishes.
