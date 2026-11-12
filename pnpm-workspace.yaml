@@ -11,6 +11,9 @@ allowBuilds:
   # npm_config_build_from_source=true and otherwise does nothing; the prebuilt
   # binary arrives as a platform-specific optional dependency.
   '@parcel/watcher': false
+  # Reached through the OpenTelemetry OTLP exporters, which are dev-only here. Its install script
+  # only fetches optional tooling that neither the library nor its tests use.
+  protobufjs: false
 
 # Forced versions for vulnerable transitive dev dependencies. These live here and NOT in
 # package.json: pnpm 11 no longer reads the `pnpm` field of package.json.

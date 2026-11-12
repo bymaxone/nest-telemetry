@@ -17,9 +17,10 @@ disabled boot loads none of them.
 | `./nest`     | NestJS module and shutdown flush        | yes                 |
 
 ```ts
-import { scaffoldMarker } from '@bymax-one/nest-telemetry'
+import { startTelemetry } from '@bymax-one/nest-telemetry'
 
-scaffoldMarker()
+const telemetry = await startTelemetry({ serviceName: 'billing' })
+await telemetry.shutdown()
 ```
 
 ## License

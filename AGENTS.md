@@ -21,11 +21,13 @@ nothing normative belongs behind it.
 
 ## 4. Security Specification
 
-- Redaction of `url.query` and `url.full`, and of Redis command payloads, is ON by default and
-  cannot be turned off silently: disabling it is an explicit option that is reported at boot.
+- Redaction of `url.query` and `url.full`, of Redis command payloads and of the process command line in
+  the exported resource is ON by default and cannot be turned off silently: disabling it is an explicit
+  `unsafe` option that is reported at boot.
 - Redaction is applied by a span processor on span end, so it covers spans created by any
   instrumentation, not only those the library configures.
 - A failure in the telemetry path (exporter down, flush timeout) never crashes or blocks the host.
+  `shutdownTelemetry()` rejects so that its caller decides what a refused flush means.
 
 ## 5. Testing Strategy
 
