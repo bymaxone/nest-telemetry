@@ -36,7 +36,12 @@ let consumerDir
 const EXPECTED_EXPORTS = {
   sdk: ['startTelemetry', 'shutdownTelemetry', 'ignorePaths', 'DEFAULT_REDACTED_QUERY_PARAMS'],
   register: [],
-  nest: ['scaffoldMarker']
+  nest: [
+    'TelemetryModule',
+    'TelemetryShutdownHook',
+    'TELEMETRY_LOGGER',
+    'TELEMETRY_FLUSH_FAILED_KEY'
+  ]
 }
 const SUBPATHS = Object.keys(EXPECTED_EXPORTS)
 
@@ -165,7 +170,12 @@ try {
     version: '0.0.1',
     type: 'module',
     dependencies: {
-      '@bymax-one/nest-telemetry': `file:${ROOT}`
+      '@bymax-one/nest-telemetry': `file:${ROOT}`,
+      // The peers `./nest` imports at load time; the consumer installs them as a Nest application would.
+      '@nestjs/common': '^11.0.16',
+      '@nestjs/core': '^11.1.18',
+      'reflect-metadata': '^0.2.0',
+      rxjs: '^7.8.0'
     }
   }
   writeFileSync(resolve(consumerDir, 'package.json'), JSON.stringify(consumerPkgJson, null, 2))
