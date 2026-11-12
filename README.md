@@ -150,7 +150,7 @@ export class AppModule {}
 Things to know before you rely on it:
 
 1. **Traces only, by default.** Metrics and logs stay off unless `OTEL_METRICS_EXPORTER` or `OTEL_LOGS_EXPORTER` names an exporter. This departs from the OpenTelemetry default, which exports both through OTLP, and it does so on purpose: otherwise a host that already ships metrics and logs another way would send them twice.
-2. **Name your service.** With neither `OTEL_SERVICE_NAME` nor a `serviceName` option, the start warns once (`BYMAX_TELEMETRY_SERVICE_NAME_MISSING`) and spans are exported as `unknown_service:node`, which groups unrelated services under one name. A `service.name` set only in `OTEL_RESOURCE_ATTRIBUTES` is honoured and the spans carry it, but the warning still fires, because the library looks only at `OTEL_SERVICE_NAME` and the option; set `OTEL_SERVICE_NAME` to silence it. The start is never refused.
+2. **Name your service.** With neither `OTEL_SERVICE_NAME` nor a `serviceName` option, the start warns once (`BYMAX_TELEMETRY_SERVICE_NAME_MISSING`) and spans are exported as `unknown_service:node`, which groups unrelated services under one name. A `service.name` set only in `OTEL_RESOURCE_ATTRIBUTES` is honoured and the spans carry it while the `env` or `service` resource detector is enabled, as every detector is by default, but the warning still fires, because the library looks only at `OTEL_SERVICE_NAME` and the option; set `OTEL_SERVICE_NAME` to silence it. The start is never refused.
 3. **Signals.** The preload flushes when the process runs out of work. It installs no signal handler, because a handler in the preload would race the application's own shutdown. In Nest, call `app.enableShutdownHooks()` so `SIGTERM` closes the application, and the module flushes the SDK. In plain Node, call `shutdownTelemetry()` yourself.
 
 ### Plain Node
@@ -313,16 +313,16 @@ What it does not do for you: choose a sampler, run a collector, or decide your s
 
 ## 🩺 Troubleshooting
 
-| You see                                                  | Look at                                                                                                                                                                  |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| No spans at all                                          | `OTEL_SDK_DISABLED`; that the application was started with `--import`; `OTEL_EXPORTER_OTLP_ENDPOINT`; the start warnings.                                                |
-| Spans from a CommonJS app but none from a native-ESM app | `BYMAX_TELEMETRY_ESM_HOOK_UNAVAILABLE`: install `@opentelemetry/instrumentation`.                                                                                        |
-| Spans arrive but carry no service name                   | `BYMAX_TELEMETRY_SERVICE_NAME_MISSING`: set `OTEL_SERVICE_NAME` or the `serviceName` option. A name set only through `OTEL_RESOURCE_ATTRIBUTES` still reaches the spans. |
-| `BYMAX_TELEMETRY_START_FAILED`                           | The warning names the cause, usually an OpenTelemetry peer that is not installed.                                                                                        |
-| HTTP spans but no Redis spans                            | Commands are traced under an active span only, and `ioredis` must be loaded after the preload.                                                                           |
-| Metrics or logs missing                                  | They are off unless `OTEL_METRICS_EXPORTER` or `OTEL_LOGS_EXPORTER` names an exporter.                                                                                   |
-| The last spans are lost on `SIGTERM`                     | Call `app.enableShutdownHooks()` in Nest, or `shutdownTelemetry()` from your own shutdown path.                                                                          |
-| A query string still appears in a span                   | It is on an attribute other than `url.query`, `url.full`, `http.url` or `http.target`: see [What This Library Does NOT Do](#-what-this-library-does-not-do).             |
+| You see                                                  | Look at                                                                                                                                                                                                                                                              |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No spans at all                                          | `OTEL_SDK_DISABLED`; that the application was started with `--import`; `OTEL_EXPORTER_OTLP_ENDPOINT`; the start warnings.                                                                                                                                            |
+| Spans from a CommonJS app but none from a native-ESM app | `BYMAX_TELEMETRY_ESM_HOOK_UNAVAILABLE`: install `@opentelemetry/instrumentation`.                                                                                                                                                                                    |
+| Spans arrive but carry no service name                   | `BYMAX_TELEMETRY_SERVICE_NAME_MISSING`: set `OTEL_SERVICE_NAME` or the `serviceName` option. A name set only through `OTEL_RESOURCE_ATTRIBUTES` still reaches the spans, unless `OTEL_NODE_RESOURCE_DETECTORS` leaves out both the `env` and the `service` detector. |
+| `BYMAX_TELEMETRY_START_FAILED`                           | The warning names the cause, usually an OpenTelemetry peer that is not installed.                                                                                                                                                                                    |
+| HTTP spans but no Redis spans                            | Commands are traced under an active span only, and `ioredis` must be loaded after the preload.                                                                                                                                                                       |
+| Metrics or logs missing                                  | They are off unless `OTEL_METRICS_EXPORTER` or `OTEL_LOGS_EXPORTER` names an exporter.                                                                                                                                                                               |
+| The last spans are lost on `SIGTERM`                     | Call `app.enableShutdownHooks()` in Nest, or `shutdownTelemetry()` from your own shutdown path.                                                                                                                                                                      |
+| A query string still appears in a span                   | It is on an attribute other than `url.query`, `url.full`, `http.url` or `http.target`: see [What This Library Does NOT Do](#-what-this-library-does-not-do).                                                                                                         |
 
 ---
 
@@ -475,6 +475,7 @@ No exports. `node --import @bymax-one/nest-telemetry/register` registers the loa
 | `TelemetryShutdownHook`      | provider | `OnApplicationShutdown`: awaits `shutdownTelemetry()`; a refused flush is reported and never rejects |
 | `TELEMETRY_LOGGER`           | token    | Optional provider with an `errorStructured(logKey, error)` method, used to report a failed flush     |
 | `TELEMETRY_FLUSH_FAILED_KEY` | constant | The stable key, `TRACING_FLUSH_FAILED`, under which a failed flush is reported                       |
+| `ITelemetryErrorLogger`      | type     | The shape `TELEMETRY_LOGGER` provides: `errorStructured(logKey, error)`                              |
 
 ---
 
