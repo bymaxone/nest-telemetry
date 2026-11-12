@@ -35,10 +35,17 @@ let consumerDir
 // its entry point.
 const EXPECTED_EXPORTS = {
   sdk: ['startTelemetry', 'shutdownTelemetry', 'ignorePaths', 'DEFAULT_REDACTED_QUERY_PARAMS'],
-  register: ['scaffoldMarker'],
+  register: [],
   nest: ['scaffoldMarker']
 }
 const SUBPATHS = Object.keys(EXPECTED_EXPORTS)
+
+// Importing `./register` runs the preload, which starts the SDK unless the standard switch says
+// otherwise; this script checks the shape of the package, not tracing.
+process.env.OTEL_SDK_DISABLED = 'true'
+
+// The CommonJS face of the preload cannot be required: it must refuse, and say how to use it.
+const ESM_ONLY = ['register']
 
 const EXPECTED_DIST_FILES = SUBPATHS.flatMap((sub) =>
   ['mjs', 'cjs', 'd.ts', 'd.cts'].map((ext) => `dist/${sub}/index.${ext}`)
@@ -93,6 +100,17 @@ section('3. CJS exports')
 const { createRequire } = await import('node:module')
 const req = createRequire(import.meta.url)
 for (const [sub, names] of Object.entries(EXPECTED_EXPORTS)) {
+  if (ESM_ONLY.includes(sub)) {
+    try {
+      req(resolve(ROOT, `dist/${sub}/index.cjs`))
+      fail(`${sub}: the CommonJS entry loaded, but it must refuse`)
+    } catch (error) {
+      if (String(error.message).includes('node --import'))
+        pass(`${sub}: the CommonJS entry refuses and names node --import`)
+      else fail(`${sub}: the CommonJS entry threw something else: ${String(error.message)}`)
+    }
+    continue
+  }
   const cjs = req(resolve(ROOT, `dist/${sub}/index.cjs`))
   for (const name of names) {
     if (name in cjs) {

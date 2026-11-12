@@ -23,8 +23,22 @@ const common = {
 export default defineConfig([
   // SDK entry (`.`) — programmatic start. Imports no `@nestjs/*` package.
   { ...common, entry: { 'sdk/index': 'src/sdk/index.ts' } },
-  // Zero-config preload for `node --import`.
-  { ...common, entry: { 'register/index': 'src/register/index.ts' } },
+  // Zero-config preload for `node --import`. The ES module is the preload itself, a bundle of
+  // `preload.mjs` and the TypeScript it calls; the CommonJS file only refuses to load, because a
+  // `--require` preload cannot wait for the asynchronous SDK start; the declarations are empty.
+  {
+    ...common,
+    format: ['esm'],
+    dts: false,
+    entry: { 'register/index': 'src/register/preload.mjs' }
+  },
+  {
+    ...common,
+    format: ['cjs'],
+    dts: false,
+    entry: { 'register/index': 'src/register/require-stub.ts' }
+  },
+  { ...common, dts: { only: true }, entry: { 'register/index': 'src/register/index.ts' } },
   // NestJS module and shutdown provider.
   { ...common, entry: { 'nest/index': 'src/nest/index.ts' } }
 ])
