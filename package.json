@@ -88,8 +88,8 @@
     "test": "jest",
     "test:all": "pnpm test && pnpm test:e2e",
     "test:cov": "jest --coverage",
-    "test:cov:all": "jest --config jest.coverage.config.ts --coverage",
-    "test:e2e": "jest --config jest.e2e.config.ts --coverage",
+    "test:cov:all": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config jest.coverage.config.ts --coverage",
+    "test:e2e": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config jest.e2e.config.ts --coverage",
     "test:watch": "jest --watch",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.build.json && tsc --noEmit -p tsconfig.e2e.json",
     "check:runtime": "node scripts/check-consumer-runtime.mjs"
@@ -106,6 +106,12 @@
   "peerDependencies": {
     "@nestjs/common": "^11.0.16",
     "@nestjs/core": "^11.1.18",
+    "@opentelemetry/api": "^1.10.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.83.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.301.0",
+    "@opentelemetry/resources": "^3.1.0",
+    "@opentelemetry/sdk-node": "^0.301.0",
+    "@opentelemetry/sdk-trace": "^3.1.0",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.0"
   },
@@ -114,6 +120,24 @@
       "optional": true
     },
     "@nestjs/core": {
+      "optional": true
+    },
+    "@opentelemetry/api": {
+      "optional": true
+    },
+    "@opentelemetry/auto-instrumentations-node": {
+      "optional": true
+    },
+    "@opentelemetry/exporter-trace-otlp-http": {
+      "optional": true
+    },
+    "@opentelemetry/resources": {
+      "optional": true
+    },
+    "@opentelemetry/sdk-node": {
+      "optional": true
+    },
+    "@opentelemetry/sdk-trace": {
       "optional": true
     },
     "reflect-metadata": {
@@ -132,7 +156,14 @@
     "@nestjs/core": "^11.1.20",
     "@nestjs/platform-express": "^11.1.20",
     "@nestjs/testing": "^11.1.20",
-    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/api": "^1.10.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.83.0",
+    "@opentelemetry/core": "^3.1.1",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.301.1",
+    "@opentelemetry/instrumentation-http": "^0.301.1",
+    "@opentelemetry/resources": "^3.1.1",
+    "@opentelemetry/sdk-node": "^0.301.1",
+    "@opentelemetry/sdk-trace": "^3.1.1",
     "@stryker-mutator/core": "^9",
     "@stryker-mutator/jest-runner": "^9",
     "@stryker-mutator/typescript-checker": "^9",
@@ -150,6 +181,7 @@
     "eslint-plugin-security": "^4.0.0",
     "globals": "^17.6.0",
     "husky": "^9.1.7",
+    "ioredis": "^5.11.1",
     "jest": "^30.4.2",
     "lint-staged": "^17.0.7",
     "prettier": "^3.8.3",

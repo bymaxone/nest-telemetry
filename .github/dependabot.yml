@@ -36,6 +36,20 @@ updates:
           - minor
           - patch
 
+      # The OpenTelemetry packages are released as one coherent set: sdk-node pins its own
+      # dependencies to exact versions, and the 0.x packages move together with the stable 3.x
+      # ones, so a bump of one without its siblings neither resolves nor tests cleanly. This library,
+      # unlike the others, carries the SDK as peers and in its own tests, which is why only it has
+      # this group. It also keeps a failing OpenTelemetry bump from holding up the unrelated tooling
+      # updates in the group below.
+      opentelemetry:
+        patterns:
+          - '@opentelemetry/*'
+        update-types:
+          - major
+          - minor
+          - patch
+
       # Batch low-risk dev tooling bumps into a single PR to cut review noise.
       # Majors stay out: each one needs its own verification and its own revert.
       dev-dependencies:

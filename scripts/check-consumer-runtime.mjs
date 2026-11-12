@@ -9,13 +9,14 @@
  *
  * What it proves, per module format:
  *
- * 1. `.` and `./register` load with NO `@nestjs/*` and NO OpenTelemetry SDK-graph package
- *    (`sdk-*`, `exporter-*`, `instrumentation*`, `resources`, `auto-instrumentations*`)
+ * 1. `.` and `./register` load, and a start that is disabled — by the host or by
+ *    OTEL_SDK_DISABLED — completes, with NO `@nestjs/*` and NO OpenTelemetry package
+ *    (`api`, `sdk-*`, `exporter-*`, `instrumentation*`, `resources`, `auto-instrumentations*`)
  *    resolvable. The SDK part is usable from plain Node, and a boot that is disabled
  *    loads no OpenTelemetry package: a resolution of either namespace is turned into a
  *    hard error by a resolve hook and recorded, so the gate fails on the first request
  *    rather than on a log line.
- * 2. `./nest` loads with `@nestjs/*` available and NO SDK-graph package resolvable:
+ * 2. `./nest` loads with `@nestjs/*` available and NO OpenTelemetry package resolvable:
  *    the Nest part adds no OpenTelemetry cost of its own.
  * 3. Every entry exports the names its subpath promises.
  *
@@ -56,10 +57,12 @@ const packageName = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf8
 const consumerDir = join(rootDir, '.consumer-runtime-check')
 
 /**
- * The OpenTelemetry packages that make up the library's SDK graph. `@opentelemetry/api` is
- * deliberately absent: other libraries may load it, and it is inert without an SDK.
+ * The OpenTelemetry packages that make up the library's SDK graph, and the API package. A boot
+ * with telemetry disabled loads none of them from this library: the API is inert without an SDK,
+ * and other libraries may load it on their own, but this library has no reason to.
  */
-const OTEL_SDK_GRAPH = [
+const OTEL_PACKAGES = [
+  '@opentelemetry/api',
   '@opentelemetry/sdk-',
   '@opentelemetry/exporter-',
   '@opentelemetry/instrumentation',
@@ -67,17 +70,43 @@ const OTEL_SDK_GRAPH = [
   '@opentelemetry/auto-instrumentations'
 ]
 
-/** The probes: which subpaths load together, which namespaces are denied, what is exported. */
+/**
+ * The probes: which subpaths load together, which namespaces are denied, what is exported, which
+ * calls are made and what they must return. `expectDenied` marks a positive control: the probe
+ * must FAIL because the resolve hook fired, which proves the denial can see a load.
+ */
 const PROBES = [
   {
-    label: 'sdk without Nest or the OpenTelemetry SDK graph',
-    deny: ['@nestjs/', ...OTEL_SDK_GRAPH],
-    entries: { '.': ['scaffoldMarker'], './register': ['scaffoldMarker'] }
+    label: 'sdk without Nest or any OpenTelemetry package, disabled by the host',
+    deny: ['@nestjs/', ...OTEL_PACKAGES],
+    entries: {
+      '.': ['startTelemetry', 'shutdownTelemetry', 'ignorePaths', 'DEFAULT_REDACTED_QUERY_PARAMS'],
+      './register': ['scaffoldMarker']
+    },
+    calls: [
+      { entry: '.', fn: 'startTelemetry', args: [{ enabled: false }], expect: { enabled: false } },
+      { entry: '.', fn: 'shutdownTelemetry', args: [], expect: {} }
+    ]
   },
   {
-    label: 'nest without the OpenTelemetry SDK graph',
-    deny: OTEL_SDK_GRAPH,
-    entries: { './nest': ['scaffoldMarker'] }
+    label: 'sdk without any OpenTelemetry package, disabled by OTEL_SDK_DISABLED',
+    deny: ['@nestjs/', ...OTEL_PACKAGES],
+    env: { OTEL_SDK_DISABLED: 'true' },
+    entries: { '.': ['startTelemetry'] },
+    calls: [{ entry: '.', fn: 'startTelemetry', args: [], expect: { enabled: false } }]
+  },
+  {
+    label: 'positive control: an enabled start reaches the denied packages',
+    deny: ['@nestjs/', ...OTEL_PACKAGES],
+    entries: { '.': ['startTelemetry'] },
+    calls: [{ entry: '.', fn: 'startTelemetry', args: [{}], expect: { enabled: true } }],
+    expectDenied: true
+  },
+  {
+    label: 'nest without any OpenTelemetry package',
+    deny: OTEL_PACKAGES,
+    entries: { './nest': ['scaffoldMarker'] },
+    calls: []
   }
 ]
 
@@ -98,32 +127,61 @@ registerHooks({
 
 const probeBody = (format) => `
 const ENTRIES = JSON.parse(process.env.PROBE_ENTRIES)
-const failures = []
-for (const [subpath, names] of Object.entries(ENTRIES)) {
-  const specifier = '${packageName}' + subpath.slice(1)
-  const loaded = ${format === 'ESM' ? 'await import(specifier)' : 'require(specifier)'}
-  const absent = names.filter((name) => !(name in loaded))
-  if (absent.length > 0) failures.push(subpath + ' does not export: ' + absent.join(', '))
+const CALLS = JSON.parse(process.env.PROBE_CALLS)
+const load = (specifier) => ${format === 'ESM' ? 'import(specifier)' : 'Promise.resolve(require(specifier))'}
+const specifierOf = (subpath) => '${packageName}' + subpath.slice(1)
+
+async function run() {
+  const failures = []
+  for (const [subpath, names] of Object.entries(ENTRIES)) {
+    const loaded = await load(specifierOf(subpath))
+    const absent = names.filter((name) => !(name in loaded))
+    if (absent.length > 0) failures.push(subpath + ' does not export: ' + absent.join(', '))
+  }
+  for (const call of CALLS) {
+    const loaded = await load(specifierOf(call.entry))
+    const result = await loaded[call.fn](...call.args)
+    for (const [key, value] of Object.entries(call.expect)) {
+      if (result?.[key] !== value) failures.push(call.fn + '() returned ' + key + '=' + result?.[key] + ', expected ' + value)
+    }
+  }
+  return failures
 }
-if (failures.length > 0) {
-  for (const failure of failures) console.error('  ✗ ${format}: ' + failure)
-  process.exit(1)
-}
-console.log('  ✓ ${format}: ' + Object.keys(ENTRIES).join(', ') + ' loaded and export their names')
 `
 
-const esmProbe = `${probeBody('ESM')}`
+const esmProbe = `${probeBody('ESM')}
+try {
+  const failures = await run()
+  if (failures.length > 0) {
+    for (const failure of failures) console.error('  ✗ ESM: ' + failure)
+    process.exit(1)
+  }
+  console.log('  ✓ ESM: loaded, exports and calls as expected')
+} catch (error) {
+  console.error('  ✗ ESM: ' + (error && error.code ? error.code + ' ' : '') + (error && error.message))
+  process.exit(1)
+}
+`
 // In CommonJS the loaded set is also read back from `require.cache`, so the proof does not rest
 // on the resolve hook alone.
 const cjsProbe = `${probeBody('CJS')}
-const DENY = JSON.parse(process.env.DENY_PREFIXES ?? '[]')
-const leaked = Object.keys(require.cache).filter((file) =>
-  DENY.some((prefix) => file.includes('node_modules/' + prefix))
-)
-if (leaked.length > 0) {
-  console.error('  ✗ CJS: require.cache holds denied modules: ' + leaked.join(', '))
-  process.exit(1)
-}
+run()
+  .then((failures) => {
+    const DENY = JSON.parse(process.env.DENY_PREFIXES ?? '[]')
+    const leaked = Object.keys(require.cache).filter((file) =>
+      DENY.some((prefix) => file.includes('node_modules/' + prefix))
+    )
+    if (leaked.length > 0) failures.push('require.cache holds denied modules: ' + leaked.join(', '))
+    if (failures.length > 0) {
+      for (const failure of failures) console.error('  ✗ CJS: ' + failure)
+      process.exit(1)
+    }
+    console.log('  ✓ CJS: loaded, exports and calls as expected')
+  })
+  .catch((error) => {
+    console.error('  ✗ CJS: ' + (error && error.code ? error.code + ' ' : '') + (error && error.message))
+    process.exit(1)
+  })
 `
 
 function run(command, args, options = {}) {
@@ -183,19 +241,30 @@ try {
     console.log(`  ${probe.label}`)
     for (const file of ['probe.mjs', 'probe.cjs']) {
       try {
-        process.stdout.write(
-          run('node', ['--import', './deny.mjs', file], {
-            cwd: consumerDir,
-            env: {
-              ...process.env,
-              DENY_PREFIXES: JSON.stringify(probe.deny),
-              PROBE_ENTRIES: JSON.stringify(probe.entries)
-            }
-          })
-        )
+        const output = run('node', ['--import', './deny.mjs', file], {
+          cwd: consumerDir,
+          env: {
+            ...process.env,
+            ...probe.env,
+            DENY_PREFIXES: JSON.stringify(probe.deny),
+            PROBE_ENTRIES: JSON.stringify(probe.entries),
+            PROBE_CALLS: JSON.stringify(probe.calls)
+          }
+        })
+        if (probe.expectDenied) {
+          console.error(`  ✗ ${file}: the positive control passed, so the denial cannot see a load`)
+          failed = true
+        } else {
+          process.stdout.write(output)
+        }
       } catch (error) {
+        const stderr = String(error.stderr ?? '')
+        if (probe.expectDenied && stderr.includes('ERR_DENIED_BY_RUNTIME_GATE')) {
+          console.log(`  ✓ ${file}: the denial fired, as the control requires`)
+          continue
+        }
         process.stdout.write(error.stdout ?? '')
-        process.stderr.write(error.stderr ?? '')
+        process.stderr.write(stderr)
         failed = true
       }
     }

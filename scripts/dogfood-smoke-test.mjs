@@ -34,7 +34,7 @@ let consumerDir
 // Every published subpath and the names it must export; each list is the public API of
 // its entry point.
 const EXPECTED_EXPORTS = {
-  sdk: ['scaffoldMarker'],
+  sdk: ['startTelemetry', 'shutdownTelemetry', 'ignorePaths', 'DEFAULT_REDACTED_QUERY_PARAMS'],
   register: ['scaffoldMarker'],
   nest: ['scaffoldMarker']
 }
@@ -179,12 +179,15 @@ try {
     // Import by PACKAGE SPECIFIER from the consumer's cwd (not an absolute
     // path) so this exercises the published `exports` map exactly as a real
     // consumer's import would resolve it.
-    const specifiers = ['', '/register', '/nest'].map(
-      (suffix) => `@bymax-one/nest-telemetry${suffix}`
-    )
+    const expected = Object.entries(EXPECTED_EXPORTS).map(([sub, names]) => ({
+      specifier: sub === 'sdk' ? '@bymax-one/nest-telemetry' : `@bymax-one/nest-telemetry/${sub}`,
+      names
+    }))
     const specifierProbe =
-      `Promise.all(${JSON.stringify(specifiers)}.map((s) => import(s)))` +
-      ".then((all) => { if (all.some((m) => !('scaffoldMarker' in m))) process.exit(3) })" +
+      `Promise.all(${JSON.stringify(expected)}.map(async ({ specifier, names }) => {` +
+      ' const loaded = await import(specifier);' +
+      ' return names.every((name) => name in loaded) })).then((all) => {' +
+      ' if (!all.every(Boolean)) process.exit(3) })' +
       '.catch((e) => { console.error(e); process.exit(5) })'
     const importResult = spawnSync('node', ['--input-type=module', '-e', specifierProbe], {
       cwd: consumerDir,
