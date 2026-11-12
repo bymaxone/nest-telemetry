@@ -133,8 +133,7 @@ jobs:
         # release that silently doubled the bundle; the dogfood smoke is the only
         # gate that resolves the packed tarball from a real consumer in ESM and
         # CJS, which is what catches a DI or `exports` defect the source-based
-        # suite cannot see. Both scripts already existed here and simply were
-        # never wired into the publish path.
+        # suite cannot see.
         run: |
           pnpm size
           pnpm check:runtime
@@ -145,15 +144,12 @@ jobs:
         # already ran it as its own step. Without the flag it runs twice — and the
         # second run starts with `clean`, deleting and rebuilding the `dist/` that
         # `size` and `check:exports` just validated, so the tarball shipped is not
-        # the artifact the gates checked. Observed in the nest-realtime 1.0.1 run.
+        # the artifact the gates checked.
         #
         # `npm publish`, not `pnpm publish`: the registry's `readme` field is
-        # populated from the publish request, and pnpm 11 does not send it. Every
-        # package here published under pnpm 11 landed with an empty `readme` — the
-        # npm page rendering no documentation at all — while every one published
-        # under pnpm 10, which delegated to the npm CLI, carries it. Confirmed on
-        # nest-realtime@1.0.1, where switching restored both `readme` and
-        # `_npmVersion` in a single release.
+        # populated from the publish request, and pnpm 11 does not send it: a package
+        # published through it lands with an empty `readme`, so the npm page renders
+        # no documentation at all.
         #
         # OIDC trusted publishing still authenticates: the npm CLI exchanges
         # the GitHub OIDC token (`id-token: write` above) for a short-lived

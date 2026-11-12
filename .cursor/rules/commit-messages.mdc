@@ -37,18 +37,18 @@ alwaysApply: true
 
 ## Allowed scopes
 
-`config` | `destinations` | `constants` | `interfaces` | `utils` | `types` | `deps` | `release`
+`config` | `sdk` | `register` | `nest` | `utils` | `types` | `deps` | `release`
 
 ---
 
 ## ✅ Correct examples
 
 ```
-feat(destinations): add file rotation destination
+feat(sdk): add a span processor that redacts url.query
 
-- Add daily and size-based rotation via rotating-file-stream
-- Expose RotatingFileDestinationOptions in public API
-- Add unit tests covering rotation edge cases
+- Redact query strings from url.full and url.query on span end
+- Expose the redaction options in the public API
+- Add unit tests covering empty and repeated query keys
 ```
 
 ```

@@ -33,10 +33,7 @@ jobs:
   full:
     uses: bymaxone/.github/.github/workflows/mutation-full.yml@v1
     with:
-      # Measured cold, with 2 runner processes: 41, more than 60 and 89.7 minutes on the hosted
-      # runner for 2412 to 2427 mutants, and 66 minutes on a laptop. On one machine the suite's test
-      # time moved by 9% across those runs, so most of the spread is the runner. The inventory step
-      # runs after the score, so the ceiling has to leave room for it. Generous on purpose —
+      # The inventory step runs after the score, so the ceiling has to leave room for it. Generous on purpose —
       # nothing blocks on this job, so an over-wide ceiling costs only the minutes it uses, while
       # an under-tight one costs the whole run and leaves the week without a measured baseline.
       timeout-minutes: 150

@@ -14,8 +14,8 @@ on:
   schedule:
     - cron: '0 6 * * 1'
 
-# Kept from the workflow this replaces: without it, repeated pushes to a
-# branch leave several analyses of the same ref running at once.
+# Without it, repeated pushes to a branch leave several analyses of the same
+# ref running at once.
 concurrency:
   group: codeql-${{ github.ref }}
   cancel-in-progress: true
@@ -46,6 +46,5 @@ jobs:
       # itself can still fail as any step can, if the action cannot be
       # downloaded or errors out.
       harden-runner: true
-      # Carried over from the workflow this replaces. It is a superset of the
-      # default suite, so leaving it out analyses strictly less than before.
+      # A superset of the default suite, so leaving it out analyses strictly less.
       queries: security-extended

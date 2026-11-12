@@ -128,8 +128,7 @@ function internalSymbols() {
 /**
  * Find the object literal inside an initializer, seeing through the wrappers this
  * repository actually uses: `{...} as const`, `{...} satisfies T`, parentheses, and
- * `Object.freeze({...} as const)` — which is how the reserved log keys are declared,
- * and the reason a first version of this function found no constants at all.
+ * `Object.freeze({...} as const)`, a common way to declare a constant table.
  *
  * @param node - The initializer expression to unwrap.
  * @returns The object literal, or `undefined` when the initializer is not one.

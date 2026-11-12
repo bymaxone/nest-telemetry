@@ -43,9 +43,8 @@ jobs:
       mutation-source-globs: '^(src/)'
       # The per-push run is incremental and finishes in minutes; this ceiling is for the cold
       # one — the first run after enabling incremental, and any run whose baseline expired.
-      # Measured cold, with 2 runner processes: 41 to 90 minutes on the hosted runner, 66 on a
-      # laptop; see `mutation-full.yml`. The job is CANCELLED rather than failed when the ceiling
-      # lands, which reads as an infrastructure blip instead of a budget.
+      # The job is CANCELLED rather than failed when the ceiling lands, which reads as an
+      # infrastructure blip instead of a budget.
       mutation-timeout-minutes: 150
 
   # Library-specific verification: full build, output integrity across every
@@ -105,7 +104,7 @@ jobs:
         # resolves every entrypoint the way each module resolution mode would.
         run: pnpm check:exports
       - name: Verify the published surface matches the documentation
-        # Three checks that each exist because a defect reached npm without them:
+        # Three checks, each guarding a defect that would otherwise reach npm:
         # the README's links resolve; its TypeScript snippets and the type tests
         # compile against `dist/` resolved through the `exports` map (`test:types`
         # maps the package to `./src`, so it cannot see a divergence between the

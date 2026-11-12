@@ -766,19 +766,18 @@ function exportedNames() {
  *    `PromiseLike<void>` but not back, so a drifted return breaks one direction.
  * 2. **Key parity** — an omitted member. An optional property missing from one
  *    side is assignable in BOTH directions, so assignability never sees it; this
- *    is how the README's absent `onRegistryReady` survived every earlier gate.
+ *    is how an absent optional member survives an assignability check.
  * 3. **Per-member identity** — a changed PARAMETER, and a dropped `readonly` or
  *    `?`. Method parameters stay bivariant even under `strictFunctionTypes`, so a
  *    README declaring `write(payload: unknown)` satisfies both assignments and key
- *    parity. Measured, not assumed: the first version of this gate passed that
- *    exact edit. `Identical` is the standard conditional-type trick for type
+ *    parity. `Identical` is the standard conditional-type trick for type
  *    equality — two deferred conditionals are only mutually assignable when their
  *    check types are the same type, which is invariance rather than assignability.
  *
  *    Compared as `Pick<T, K>` rather than `T[K]`, because indexed access DROPS the
  *    property modifiers: `readonly name: string` and `name: string` both reduce to
- *    `string`, and the second version of this gate passed a README that dropped the
- *    `readonly`. `Pick` carries the modifier and the optionality into the
+ *    `string`, so a README that dropped the
+ *    `readonly` would pass. `Pick` carries the modifier and the optionality into the
  *    comparison.
  *
  * @param code - The README block, verbatim.
