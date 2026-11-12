@@ -81,6 +81,16 @@ describe('service identity on the exported resource', () => {
     })
   })
 
+  it('treats a blank OTEL_SERVICE_NAME as absent', async () => {
+    // Scenario: an empty variable must not erase the name the code passed.
+    const handle = await startAndRecord({
+      serviceName: 'from-code',
+      env: { OTEL_SERVICE_NAME: '' }
+    })
+    await handle.shutdown()
+    expect(resourceAttributes(collector.bodies[0] ?? '')['service.name']).toBe('from-code')
+  })
+
   it('uses the host name when the environment does not override it', async () => {
     // Scenario: no OTEL_SERVICE_NAME, so the name the code passed is used.
     const handle = await startAndRecord({ serviceName: 'from-code', env: {} })
