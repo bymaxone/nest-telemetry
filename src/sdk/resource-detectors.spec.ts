@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+
 import type { ResourceDetector } from '@opentelemetry/resources'
 
 import { selectResourceDetectors, withoutAttributes } from './resource-detectors'
@@ -145,5 +148,36 @@ describe('selectResourceDetectors', () => {
     // Scenario: the list holds the detector objects themselves, not copies, so a selection of one
     // name never carries another.
     expect(selectResourceDetectors(['os'], detectors, true)).toEqual([detectors.os])
+  })
+})
+
+describe('the names the installed SDK accepts', () => {
+  /** The SDK's own dist directory, read from the installed package. */
+  const dist = dirname(require.resolve('@opentelemetry/sdk-node'))
+
+  it("are all accepted, under the specification's names and the older ones", () => {
+    // Scenario: OpenTelemetry renames or adds a detector name in a later release; a table copied
+    // from the SDK would never notice, so both of the SDK's tables are read from the installed
+    // package and every name in them must select at least one detector.
+    const current = readFileSync(join(dist, 'create-from-env.cjs'), 'utf8')
+    const start = current.indexOf('DEFAULT_RESOURCE_DETECTOR_NAMES')
+    const end = current.indexOf('unknown resource detector')
+    const specification = [...current.slice(start, end).matchAll(/case "(\w+)":/g)].map(
+      (match) => match[1] ?? ''
+    )
+    const legacy = [
+      ...readFileSync(join(dist, 'utils.cjs'), 'utf8').matchAll(/RESOURCE_DETECTOR_\w+ = "(\w+)"/g)
+    ].map((match) => match[1] ?? '')
+    const names = [...new Set([...specification, ...legacy])]
+    expect(names.length).toBeGreaterThanOrEqual(6)
+    for (const name of names) {
+      expect({
+        name,
+        selected: selectResourceDetectors([name], detectors, true).length > 0
+      }).toEqual({
+        name,
+        selected: true
+      })
+    }
   })
 })
