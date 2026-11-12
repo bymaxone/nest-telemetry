@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.jest.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  },
+  "include": ["src/**/*", "test/e2e/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

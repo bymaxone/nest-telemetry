@@ -1,0 +1,181 @@
+name: Release
+
+# Tag-driven release. Pushing a `v*.*.*` tag kicks off the publish flow; the
+# `workflow_dispatch` trigger is kept so an interrupted release can be re-run
+# manually from the Actions tab when needed.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*.*.*'
+
+# A release is a destructive, shared-state operation — only one at a time.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+# Default to read-only at the workflow level. The publish job widens to
+# `contents: write` (for the GitHub Release) and `id-token: write` (for
+# the OIDC trusted publisher exchange).
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish to npm and create GitHub Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # The `npm-publish` environment gates the run behind a manual approval
+    # (configured in repo Settings → Environments). Even an accidentally
+    # pushed tag cannot publish without a reviewer clicking "Approve".
+    environment:
+      name: npm-publish
+      url: https://www.npmjs.com/package/@bymax-one/nest-telemetry
+
+    # Required for npm OIDC trusted publishing (`id-token: write`) and for
+    # `gh release create` (`contents: write`). No `NPM_TOKEN` secret needed —
+    # the publish exchanges the GitHub OIDC token for a short-lived npm
+    # credential via the Trusted Publisher configured on npmjs.com.
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          # The install and build steps below run the repository's own scripts; the write token
+          # must not stay in the repository's git configuration for them to read.
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.x
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify tag matches package.json version
+        # Guards against publishing a tag whose semver does not match the
+        # version committed to package.json — a mismatch always indicates
+        # a broken release and would otherwise ship the wrong metadata.
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION=${GITHUB_REF_NAME#v}
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json version $PKG_VERSION"
+            exit 1
+          fi
+
+      - name: Extract release notes from CHANGELOG
+        # The GitHub Release body is the tag's own CHANGELOG section, so the notes a reader
+        # sees are the ones reviewed in the release PR. It runs before the gates and the
+        # publish: a version with no section stops the release before anything is published,
+        # and there is no fallback text. The version is matched as a literal, so its dots match
+        # only dots, and only the heading's own first bracket counts, so a
+        # second bracketed token on another heading cannot start the section. The notes go
+        # through a file, never through a shell or an output variable, so nothing inside the
+        # CHANGELOG is evaluated or can end the value.
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          awk -v ver="$VERSION" '
+            /^## \[/ {
+              if (found) exit
+              if (index($0, "## [" ver "]") == 1) { found = 1; next }
+            }
+            found { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/release-notes.md"; then
+            echo "CHANGELOG.md has no non-empty section for $VERSION"
+            exit 1
+          fi
+
+      - name: Verify (typecheck · lint · test · build)
+        run: pnpm prepublishOnly
+
+      - name: Verify a change to the public declarations carries its CHANGELOG note
+        # Runs after the build inside prepublishOnly, so `dist/` exists, and before the
+        # publish. It compares the built `.d.ts` and `.d.cts` with the previous published
+        # version, ignoring comments, and always prints what differs. A difference passes only
+        # when the CHANGELOG section of this version holds an "Apply to a derived backend" note,
+        # since the version number carries no compatibility information here. It reads the
+        # previous version from the public registry, so it needs no credential. There is no
+        # override: a difference without its note is resolved by writing the note.
+        run: node scripts/check-api-surface.mjs
+
+      - name: Verify published type resolution
+        # Runs after the build inside prepublishOnly and before the publish, so
+        # a tag cannot ship a tarball whose `exports` map resolves to
+        # declarations for the wrong module format. It cannot live in
+        # prepublishOnly itself: attw packs the tarball, and the nested pack
+        # inside `pnpm publish` resolves to a path that does not exist.
+        #
+        # `check:published` needs no equivalent step: it packs nothing, so it
+        # lives in prepublishOnly and already ran there. Repeating it here would
+        # re-probe every README link and recompile the snippets for no new
+        # information, adding time and one more chance of a network flake to the
+        # one job that must not fail spuriously.
+        run: pnpm check:exports
+
+      - name: Release-shape gates (bundle size + dogfood smoke test)
+        # `prepublishOnly` runs typecheck/lint/tests/build but not these, and a
+        # tag is the only path that publishes from CI. The size budget stops a
+        # release that silently doubled the bundle; the dogfood smoke is the only
+        # gate that resolves the packed tarball from a real consumer in ESM and
+        # CJS, which is what catches a DI or `exports` defect the source-based
+        # suite cannot see. Both scripts already existed here and simply were
+        # never wired into the publish path.
+        run: |
+          pnpm size
+          pnpm check:runtime
+          node scripts/dogfood-smoke-test.mjs
+
+      - name: Publish to npm with provenance
+        # `--ignore-scripts`: npm runs `prepublishOnly` on publish, and this job
+        # already ran it as its own step. Without the flag it runs twice — and the
+        # second run starts with `clean`, deleting and rebuilding the `dist/` that
+        # `size` and `check:exports` just validated, so the tarball shipped is not
+        # the artifact the gates checked. Observed in the nest-realtime 1.0.1 run.
+        #
+        # `npm publish`, not `pnpm publish`: the registry's `readme` field is
+        # populated from the publish request, and pnpm 11 does not send it. Every
+        # package here published under pnpm 11 landed with an empty `readme` — the
+        # npm page rendering no documentation at all — while every one published
+        # under pnpm 10, which delegated to the npm CLI, carries it. Confirmed on
+        # nest-realtime@1.0.1, where switching restored both `readme` and
+        # `_npmVersion` in a single release.
+        #
+        # OIDC trusted publishing still authenticates: the npm CLI exchanges
+        # the GitHub OIDC token (`id-token: write` above) for a short-lived
+        # publish credential. npm runs no git checks, so the detached HEAD the
+        # runner sits on at the tag SHA needs no flag of its own.
+        # Skips gracefully when the version was already published manually
+        # (e.g. during the bootstrap of the first release).
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if npm view "@bymax-one/nest-telemetry@${PKG_VERSION}" version 2>/dev/null | grep -qF "$PKG_VERSION"; then
+            echo "Version ${PKG_VERSION} already published on npm — skipping publish step."
+          else
+            npm publish --provenance --access public --ignore-scripts
+          fi
+
+      - name: Create GitHub Release
+        # The notes come from the file the extraction step wrote, never from `${{ ... }}`
+        # interpolation or an output variable, so backticks, `$()` and other shell
+        # metacharacters inside the CHANGELOG cannot be evaluated by bash.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file "$RUNNER_TEMP/release-notes.md"

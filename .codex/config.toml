@@ -1,0 +1,20 @@
+# Codex charges one budget for the whole instruction chain it loads: one AGENTS.md
+# per directory from the repository root down to the working directory, concatenated.
+# Past the cap the data is truncated rather than skipped, silently -- no error, no
+# failed check -- so the END of the last file loaded is what disappears. The default
+# 32768 is a limit that does not report itself.
+#
+# 65536 is the number `agents-sync` measures this repository against, so the budget
+# gate and the reviewer read the same cap.
+#
+# This is honoured only where the project is trusted: Codex ignores project `.codex/`
+# layers entirely for an untrusted project, which returns a fresh clone to the default
+# without saying so. Treat it as raising a ceiling, never as the reason the chain fits
+# -- the chain has to fit under 32768 on its own, and today it does.
+#
+# What keeps it fitting is placement, not prose. A rule that is true only under a
+# subtree belongs in that subtree's AGENTS.md, where it costs the root chain nothing;
+# orientation belongs in `docs/`, which Codex never loads because it does not follow
+# links. Trimming a rule to save bytes is the one move to avoid: it changes what the
+# reviewer enforces.
+project_doc_max_bytes = 65536

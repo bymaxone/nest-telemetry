@@ -1,0 +1,45 @@
+# Source
+src/
+test/
+
+# Documentation (except top-level)
+docs/
+
+# Coverage and reports
+coverage/
+reports/
+
+# GitHub
+.github/
+
+# Config files (not needed by consumers)
+*.config.ts
+tsconfig.*.json
+tsconfig.json
+stryker.config.json
+eslint.config.mjs
+commitlint.config.cjs
+jest.config.ts
+jest.coverage.config.ts
+jest.e2e.config.ts
+jest.stryker.config.ts
+tsup.config.ts
+.prettierrc
+.gitignore
+.gitmessage
+.husky/
+
+# Temp dirs
+.stryker-tmp/
+bench/
+scripts/
+
+# Dev artifacts
+*.tsbuildinfo
+pnpm-lock.yaml
+node_modules/
+
+# Editor / IDE
+.vscode/
+.cursor/
+.claude/

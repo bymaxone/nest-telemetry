@@ -1,0 +1,89 @@
+---
+description: Commit message conventions for @bymax-one/nest-telemetry. Apply whenever writing or suggesting a git commit message.
+alwaysApply: true
+---
+
+# Commit message conventions
+
+**HARD LIMITS — commitlint will reject the commit if violated:**
+- Subject line: **≤ 72 characters**
+- Every body line individually: **≤ 100 characters** — this includes bullet points
+- Never write a bullet point sentence that wraps beyond 100 chars. Break it into two lines.
+
+## Format
+
+```
+<type>(<scope>): <subject>
+
+<body>
+```
+
+## Allowed types
+
+`feat` | `fix` | `docs` | `refactor` | `perf` | `test` | `build` | `ci` | `chore` | `revert`
+
+## Subject rules
+
+- Lower-case after the colon
+- No period at the end
+- Max 72 characters total
+
+## Body rules
+
+- Blank line between subject and body
+- Each line max 100 characters — **count before writing**
+- Use short, direct verbs: "Add", "Fix", "Remove", "Update" — not "Introduced", "Created", "Established"
+- If a bullet would exceed 100 chars, split at a natural clause boundary and indent the continuation
+
+## Allowed scopes
+
+`config` | `destinations` | `constants` | `interfaces` | `utils` | `types` | `deps` | `release`
+
+---
+
+## ✅ Correct examples
+
+```
+feat(destinations): add file rotation destination
+
+- Add daily and size-based rotation via rotating-file-stream
+- Expose RotatingFileDestinationOptions in public API
+- Add unit tests covering rotation edge cases
+```
+
+```
+docs: add commit message conventions and repository instructions
+
+- Add Conventional Commits rule file with commitlint constraints
+- Add repository instructions with commands and source layout
+- Add code review and testing standards for contributors
+```
+
+```
+chore(deps): bump @opentelemetry/sdk-node to 0.220.0
+```
+
+---
+
+## ❌ Wrong examples (will be rejected)
+
+Too long subject:
+```
+feat(config): add validation for telemetry module options and throw descriptive errors on misconfiguration
+```
+
+Body line over 100 chars:
+```
+- Introduced a new document outlining commit message conventions for the project, enforcing Conventional Commits.
+```
+
+Fix — split it:
+```
+- Add document outlining commit message conventions
+  enforcing Conventional Commits format
+```
+
+Or shorten:
+```
+- Add Conventional Commits guidelines with commitlint constraints
+```

@@ -1,0 +1,51 @@
+# CodeQL — thin caller of the org-wide reusable analysis (bymaxone/.github).
+#
+# The whole definition, including the public-repository gate that decides
+# whether scanning may run at all, lives in bymaxone/.github so the licensing
+# rule exists once rather than in every repository that copies it.
+name: CodeQL
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'
+
+# Kept from the workflow this replaces: without it, repeated pushes to a
+# branch leave several analyses of the same ref running at once.
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege for anything that does not declare its own. The `codeql` job
+# below replaces this set rather than intersecting with it, so this floor governs
+# any job added later that forgets to think about it.
+permissions:
+  contents: read
+
+jobs:
+  # Job id is the convention across the org: it prefixes the reported check,
+  # so every repo shows `codeql / Analyze (<language>)` under the same name.
+  codeql:
+    # Declared on the calling job, which is the only place that reaches the
+    # called workflow: a job that sets its own permissions replaces the
+    # workflow-level set rather than intersecting with it, and a called
+    # workflow cannot be granted more than its caller holds.
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    uses: bymaxone/.github/.github/workflows/codeql.yml@v1
+    with:
+      # Added to match the rest of the libraries. On `audit` the policy records
+      # the job's outbound calls and blocks none of them, so nothing fails for
+      # reaching an unexpected destination — it only becomes visible. The step
+      # itself can still fail as any step can, if the action cannot be
+      # downloaded or errors out.
+      harden-runner: true
+      # Carried over from the workflow this replaces. It is a superset of the
+      # default suite, so leaving it out analyses strictly less than before.
+      queries: security-extended
