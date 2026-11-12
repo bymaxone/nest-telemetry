@@ -83,6 +83,7 @@ const PROBES = [
     deny: ['@nestjs/', ...OTEL_PACKAGES],
     // The preload runs when it is imported, so this group disables it through the standard switch.
     env: { OTEL_SDK_DISABLED: 'true' },
+    expectNoWarnings: true,
     entries: {
       '.': ['startTelemetry', 'shutdownTelemetry', 'ignorePaths', 'DEFAULT_REDACTED_QUERY_PARAMS'],
       './register': []
@@ -97,6 +98,7 @@ const PROBES = [
     label: 'sdk without any OpenTelemetry package, disabled by OTEL_SDK_DISABLED',
     deny: ['@nestjs/', ...OTEL_PACKAGES],
     env: { OTEL_SDK_DISABLED: 'true' },
+    expectNoWarnings: true,
     entries: { '.': ['startTelemetry'] },
     calls: [{ entry: '.', fn: 'startTelemetry', args: [], expect: { enabled: false } }]
   },
@@ -293,6 +295,11 @@ try {
               `  ✓ ${file}: the library warned and the boot went on, as the control requires`
             )
           }
+        } else if (probe.expectNoWarnings && output.includes('  warning ')) {
+          // A disabled boot has nothing to warn about. The preload turns a failed start into a
+          // warning, so a disabled boot that wrongly loaded a denied package would otherwise pass.
+          console.error(`  ✗ ${file}: a disabled boot printed a warning: ${output.trim()}`)
+          failed = true
         } else if (probe.expectDenied) {
           console.error(`  ✗ ${file}: the positive control passed, so the denial cannot see a load`)
           failed = true
