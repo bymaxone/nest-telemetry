@@ -32,7 +32,6 @@ const config: Config = {
     '!**/*.spec.ts',
     '!**/*.test.ts',
     '!**/__tests__/**',
-    '!**/index.ts',
     '!**/*.d.ts'
   ],
   coverageThreshold: {

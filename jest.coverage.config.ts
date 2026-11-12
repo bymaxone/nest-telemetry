@@ -48,7 +48,6 @@ const config: Config = {
     '!src/**/*.spec.ts',
     '!src/**/*.test.ts',
     '!src/**/__tests__/**',
-    '!src/**/index.ts',
     '!src/**/*.d.ts'
   ],
   coverageReporters: ['text', 'lcov', 'clover'],

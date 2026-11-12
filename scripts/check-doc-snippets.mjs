@@ -5,10 +5,9 @@
  *
  * Layer: repository tooling. Nothing here ships — `scripts/` is outside `files`.
  *
- * Why it exists: this defect class recurred across four review rounds of the same
- * pull request — a snippet referencing `safeLevel`, `TELEMETRY_OPTIONS_TOKEN`,
- * `PREVIEW_LENGTH` or `this.reportFlushFailure` with nothing to resolve them.
- * Reviewing prose by eye does not catch it; parsing does.
+ * Why it exists: a snippet that names a symbol with nothing to resolve it — an
+ * unimported constant, a `this.member` the class never defines — reads as correct
+ * prose and misleads the reader. Reviewing prose by eye does not catch it; parsing does.
  *
  * How it decides. Three questions, all answered from the syntax tree rather than from
  * a regular expression, because a name inside a comment or a string is a MENTION and
@@ -25,30 +24,20 @@
  *
  * Question 3 exists because question 1 cannot see it: a property is not a reference, so
  * an invented `DEFAULT_OPTIONS.REDACTION_DISABLED` reads as a use of
- * `DEFAULT_OPTIONS` — which IS imported — and passes. It reached this documentation
- * exactly that way.
+ * `DEFAULT_OPTIONS` — which IS imported — and passes.
  *
  * Deliberately NOT checked: a free local like `health` in an excerpt whose scope the
  * prose introduces. Flagging those means flagging every excerpt variable, and the
  * noise would retire the check. That case stays a matter of writing the prose well.
  *
- * The baseline. The planning documents carry 43 distinct file-and-symbol pairs from
- * before the check existed — fewer than the raw occurrence count, since one missing
- * import usually shows up in several snippets of the same document. Fixing all of them
- * is not the same job as stopping new ones, so they are recorded in
- * `doc-snippets-baseline.json`: a finding outside it fails, and an entry inside it that
- * no longer reproduces ALSO fails, so a fixed snippet cannot leave a stale line behind.
- * Regenerate with
- * `--write-baseline` — which writes the INTERSECTION of the old baseline and what still
- * reproduces, so it can only remove entries. A defect introduced in the same edit is
- * not adopted by it; the run still fails.
- *
- * Widening what the check looks at is the one case where the list legitimately grows.
- * It has happened twice: accepting `ts` fences alongside `typescript`, then accepting
- * indented and longer fences plus destructured exports. Each surfaced pre-existing
- * findings in documents nobody had touched — not regressions. That takes `--adopt-new`, a separate flag precisely so the
- * decision is made on purpose and stated in the commit rather than taken silently by the
- * routine command.
+ * The baseline. Findings that exist before the check can be fixed are recorded in
+ * `doc-snippets-baseline.json`: a finding outside it fails, and an entry inside it that no
+ * longer reproduces ALSO fails, so a fixed snippet cannot leave a stale line behind. The
+ * list starts empty here. `--write-baseline` writes the INTERSECTION of the old baseline
+ * and what still reproduces, so it can only remove entries; a defect introduced in the
+ * same edit is not adopted by it and the run still fails. Widening what the check looks
+ * at is the one case where the list legitimately grows, and that takes `--adopt-new`, a
+ * separate flag so the decision is made on purpose and stated in the commit.
  *
  * Baseline entries are keyed by file and symbol, not by line, so editing prose above a
  * snippet does not churn the file. The cost of that choice is one real gap: a NEW

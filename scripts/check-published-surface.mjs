@@ -3,16 +3,14 @@
  * types describe the package that is actually about to ship.
  * @layer scripts
  *
- * Every check here exists because its absence let a defect reach npm:
+ * Three failures reach npm without it, and each has a check here:
  *
- * - `1.0.3` shipped a README whose "Example App" link returned 404. Nothing read
- *   the links.
- * - `1.0.4` fixed an exported type that rejected the very snippet the README
- *   shows. `test:types` compiles `src` through a `paths` mapping, so it never
- *   sees what a consumer resolving through `exports` sees, and the consumer
- *   fixture happened to use a workaround form.
- * - A pull request deleted a `## [x.y.z]` heading while adding the next one,
- *   which leaves the release workflow with no section to publish and stops it.
+ * - A README link that returns 404: nothing else reads the links.
+ * - An exported type that rejects the snippet the README shows. `test:types` compiles
+ *   `src` through a `paths` mapping, so it never sees what a consumer resolving through
+ *   `exports` sees; these snippets compile against `dist/` through the `exports` map.
+ * - A `## [x.y.z]` heading deleted while the next one is added, which leaves the release
+ *   workflow with no section to publish and stops it.
  *
  * The README snippets are compiled under three constraints:
  *
@@ -32,7 +30,7 @@
  *    symlink to the repository and a generated module must not replace a snippet.
  *
  * Portable between packages: everything here is generic except `readme-prelude.d.ts`,
- * the `SnippetContext` it declares, and the `dist/server/index.d.ts` entry that
+ * the `SnippetContext` it declares, and the `dist/sdk/index.d.ts` entry that
  * `publicNames` reads.
  *
  * Run after `pnpm build` — the snippets compile against `dist/`.
@@ -490,9 +488,9 @@ function checkChangelog() {
   }
 
   // Checking only the versions the file happens to list cannot notice one that
-  // is ABSENT — and a heading deleted while adding the next one is exactly how
-  // the 1.0.3 entry was swallowed by 1.0.4. The tags are the outside source of
-  // truth for what was released, so they are what the file is measured against.
+  // is ABSENT, such as a heading deleted while adding the next one. The tags are the
+  // outside source of truth for what was released, so they are what the file is
+  // measured against.
   // `actions/checkout` clones with depth 1 and no tags, so `git tag --list`
   // returns an empty set with exit code 0 — the cross-check would pass by
   // finding nothing to check. Fetch them first, and if they still are not there
