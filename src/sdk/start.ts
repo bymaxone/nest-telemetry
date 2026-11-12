@@ -5,6 +5,12 @@
  * No OpenTelemetry package is imported at module scope: every one is loaded by a dynamic `import()`
  * inside the enabled branch, so a disabled boot loads none of them.
  */
+import type * as AutoInstrumentations from '@opentelemetry/auto-instrumentations-node'
+import type * as OtlpExporter from '@opentelemetry/exporter-trace-otlp-http'
+import type * as Resources from '@opentelemetry/resources'
+import type * as SdkNode from '@opentelemetry/sdk-node'
+import type * as SdkTrace from '@opentelemetry/sdk-trace'
+
 import {
   buildInstrumentationConfig,
   buildResourceAttributes,
@@ -13,7 +19,8 @@ import {
 } from './assembly'
 import { readTelemetryEnvironment } from './environment'
 import type { TelemetryEnvironment } from './environment'
-import { clearHandle, currentHandle, registerHandle } from './handle'
+import { createHandle, currentHandle, registerHandle } from './handle'
+import type { RunningHandle } from './handle'
 import { createUrlQueryRedactor } from './redaction'
 import { selectResourceDetectors } from './resource-detectors'
 import type { TelemetryHandle, TelemetryOptions } from './types'
@@ -38,7 +45,13 @@ export async function startTelemetry(options: TelemetryOptions = {}): Promise<Te
   if (options.enabled === false || env.sdkDisabled) {
     return DISABLED_HANDLE
   }
-  const running = currentHandle()
+  let running = currentHandle()
+  if (running?.stopping === true) {
+    // A start that arrives during a flush waits for it, and starts a fresh SDK once it settles.
+    // Whether the flush succeeded is its own caller's concern.
+    await Promise.allSettled([running.shutdown()])
+    running = currentHandle()
+  }
   if (running !== undefined) {
     return running
   }
@@ -51,37 +64,49 @@ export async function startTelemetry(options: TelemetryOptions = {}): Promise<Te
 }
 
 /** The start in progress, if any. */
-let starting: Promise<TelemetryHandle> | undefined
+let starting: Promise<RunningHandle> | undefined
+
+/** The OpenTelemetry packages a start loads, all of them behind dynamic imports. */
+interface LoadedPackages {
+  readonly sdkNode: typeof SdkNode
+  readonly sdkTrace: typeof SdkTrace
+  readonly autoInstrumentations: typeof AutoInstrumentations
+  readonly exporter: typeof OtlpExporter
+  readonly resources: typeof Resources
+}
 
 /**
- * Loads the SDK packages, builds the SDK and starts it.
+ * Loads the OpenTelemetry packages a start needs.
  *
- * @param options - The host's policy.
- * @param env - The parsed environment.
- * @returns The handle of the started SDK.
+ * @returns The loaded packages.
  */
-async function boot(
-  options: TelemetryOptions,
-  env: TelemetryEnvironment
-): Promise<TelemetryHandle> {
-  warnAboutUnsafeOptions(options)
-
-  const [
-    { NodeSDK },
-    { BatchSpanProcessor },
-    { getNodeAutoInstrumentations },
-    exporter,
-    resources
-  ] = await Promise.all([
+async function loadPackages(): Promise<LoadedPackages> {
+  const [sdkNode, sdkTrace, autoInstrumentations, exporter, resources] = await Promise.all([
     import('@opentelemetry/sdk-node'),
     import('@opentelemetry/sdk-trace'),
     import('@opentelemetry/auto-instrumentations-node'),
     import('@opentelemetry/exporter-trace-otlp-http'),
     import('@opentelemetry/resources')
   ])
+  return { sdkNode, sdkTrace, autoInstrumentations, exporter, resources }
+}
 
+/**
+ * Builds the SDK from the host's options and the environment, without starting it.
+ *
+ * @param packages - The loaded OpenTelemetry packages.
+ * @param options - The host's policy.
+ * @param env - The parsed environment.
+ * @returns The SDK.
+ */
+function buildSdk(
+  packages: LoadedPackages,
+  options: TelemetryOptions,
+  env: TelemetryEnvironment
+): SdkNode.NodeSDK {
+  const { sdkNode, sdkTrace, autoInstrumentations, exporter, resources } = packages
   const signals = planSignals(env)
-  const sdk = new NodeSDK({
+  return new sdkNode.NodeSDK({
     ...signals.overrides,
     resource: resources.resourceFromAttributes(buildResourceAttributes(options, env)),
     resourceDetectors: selectResourceDetectors(
@@ -98,29 +123,29 @@ async function boot(
     spanProcessors: [
       // Ordered before the batch processor, so each span is redacted in place before it is exported.
       ...(options.unsafe?.disableUrlRedaction === true ? [] : [createUrlQueryRedactor()]),
-      new BatchSpanProcessor({
+      new sdkTrace.BatchSpanProcessor({
         exporter: new exporter.OTLPTraceExporter(),
         ...env.batchSpanProcessor
       })
     ],
-    instrumentations: [getNodeAutoInstrumentations(buildInstrumentationConfig(options, signals))]
+    instrumentations: [
+      autoInstrumentations.getNodeAutoInstrumentations(buildInstrumentationConfig(options, signals))
+    ]
   })
-  sdk.start()
+}
 
-  let stopped = false
-  const handle: TelemetryHandle = {
-    enabled: true,
-    shutdown: async () => {
-      if (stopped) {
-        return
-      }
-      stopped = true
-      if (currentHandle() === handle) {
-        clearHandle()
-      }
-      await sdk.shutdown()
-    }
-  }
+/**
+ * Loads the SDK packages, builds the SDK, starts it and registers its handle.
+ *
+ * @param options - The host's policy.
+ * @param env - The parsed environment.
+ * @returns The handle of the started SDK.
+ */
+async function boot(options: TelemetryOptions, env: TelemetryEnvironment): Promise<RunningHandle> {
+  warnAboutUnsafeOptions(options)
+  const sdk = buildSdk(await loadPackages(), options, env)
+  sdk.start()
+  const handle = createHandle(() => sdk.shutdown())
   registerHandle(handle)
   return handle
 }

@@ -8,18 +8,24 @@
  */
 import type { TelemetryHandle } from './types'
 
+/** A registered handle, which also knows whether its shutdown is under way. */
+export interface RunningHandle extends TelemetryHandle {
+  /** Whether a shutdown has begun and has not yet settled. */
+  readonly stopping: boolean
+}
+
 /** The registry symbol under which the handle is published. */
 const HANDLE_KEY = Symbol.for('@bymax-one/nest-telemetry/handle')
 
 /** `globalThis` seen as the store of the handle. */
-const store = globalThis as typeof globalThis & { [HANDLE_KEY]?: TelemetryHandle }
+const store = globalThis as typeof globalThis & { [HANDLE_KEY]?: RunningHandle }
 
 /**
  * Registers a started SDK's handle.
  *
  * @param handle - The handle to publish.
  */
-export function registerHandle(handle: TelemetryHandle): void {
+export function registerHandle(handle: RunningHandle): void {
   store[HANDLE_KEY] = handle
 }
 
@@ -28,7 +34,7 @@ export function registerHandle(handle: TelemetryHandle): void {
  *
  * @returns The handle, or `undefined` when none is registered.
  */
-export function currentHandle(): TelemetryHandle | undefined {
+export function currentHandle(): RunningHandle | undefined {
   return store[HANDLE_KEY]
 }
 
@@ -38,10 +44,46 @@ export function clearHandle(): void {
 }
 
 /**
+ * Creates the handle of a started SDK.
+ *
+ * Every caller of `shutdown` gets the one flush: a caller that arrives while it is pending waits for
+ * it, so awaiting `shutdown` always means the spans were exported, whoever started the flush. The
+ * handle stays registered until the flush settles, so `shutdownTelemetry` finds it too, and clears
+ * its own registration then, success or failure, leaving a handle another copy registered alone.
+ *
+ * @param stopSdk - Flushes and stops the SDK.
+ * @returns The handle.
+ */
+export function createHandle(stopSdk: () => Promise<void>): RunningHandle {
+  let flush: Promise<void> | undefined
+  let finished = false
+  const handle: RunningHandle = {
+    enabled: true,
+    get stopping() {
+      return flush !== undefined && !finished
+    },
+    shutdown: () => {
+      if (finished) {
+        return Promise.resolve()
+      }
+      flush ??= stopSdk().finally(() => {
+        finished = true
+        if (currentHandle() === handle) {
+          clearHandle()
+        }
+      })
+      return flush
+    }
+  }
+  return handle
+}
+
+/**
  * Flushes and stops the SDK the preload registered, if any.
  *
- * Awaiting this guarantees buffered spans are exported before the process exits. With nothing
- * registered, which is the case when telemetry is disabled, it resolves immediately.
+ * Awaiting this guarantees buffered spans are exported before the process exits, including when
+ * another caller started the flush. With nothing registered, which is the case when telemetry is
+ * disabled, it resolves immediately.
  *
  * @returns A promise that resolves once buffered spans are exported.
  */

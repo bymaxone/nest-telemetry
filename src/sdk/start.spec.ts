@@ -275,14 +275,46 @@ describe('startTelemetry', () => {
       expect(mockSdkInstance.shutdown).toHaveBeenCalledTimes(1)
     })
 
-    it('leaves a newer handle registered when an older one shuts down', async () => {
-      // Scenario: the registry was cleared and a second SDK started; shutting the first one down
-      // must not clear the second one's registration.
+    it('waits for a flush in progress before starting a new SDK', async () => {
+      // Scenario: a start arrives while the previous SDK is still flushing; it must not be handed
+      // the handle that is stopping, and must not start before the flush ends.
+      let finish = (): void => undefined
+      mockSdkInstance.shutdown.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve
+          })
+      )
       const first = await startTelemetry({ env: {} })
-      clearHandle()
-      const second = await startTelemetry({ env: {} })
-      await first.shutdown()
-      expect(currentHandle()).toBe(second)
+      const flush = first.shutdown()
+      const restarted = startTelemetry({ env: {} })
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(mockNodeSdk).toHaveBeenCalledTimes(1)
+      finish()
+      await flush
+      const second = await restarted
+      expect(second).not.toBe(first)
+      expect(mockNodeSdk).toHaveBeenCalledTimes(2)
+    })
+
+    it('starts a new SDK after a flush in progress fails', async () => {
+      // Scenario: the flush that a start was waiting on fails; the start still proceeds, and the
+      // failure belongs to the caller that asked for the flush.
+      let fail = (_error: Error): void => undefined
+      mockSdkInstance.shutdown.mockImplementationOnce(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            fail = reject
+          })
+      )
+      const first = await startTelemetry({ env: {} })
+      const flush = first.shutdown()
+      const restarted = startTelemetry({ env: {} })
+      await new Promise((resolve) => setImmediate(resolve))
+      fail(new Error('refused'))
+      await expect(flush).rejects.toThrow('refused')
+      await expect(restarted).resolves.toMatchObject({ enabled: true })
+      expect(mockNodeSdk).toHaveBeenCalledTimes(2)
     })
   })
 })

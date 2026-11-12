@@ -153,9 +153,9 @@ describe('enabling and disabling', () => {
     // Scenario: a second copy of the library registered its own handle under the same symbol;
     // shutting this SDK down must not clear that registration.
     const key = Symbol.for('@bymax-one/nest-telemetry/handle')
-    const store = globalThis as typeof globalThis & { [key]?: TelemetryHandle }
+    const other = { enabled: true, stopping: false, shutdown: () => Promise.resolve() }
+    const store = globalThis as typeof globalThis & { [key]?: typeof other }
     const handle = await startTelemetry({ env: {} })
-    const other: TelemetryHandle = { enabled: true, shutdown: () => Promise.resolve() }
     store[key] = other
     await handle.shutdown()
     expect(store[key]).toBe(other)
@@ -230,6 +230,23 @@ describe('the process command line in the exported resource', () => {
     for (const name of present) expect(attributes).toHaveProperty([name])
     for (const name of absent) expect(attributes).not.toHaveProperty([name])
     expect(collector.bodies.join('\n')).not.toContain(ARGV_SECRET)
+  })
+})
+
+describe('overlapping shutdowns', () => {
+  it('make every caller wait for the flush, and a start during it starts a fresh SDK', async () => {
+    // Scenario: a signal handler and the application hook both shut down, and a start arrives
+    // while the flush is under way. Nobody resolves before the span is delivered, and the new
+    // start does not receive the handle that is stopping.
+    const first = await startAndRecord({ env: {} })
+    const direct = first.shutdown()
+    const viaApi = shutdownTelemetry()
+    const restarted = startTelemetry({ env: {} })
+    await Promise.all([direct, viaApi])
+    expect(collector.bodies).toHaveLength(1)
+    const second = await restarted
+    expect(second).not.toBe(first)
+    expect(second.enabled).toBe(true)
   })
 })
 

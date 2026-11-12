@@ -33,14 +33,13 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
-//   - sdk: 2.97 KiB real -> 3.1 KiB budget (~4% headroom). The resource-detector selection that
-//     keeps the process command line out of the exported resource, and the cache of a start in
-//     progress, added 0.57 KiB to the 2.40 KiB the first build measured (redaction, environment
-//     reader, SDK assembly and handle registry).
+//   - sdk: 3.19 KiB real -> 3.3 KiB budget (~3.5% headroom), the whole subpath: redaction, the
+//     environment reader, the SDK assembly, the resource-detector selection that keeps the process
+//     command line out of the exported resource, the start cache and the handle lifecycle.
 //   - register / nest: placeholder modules, so each budget is a 1.0 KiB floor. A budget is
 //     re-derived from the built artifact with modest headroom, never nudged.
 const BUDGETS = [
-  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 3.1 * 1024 },
+  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 3.3 * 1024 },
   { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 1.0 * 1024 },
   { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 1.0 * 1024 }
 ]
