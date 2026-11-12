@@ -69,8 +69,6 @@ Things to know before you rely on it:
 The SDK part never imports `@nestjs/*`. Start it from your own preload, or from the first lines of your entry point if nothing instrumented has been imported yet:
 
 ```ts
-import { createServer } from 'node:http'
-
 import { ignorePaths, startTelemetry } from '@bymax-one/nest-telemetry'
 
 const telemetry = await startTelemetry({
@@ -79,17 +77,13 @@ const telemetry = await startTelemetry({
   ignoreIncomingRequest: ignorePaths([/^\/health\/(live|ready)\/?$/, /^\/metrics\/?$/])
 })
 
-const server = createServer((_request, response) => response.end('ok')).listen(3000)
+// ... run your application ...
 
-process.once('SIGTERM', () => {
-  // Stop accepting work, then flush the SDK. The process ends once nothing holds it open.
-  server.close(() => {
-    void telemetry.shutdown()
-  })
-})
+// In your own graceful-shutdown path, after your resources are closed:
+await telemetry.shutdown()
 ```
 
-A listener for `SIGTERM` replaces Node's default termination, so the handler above closes the server and flushes, and the process ends once nothing holds it open. `startTelemetry` resolves to a handle with `enabled` and `shutdown()`. Starting twice returns the handle already running, including across two copies of the module (an ES-module preload and a CommonJS application share the handle through `globalThis`).
+This package installs no signal handler and shows none, because handling signals belongs to the application: a `SIGTERM` listener replaces Node's default termination, so it has to end the process itself once its work is done. `startTelemetry` resolves to a handle with `enabled` and `shutdown()`. Starting twice returns the handle already running, including across two copies of the module (an ES-module preload and a CommonJS application share the handle through `globalThis`).
 
 ## Using with the bymax-one template
 
@@ -271,7 +265,7 @@ What it does not do for you: choose a sampler, run a collector, or decide your s
 | `BYMAX_TELEMETRY_START_FAILED`                           | The warning names the cause, usually an OpenTelemetry peer that is not installed.                                         |
 | HTTP spans but no Redis spans                            | Commands are traced under an active span only, and `ioredis` must be loaded after the preload.                            |
 | Metrics or logs missing                                  | They are off unless `OTEL_METRICS_EXPORTER` or `OTEL_LOGS_EXPORTER` names an exporter.                                    |
-| The last spans are lost on `SIGTERM`                     | Call `app.enableShutdownHooks()` in Nest, or `shutdownTelemetry()` in your signal handler.                                |
+| The last spans are lost on `SIGTERM`                     | Call `app.enableShutdownHooks()` in Nest, or `shutdownTelemetry()` from your own shutdown path.                           |
 | A query string still appears in a span                   | It is on an attribute other than `url.query`, `url.full`, `http.url` or `http.target`: see [Not covered](#not-covered).   |
 
 ## Compatibility and versioning
