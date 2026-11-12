@@ -200,7 +200,7 @@ The OpenTelemetry SDK reads these itself, and the library never touches them: `O
 
 `./register` is for `node --import`. It registers the loader hook, starts the SDK from the standard variables and flushes on a natural exit. It is ES-module only in substance: requiring it from CommonJS throws and names `node --import`, because starting the SDK is asynchronous and a `--require` preload cannot wait for it, which would let the application load first, unnoticed.
 
-The preload reports each failure it can meet as one of these warnings:
+The start emits these warnings:
 
 | Code                                        | Meaning                                                                        |
 | ------------------------------------------- | ------------------------------------------------------------------------------ |
@@ -286,8 +286,6 @@ The SDK part is plain functions over the OpenTelemetry packages, loaded on deman
 A span can carry whatever an instrumentation or your code records on it. This package redacts what it can know is dangerous, by default, and says plainly what it does not cover.
 
 The layers are in the [Security Table](#-security-table) below.
-
-Each layer except the outgoing request URL list has one off switch, an `unsafe` option set to the literal `true`, and each one emits a process warning of type `SecurityWarning` with the code `BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED`. `instrumentations.overrides` cannot undo a layer: a list of parameters you supply is added to the library's, and the Redis serializer stays the library's.
 
 ### Exported on purpose
 
