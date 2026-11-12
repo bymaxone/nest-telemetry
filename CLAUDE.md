@@ -66,9 +66,11 @@ Equivalent mutants are documented **in the source** as
 
 ## Documentation changes ship
 
-`README.md` and `CHANGELOG.md` are in `files`, so they are part of the published package. A change to
-either goes out as a patch release: bump the version and add the CHANGELOG section in the same pull
-request, and verify that `dist/` is unchanged instead of asserting it.
+`README.md` and `CHANGELOG.md` are in `files`, so they are part of the published package. Once a
+version is published, a change to either goes out as a patch release: bump the version and add the
+CHANGELOG section in the same pull request, and verify that `dist/` is unchanged instead of asserting
+it. Before the first publish there is no published version to patch, and the `Unreleased` section of the
+first version is edited in place.
 
 The first publish (1.0.0) and every version bump need the maintainer's explicit instruction naming the
 number. Never infer a bump from an event.
