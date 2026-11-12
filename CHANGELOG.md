@@ -8,7 +8,19 @@ The `release.yml` workflow extracts the section matching the pushed `vX.Y.Z` tag
 as the GitHub Release body, so each released version needs a matching `## [X.Y.Z]`
 heading here.
 
-## [1.0.0] - Unreleased
+## [1.0.1] - 2026-11-12
+
+Documentation only; the built files are the same as in 1.0.0.
+
+### Changed
+
+- The changelog dates 1.0.0, which the published package still lists as unreleased.
+- The README follows the structure of the other `@bymax-one` libraries. Its claims are those of 1.0.0,
+  and a `service.name` set only in `OTEL_RESOURCE_ATTRIBUTES` reaches the spans while the `env`
+  or `service` resource detector is enabled, and the missing-service-name warning still fires.
+- `docs/mutation_testing_results.md` records the cold mutation run that gated 1.0.0.
+
+## [1.0.0] - 2026-11-12
 
 First release.
 
@@ -43,4 +55,5 @@ First release.
 - Verification from the packed tarball: real `node --import` processes in a CommonJS and a native-ESM
   application, with planted secrets absent from the exported body and negative controls.
 
+[1.0.1]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.1
 [1.0.0]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.0
