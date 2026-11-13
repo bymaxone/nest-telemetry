@@ -21,7 +21,7 @@ export interface BatchSpanProcessorTuning {
 
 /** The environment values the library acts on. */
 export interface TelemetryEnvironment {
-  /** Whether `OTEL_SDK_DISABLED` is the word `true`, in any letter case and ignoring surrounding whitespace, as the SDK reads it. */
+  /** Whether `OTEL_SDK_DISABLED` is the word `true`, in any letter case and ignoring surrounding whitespace. */
   readonly sdkDisabled: boolean
   /** `OTEL_SERVICE_NAME`, or `undefined` when it is unset or blank. */
   readonly serviceName: string | undefined

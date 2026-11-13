@@ -44,8 +44,7 @@ const DISABLED_HANDLE: TelemetryHandle = {
  * Starts the OpenTelemetry SDK, unless it is disabled.
  *
  * The SDK is off when the host passes `enabled: false` or the standard `OTEL_SDK_DISABLED=true`
- * switch is set, whichever the host says. Starting twice returns the handle already running and warns
- * when the later call passed options, which it ignores.
+ * switch is set, whichever the host says. Starting twice returns the handle already running.
  *
  * @param options - The host's policy.
  * @returns The handle, which flushes and stops the SDK.
