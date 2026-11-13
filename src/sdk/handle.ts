@@ -157,18 +157,12 @@ export function createHandle(
         timer.unref()
         new Promise<void>((started) => {
           started(stopSdk())
-        }).then(
-          () => {
+        })
+          .finally(() => {
             clearTimeout(timer)
             finish()
-            resolve()
-          },
-          (error: unknown) => {
-            clearTimeout(timer)
-            finish()
-            reject(error)
-          }
-        )
+          })
+          .then(resolve, reject)
       })
       return flush
     }
