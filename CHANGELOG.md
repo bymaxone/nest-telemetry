@@ -8,6 +8,64 @@ The `release.yml` workflow extracts the section matching the pushed `vX.Y.Z` tag
 as the GitHub Release body, so each released version needs a matching `## [X.Y.Z]`
 heading here.
 
+## [1.0.2] - 2026-11-13
+
+### Security
+
+- **node-redis command arguments and keys no longer reach `db.query.text`.** The command-name serializer
+  was applied to `instrumentation-ioredis` only, so `instrumentation-redis` kept the default one: an
+  `EVAL` argument and a key were exported on node-redis 3.1.2, 4.7.1, 5.12.2 and 6.3.1. Both
+  instrumentations now export the command name only, behind the same
+  `unsafe.disableRedisArgumentRedaction`, and a host override cannot replace the serializer of either.
+
+### Fixed
+
+- `OTEL_SDK_DISABLED` is read as the SDK reads it, trimmed. A value such as `"true "` or `" TRUE"`
+  made the library load the loader hook and every OpenTelemetry package and report `enabled: true`,
+  while the SDK itself did nothing.
+- A later `startTelemetry` call against a running SDK no longer drops its options silently: see the
+  warning below.
+
+### Added
+
+- `BYMAX_TELEMETRY_OPTIONS_IGNORED`: a `startTelemetry` call reached an SDK that was already running, so its
+  options were ignored, or `enabled: false` did not stop it. Any defined option counts, `env` included, and a
+  call that passes none stays silent.
+- `BYMAX_TELEMETRY_RESTART_UNSUPPORTED`: see below.
+
+### Changed
+
+- **A start after a shutdown in the same process is refused.** `startTelemetry` rejects with an error that
+  says to start once per process, and once in a global setup for a test suite, and the process emits
+  `BYMAX_TELEMETRY_RESTART_UNSUPPORTED`; the preload turns it into its start-failed warning. Auto-instrumented
+  spans can never resume after a shutdown in the same process, because the modules are already patched;
+  spans created through the API could, but a half-working restart is refused on purpose. Before, the second
+  start reported `enabled: true` and exported nothing. A test suite that started one SDK per case now has to
+  start once.
+- The README names both Redis clients, says which one needs an active span, states what was measured about
+  mysql2 bound values, and lists the identifiers the library does not redact. A canary in the runtime proofs
+  fails if a bound mysql2 value ever reaches `db.query.text`.
+
+### Shutdown order of `TelemetryModule`
+
+`TelemetryModule` is now global, so its shutdown hook runs among the last. A span that another global module
+ends in its own shutdown hook, such as a queue drain, is now exported when `TelemetryModule` is listed first in
+the application module's imports, and was dropped before. Nest closes global modules in the reverse of the
+order it registers them, so list it before any module that is global or imports a global module. Applications
+that provided `TelemetryShutdownHook` in a module of their own to get this order can import the module.
+
+### Apply to a derived backend
+
+The declarations did not change; four behaviours did, and a derived backend acts on them:
+
+1. A start after a shutdown in the same process now throws. Start telemetry once per process, and in a
+   test suite start it once in a global setup.
+2. `TelemetryModule` is global. List it **first** in the application module's imports, so its flush runs
+   last; a module of your own that only provided `TelemetryShutdownHook` to get that order can import it.
+3. `OTEL_SDK_DISABLED` is trimmed as the SDK trims it, so a padded `" true "` now really disables.
+4. node-redis spans now carry the command name only. A dashboard or alert that matched node-redis
+   arguments or keys in `db.query.text` has to change.
+
 ## [1.0.1] - 2026-11-12
 
 Documentation only; the built files are the same as in 1.0.0.
@@ -55,5 +113,6 @@ First release.
 - Verification from the packed tarball: real `node --import` processes in a CommonJS and a native-ESM
   application, with planted secrets absent from the exported body and negative controls.
 
+[1.0.2]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.2
 [1.0.1]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.1
 [1.0.0]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.0
