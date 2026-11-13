@@ -33,16 +33,15 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
-//   - sdk: 4.00 KiB real -> 4.05 KiB budget (~1% headroom), up from 3.71 -> 3.9: the shutdown
-//     deadline (the timer, its warning, the clamp of the configured value and the settle
-//     bookkeeping) cost 0.1 KiB; shortening its warning recovered 0.01 KiB. The subpath is the whole of: redaction, the
+//   - sdk: 3.97 KiB real -> 4.05 KiB budget (~2% headroom), the whole subpath: redaction, the
 //     environment reader, the SDK assembly, the resource-detector selection that keeps the process
-//     command line out of the exported resource, the start cache and the handle lifecycle, the
-//     refusal of a start after a shutdown and the warnings for a later call that changes nothing,
-//     with their full explanatory text.
-//   - register: 4.22 KiB real -> 4.27 KiB budget (~1% headroom), up from 3.93 -> 4.1 for the same
-//     shutdown deadline. The preload bundles its own copy
-//     of the start logic: the copies share their state through `globalThis`, not through a module.
+//     command line out of the exported resource, the start cache and the handle lifecycle with its
+//     shutdown deadline (about 0.1 KiB: the timer, its warning and the clamp of the configured
+//     value), the refusal of a start after a shutdown and the warnings for a later call that
+//     changes nothing, with their full explanatory text.
+//   - register: 4.21 KiB real -> 4.27 KiB budget (~1.5% headroom). The preload bundles its own copy
+//     of the start logic, shutdown deadline included: the copies share their state through
+//     `globalThis`, not through a module.
 //   - nest: 1.31 KiB real -> 1.4 KiB budget (~7% headroom), the global module and the shutdown hook
 //     with every step of failure reporting guarded.
 //   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
