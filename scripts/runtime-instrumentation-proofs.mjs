@@ -19,6 +19,8 @@ import { createServer as createTcpServer } from 'node:net'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { runDatabaseProofs } from './runtime-database-proofs.mjs'
+
 const QUERY_SECRET = 'QUERY-SECRET-5d1e'
 const REDIS_SECRET = 'REDIS-ARGV-SECRET-8b3a'
 const HTTP_SCOPE = '@opentelemetry/instrumentation-http'
@@ -244,6 +246,8 @@ export async function runInstrumentationProofs({ consumerDir, packageName }) {
         )
       }
     }
+
+    await runDatabaseProofs({ consumerDir, packageName, run, failures })
 
     // Each control names the span that must be missing, which is what the check can lose without
     // the property it guards. The core `http` module is patched even when the preload loads late,

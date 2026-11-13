@@ -71,7 +71,7 @@ Install it with the OpenTelemetry peers you use: the command is in [Quick Start]
 
 - ✅ **Span-end query redaction** — `url.query` is replaced and the query is cut from `url.full`, `http.url` and `http.target`, on spans from any instrumentation
 - ✅ **Outgoing-URL credential list** — A list of credential-bearing parameters, checked in a test against the SDK's own default list; a host can add names and never drop them
-- ✅ **Redis commands reduced to their name** — `EVAL` and `EVALSHA` payloads never leave the process
+- ✅ **Redis commands reduced to their name** — for `ioredis` and node-redis (`redis`), arguments and keys never leave the process, `EVAL` and `EVALSHA` payloads included
 - ✅ **Command line kept out of the resource** — `process.command_args` and `process.command_line` are dropped
 - ✅ **Explicit, loud opt-outs** — Each off switch is a literal `unsafe.*: true` and emits a `SecurityWarning`
 
@@ -214,7 +214,7 @@ The programmatic `startTelemetry` keeps its rejection when the SDK cannot start,
 ### What is traced
 
 - **Load order matters only for modules your application loads itself.** The core `http` module is patched even when the preload runs after it. A client such as `ioredis` is patched only if the preload ran before the application required it. Measured: an application that required `ioredis` first exported no `ioredis` span.
-- **Redis commands are traced only under an active span.** The `ioredis` instrumentation defaults to `requireParentSpan: true`, so a command issued outside any request produces no span. Commands inside a request handler do.
+- **`ioredis` commands are traced only under an active span; node-redis commands are not.** The `ioredis` instrumentation defaults to `requireParentSpan: true`, so a command issued outside any request produces no span. The node-redis (`redis`) instrumentation defaults to `false`, so it traces a command with no request around it too. Measured with `redis` 5.
 - **`fs` instrumentation is off by default**, because it floods traces with disk activity that has no context. Turn it on with `instrumentations.fs`.
 
 ### Flushing
@@ -249,7 +249,7 @@ A caret on a `0.x` version allows patch releases only, so each OpenTelemetry min
 | Spans from a CommonJS app but none from a native-ESM app | `BYMAX_TELEMETRY_ESM_HOOK_UNAVAILABLE`: install `@opentelemetry/instrumentation`.                                                                                                                                                                                    |
 | Spans arrive but carry no service name                   | `BYMAX_TELEMETRY_SERVICE_NAME_MISSING`: set `OTEL_SERVICE_NAME` or the `serviceName` option. A name set only through `OTEL_RESOURCE_ATTRIBUTES` still reaches the spans, unless `OTEL_NODE_RESOURCE_DETECTORS` leaves out both the `env` and the `service` detector. |
 | `BYMAX_TELEMETRY_START_FAILED`                           | The warning names the cause, usually an OpenTelemetry peer that is not installed.                                                                                                                                                                                    |
-| HTTP spans but no Redis spans                            | Commands are traced under an active span only, and `ioredis` must be loaded after the preload.                                                                                                                                                                       |
+| HTTP spans but no Redis spans                            | `ioredis` commands are traced under an active span only, and the client must be loaded after the preload.                                                                                                                                                            |
 | Metrics or logs missing                                  | They are off unless `OTEL_METRICS_EXPORTER` or `OTEL_LOGS_EXPORTER` names an exporter.                                                                                                                                                                               |
 | The last spans are lost on `SIGTERM`                     | Call `app.enableShutdownHooks()` in Nest, or `shutdownTelemetry()` from your own shutdown path.                                                                                                                                                                      |
 | A query string still appears in a span                   | It is on an attribute other than `url.query`, `url.full`, `http.url` or `http.target`: see [What This Library Does NOT Do](#-what-this-library-does-not-do).                                                                                                         |
@@ -293,7 +293,7 @@ The resource carries `host.name`, `os.*`, `process.pid`, `process.owner`, the ex
 
 ### How this is verified
 
-The packed tarball is installed and run with real `node --import` processes, in a CommonJS application and a native-ESM application, against a local OTLP receiver and a fake Redis. A real HTTP request carries a planted query secret and a real `EVAL` carries a planted argument; both are absent from the whole exported body, while the HTTP spans and the Redis command name are present. Negative controls (no loader hook, no preload, a preload loaded after `ioredis`, `OTEL_SDK_DISABLED=true`) export no such span, so the checks can fail. The proof covers the HTTP and `ioredis` instrumentations; the span-end layer works on attributes, so it applies to spans from other instrumentations too, but those are not each proven individually.
+The packed tarball is installed and run with real `node --import` processes, in a CommonJS application and a native-ESM application, against a local OTLP receiver and a fake Redis. A real HTTP request carries a planted query secret and a real `EVAL` carries a planted argument; both are absent from the whole exported body, while the HTTP spans and the Redis command name are present. Negative controls (no loader hook, no preload, a preload loaded after `ioredis`, `OTEL_SDK_DISABLED=true`) export no such span, so the checks can fail. The span-end layer works on attributes, so it applies to spans from any instrumentation; an instrumentation the proofs do not exercise is not proven individually.
 
 What is **not** redacted is listed flat in [What This Library Does NOT Do](#-what-this-library-does-not-do). To report a vulnerability, follow [SECURITY.md](./SECURITY.md).
 
@@ -305,7 +305,7 @@ What is **not** redacted is listed flat in [What This Library Does NOT Do](#-wha
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Query redaction      | `url.query` is replaced by `[redacted]` and the query is cut from `url.full`, `http.url` and `http.target` as each span ends, for any instrumentation                                                                                                   |
 | Outgoing URLs        | The HTTP instrumentation redacts a credential-parameter list (`token`, `code`, `access_token`, `signature`, `X-Amz-*`, and more); hosts add names, never drop them; a test compares the list with the SDK's own, so a name the SDK adds later is caught |
-| Redis                | `db.query.text` holds the command name only; `EVAL` and `EVALSHA` payloads, which carry `KEYS` and `ARGV`, never leave the process                                                                                                                      |
+| Redis                | `db.query.text` holds the command name only, for `ioredis` and node-redis; `EVAL` and `EVALSHA` payloads, which carry `KEYS` and `ARGV`, and every key never leave the process                                                                          |
 | Process command line | `process.command_args` and `process.command_line` are dropped from the resource, because command-line arguments are a common carrier of secrets                                                                                                         |
 | Opt-outs             | Literal `unsafe.*: true` options only, each emitting a `SecurityWarning`; no environment variable turns redaction off                                                                                                                                   |
 | Overrides            | `instrumentations.overrides` is merged under the library's redaction, which is applied again on top                                                                                                                                                     |
@@ -389,8 +389,14 @@ No exports. `node --import @bymax-one/nest-telemetry/register` registers the loa
 By design, the following are out of scope:
 
 - ❌ **Redact secrets in the URL path** — only the query string is removed. A path such as `/reset/<token>` is exported as it is
-- ❌ **Redact SQL text with inline literals** — database instrumentations record the statement, and values written into it are exported
+- ❌ **Redact SQL text with inline literals** — database instrumentations record the statement, and values written into it are exported. A value bound to a placeholder is not recorded by `instrumentation-mysql2` 0.71, measured with mysql2 2.3.3, 3.0.0, 3.9.0 and 3.24.6; a canary in the proofs fails if that stops being true
 - ❌ **Redact `exception.message` in span events** — an exception's message is exported as recorded
+- ❌ **Redact the text of database driver errors** — not measured; an error recorded on a span carries whatever message the driver wrote
+- ❌ **Redact the memcached key** — `db.memcached.key` is recorded on every memcached span
+- ❌ **Redact an SNS phone number** — a publish to a `PhoneNumber` records the number as the destination name
+- ❌ **Redact the Kafka message key** — `messaging.kafka.message.key` is recorded on producer and consumer spans
+- ❌ **Redact gRPC error messages** — `grpc.error_message` is recorded when a call fails
+- ❌ **Stop the OpenAI instrumentation from capturing prompts** — it reads `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` itself, and when that is set, message content is recorded
 - ❌ **Redact span names your own code builds from raw URLs**
 - ❌ **Redact baggage**
 - ❌ **Redact request and response bodies, or HTTP headers** — they are not captured by default, and they are not redacted if you enable capturing them
