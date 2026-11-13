@@ -1,20 +1,57 @@
+import { getBooleanFromEnv } from '@opentelemetry/core'
+
 import { readTelemetryEnvironment } from './environment'
 
 describe('readTelemetryEnvironment', () => {
   describe('sdkDisabled', () => {
-    it.each(['true', 'TRUE', 'True'])('is true for OTEL_SDK_DISABLED=%s', (value) => {
-      // Scenario: the standard kill switch is the string "true", in any letter case.
-      expect(readTelemetryEnvironment({ OTEL_SDK_DISABLED: value }).sdkDisabled).toBe(true)
-    })
+    it.each(['true', 'TRUE', 'True', 'true ', ' TRUE', ' true ', '\ttrue\n'])(
+      'is true for OTEL_SDK_DISABLED=%p',
+      (value) => {
+        // Scenario: the standard kill switch is the word "true", in any letter case, with
+        // surrounding whitespace ignored as the SDK ignores it. A value the library read as "on"
+        // that the SDK read as "off" would load every package for an SDK that then does nothing.
+        expect(readTelemetryEnvironment({ OTEL_SDK_DISABLED: value }).sdkDisabled).toBe(true)
+      }
+    )
 
-    it.each([undefined, '', 'false', '1', 'yes', ' true ', 'truthy'])(
+    it.each([undefined, '', '  ', 'false', '1', 'yes', 'truthy', 'tru e'])(
       'is false for OTEL_SDK_DISABLED=%p',
       (value) => {
-        // Scenario: only the exact word turns the SDK off; anything else, a typo included, leaves
+        // Scenario: only the word "true" turns the SDK off; anything else, a typo included, leaves
         // it on, as the OTel specification defines the switch.
         expect(readTelemetryEnvironment({ OTEL_SDK_DISABLED: value }).sdkDisabled).toBe(false)
       }
     )
+
+    it.each([
+      'true',
+      'TRUE',
+      ' true ',
+      ' TRUE',
+      ' True ',
+      'true ',
+      '\ttrue\n',
+      'false',
+      '1',
+      'yes',
+      '',
+      '  ',
+      'truthy',
+      'tru e'
+    ])('reads OTEL_SDK_DISABLED=%p as the installed SDK does', (value) => {
+      // Scenario: the SDK decides for itself whether to start from the same variable, so the two
+      // must never disagree. This asks the installed SDK, so a change to its parsing fails here.
+      const previous = process.env['OTEL_SDK_DISABLED']
+      process.env['OTEL_SDK_DISABLED'] = value
+      try {
+        expect(readTelemetryEnvironment({ OTEL_SDK_DISABLED: value }).sdkDisabled).toBe(
+          getBooleanFromEnv('OTEL_SDK_DISABLED')
+        )
+      } finally {
+        if (previous === undefined) delete process.env['OTEL_SDK_DISABLED']
+        else process.env['OTEL_SDK_DISABLED'] = previous
+      }
+    })
   })
 
   describe('serviceName', () => {
