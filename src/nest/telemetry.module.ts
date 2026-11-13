@@ -7,7 +7,8 @@ import { Global, Module } from '@nestjs/common'
 import { TelemetryShutdownHook } from './telemetry-shutdown.hook'
 
 /**
- * Import it in the application module, before any other global module. Nest then awaits the SDK
+ * List it first in the imports of the application module, before any module that is global or
+ * imports a global module. Nest then awaits the SDK
  * flush while closing the application, so buffered spans are exported before the process exits.
  * The SDK itself is started by the `./register` preload or by `startTelemetry`, outside Nest.
  */

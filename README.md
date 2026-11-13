@@ -128,7 +128,7 @@ import { TelemetryModule } from '@bymax-one/nest-telemetry/nest'
 export class AppModule {}
 ```
 
-`TelemetryModule` is global, and Nest closes global modules last, in the reverse of their registration order. Import it **before any other global module**, so it closes after them: a span that another global module, such as a queue drain or a database module, ends in its own shutdown hook is exported only if `TelemetryModule` was registered first. Measured with Nest 11: imported first, the span arrives; imported after the other global module, it is dropped.
+`TelemetryModule` is global, and Nest closes global modules last, in the reverse of the order it registers them. List it **first** in the application module's imports, before any module that is global or that imports a global module, so it closes after them: a span that another global module, such as a queue drain or a database module, ends in its own shutdown hook is exported only if `TelemetryModule` was registered first. Measured with Nest 11: listed first, the span arrives whether the other global module is imported directly or through a feature module; listed after a feature module that imports a global module, or after the global module itself, the span is dropped.
 
 Things to know before you rely on it:
 
@@ -257,7 +257,7 @@ A caret on a `0.x` version allows patch releases only, so each OpenTelemetry min
 | `BYMAX_TELEMETRY_START_FAILED`                                        | The warning names the cause, usually an OpenTelemetry peer that is not installed.                                                                                                                                                                                    |
 | HTTP spans but no Redis spans                                         | `ioredis` commands are traced under an active span only, and the client must be loaded after the preload.                                                                                                                                                            |
 | Metrics or logs missing                                               | They are off unless `OTEL_METRICS_EXPORTER` or `OTEL_LOGS_EXPORTER` names an exporter.                                                                                                                                                                               |
-| The last spans of another module are lost when the application closes | Import `TelemetryModule` before any other global module, so it closes last.                                                                                                                                                                                          |
+| The last spans of another module are lost when the application closes | List `TelemetryModule` first in the application module's imports, so it closes last.                                                                                                                                                                                 |
 | The last spans are lost on `SIGTERM`                                  | Call `app.enableShutdownHooks()` in Nest, or `shutdownTelemetry()` from your own shutdown path.                                                                                                                                                                      |
 | A query string still appears in a span                                | It is on an attribute other than `url.query`, `url.full`, `http.url` or `http.target`: see [What This Library Does NOT Do](#-what-this-library-does-not-do).                                                                                                         |
 
@@ -383,7 +383,7 @@ No exports. `node --import @bymax-one/nest-telemetry/register` registers the loa
 
 | Export                       | Kind     | Purpose                                                                                              |
 | ---------------------------- | -------- | ---------------------------------------------------------------------------------------------------- |
-| `TelemetryModule`            | module   | Global; registers `TelemetryShutdownHook`. Import it before any other global module                  |
+| `TelemetryModule`            | module   | Global; registers `TelemetryShutdownHook`. List it first in the application module's imports         |
 | `TelemetryShutdownHook`      | provider | `OnApplicationShutdown`: awaits `shutdownTelemetry()`; a refused flush is reported and never rejects |
 | `TELEMETRY_LOGGER`           | token    | Optional provider with an `errorStructured(logKey, error)` method, used to report a failed flush     |
 | `TELEMETRY_FLUSH_FAILED_KEY` | constant | The stable key, `TRACING_FLUSH_FAILED`, under which a failed flush is reported                       |
