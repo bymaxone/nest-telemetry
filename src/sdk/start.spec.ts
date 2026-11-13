@@ -436,7 +436,7 @@ describe('startTelemetry', () => {
       expect(mockNodeSdk).toHaveBeenCalledTimes(2)
     })
 
-    it('says that enabled:false does not stop an SDK that is stopping', async () => {
+    it('stays silent when enabled:false arrives while the SDK is stopping', async () => {
       // Scenario: during a flush there is no running SDK to keep, so a host that asks for
       // telemetry off is not told it failed to stop one.
       const running = await startTelemetry({ serviceName: 'api', env: {} })
