@@ -4,7 +4,7 @@
  * was exported.
  * @layer scripts
  *
- * Two proofs, each with a negative control that proves its check can fail:
+ * Each proof has a negative control that proves its check can fail:
  *
  * - node-redis: the command name is exported and the planted argument and key are not. The control
  *   starts the SDK with the explicit opt-out, and the planted values then appear.
