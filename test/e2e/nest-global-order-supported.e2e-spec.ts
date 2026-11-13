@@ -1,3 +1,7 @@
+/**
+ * @fileoverview Pins that a span another global module ends while the application closes is exported when TelemetryModule is imported first.
+ * @layer e2e
+ */
 import 'reflect-metadata'
 
 import { Global, Injectable, Module } from '@nestjs/common'

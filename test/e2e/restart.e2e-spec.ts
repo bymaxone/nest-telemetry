@@ -1,3 +1,7 @@
+/**
+ * @fileoverview Pins that a start after a shutdown is refused through the public API, and that the preload turns the refusal into a warning.
+ * @layer e2e
+ */
 import { context, propagation, trace } from '@opentelemetry/api'
 
 import { shutdownTelemetry, startTelemetry } from '@bymax-one/nest-telemetry'

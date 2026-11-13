@@ -1,3 +1,7 @@
+/**
+ * @fileoverview Lets an end-to-end suite that starts one SDK per case start again.
+ * @layer e2e
+ */
 import { clearHandle } from '../../../src/sdk/handle'
 
 /**
