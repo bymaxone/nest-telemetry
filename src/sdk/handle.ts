@@ -108,7 +108,7 @@ function shutdownDeadline(requested: number | undefined): number {
  * Creates the handle of a started SDK.
  *
  * Every caller of `shutdown` gets the one flush: a caller that arrives while it is pending waits for
- * it, so awaiting `shutdown` always means the spans were exported, whoever started the flush. The
+ * it, so awaiting `shutdown` means the spans were exported, whoever started the flush, unless the deadline below passed first. The
  * handle stays registered until the flush settles, so `shutdownTelemetry` finds it too, and clears
  * its own registration then, success or failure, leaving a handle another copy registered alone.
  *

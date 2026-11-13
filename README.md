@@ -225,7 +225,7 @@ The programmatic `startTelemetry` keeps its rejection when the SDK cannot start,
 
 ### Flushing
 
-Awaiting `shutdown()` or `shutdownTelemetry()` means the spans were exported, whoever started the flush: overlapping callers wait for the same flush, and a shutdown that arrives while the SDK is still starting waits for the start and then stops what it built. A flush the collector refuses is reported, never thrown into your shutdown path, by the Nest module; the programmatic functions reject, so their caller decides.
+Awaiting `shutdown()` or `shutdownTelemetry()` means the spans were exported, whoever started the flush, unless the deadline below passed first: overlapping callers wait for the same flush, and a shutdown that arrives while the SDK is still starting waits for the start and then stops what it built. A flush the collector refuses is reported, never thrown into your shutdown path, by the Nest module; the programmatic functions reject, so their caller decides.
 
 The wait is bounded. A collector that accepts a connection and never answers would otherwise hold shutdown for the exporter's own timeout, ten seconds by default, so a flush that has not finished within `shutdownTimeoutMs` (5 seconds unless set, at most 120 seconds) stops holding the caller: shutdown emits `BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT` and resolves. The flush keeps running in the background and a failure after the deadline is dropped. Spans still queued at that point may be lost.
 
