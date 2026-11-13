@@ -25,6 +25,7 @@ import {
   clearPendingStart,
   createHandle,
   currentHandle,
+  hasStopped,
   pendingStart,
   registerHandle,
   setPendingStart
@@ -33,6 +34,10 @@ import type { RunningHandle } from './handle'
 import { createUrlQueryRedactor } from './redaction'
 import { selectResourceDetectors } from './resource-detectors'
 import type { TelemetryHandle, TelemetryOptions } from './types'
+
+/** Why a start after a shutdown is refused, and what to do instead. */
+const RESTART_MESSAGE =
+  'Telemetry cannot start again after it was shut down in the same process: the modules the first start instrumented stay patched against its tracer provider, so a second SDK would export nothing for them. Start telemetry once per process; in a test suite, start it once in a global setup.'
 
 /** The handle of a boot that started nothing. */
 const DISABLED_HANDLE: TelemetryHandle = {
@@ -74,6 +79,13 @@ export async function startTelemetry(options: TelemetryOptions = {}): Promise<Te
   if (joined !== undefined) {
     warnAboutIgnoredOptions(options)
     return joined
+  }
+  if (hasStopped()) {
+    process.emitWarning(RESTART_MESSAGE, {
+      type: 'Warning',
+      code: 'BYMAX_TELEMETRY_RESTART_UNSUPPORTED'
+    })
+    throw new Error(RESTART_MESSAGE)
   }
   const start = boot(options, env).finally(clearPendingStart)
   setPendingStart(start)

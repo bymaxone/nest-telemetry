@@ -3,6 +3,7 @@ import {
   clearPendingStart,
   createHandle,
   currentHandle,
+  hasStopped,
   pendingStart,
   registerHandle,
   setPendingStart,
@@ -176,6 +177,47 @@ describe('createHandle', () => {
     registerHandle(other)
     await handle.shutdown()
     expect(currentHandle()).toBe(other)
+  })
+})
+
+describe('hasStopped', () => {
+  it('is false until a started SDK has been shut down', () => {
+    // Scenario: a process that never stopped an SDK may start one.
+    expect(hasStopped()).toBe(false)
+    createHandle(() => Promise.resolve())
+    expect(hasStopped()).toBe(false)
+  })
+
+  it('stays false while the flush is pending and becomes true when it settles', async () => {
+    // Scenario: the mark means the SDK is gone, not that it is going.
+    const { stop, finish } = deferredStop()
+    const handle = createHandle(stop)
+    const flush = handle.shutdown()
+    expect(hasStopped()).toBe(false)
+    finish()
+    await flush
+    expect(hasStopped()).toBe(true)
+  })
+
+  it('becomes true when the flush fails too', async () => {
+    // Scenario: a flush the collector refused still leaves the SDK shut down and its modules patched.
+    const handle = createHandle(() => Promise.reject(new Error('refused')))
+    await expect(handle.shutdown()).rejects.toThrow('refused')
+    expect(hasStopped()).toBe(true)
+  })
+
+  it('is shared through the global symbol registry, so another copy of the module sees it', async () => {
+    // Scenario: the preload's copy shut the SDK down, and the application's copy must refuse.
+    await createHandle(() => Promise.resolve()).shutdown()
+    const store = globalThis as typeof globalThis & Record<symbol, unknown>
+    expect(store[Symbol.for('@bymax-one/nest-telemetry/stopped')]).toBe(true)
+  })
+
+  it('is forgotten when the registry is cleared', async () => {
+    // Scenario: a test harness resets the process-wide state between cases, through this module.
+    await createHandle(() => Promise.resolve()).shutdown()
+    clearHandle()
+    expect(hasStopped()).toBe(false)
   })
 })
 

@@ -33,17 +33,20 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
-//   - sdk: 3.34 KiB real -> 3.5 KiB budget (~4.5% headroom), the whole subpath: redaction, the
+//   - sdk: 3.71 KiB real -> 3.9 KiB budget (~5% headroom), the whole subpath: redaction, the
 //     environment reader, the SDK assembly, the resource-detector selection that keeps the process
-//     command line out of the exported resource, the start cache and the handle lifecycle.
-//   - register: 3.50 KiB real -> 3.7 KiB budget (~5% headroom). The preload bundles its own copy
+//     command line out of the exported resource, the start cache and the handle lifecycle, the
+//     refusal of a start after a shutdown and the warnings for a later call that changes nothing,
+//     with their full explanatory text.
+//   - register: 3.93 KiB real -> 4.1 KiB budget (~4% headroom). The preload bundles its own copy
 //     of the start logic: the copies share their state through `globalThis`, not through a module.
-//   - nest: 1.30 KiB real -> 1.4 KiB budget (~7% headroom), the module and the shutdown hook with
-//     every step of failure reporting guarded. A
-//     budget is re-derived from the built artifact with modest headroom, never nudged.
+//   - nest: 1.31 KiB real -> 1.4 KiB budget (~7% headroom), the global module and the shutdown hook
+//     with every step of failure reporting guarded.
+//   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
+//   met by shortening the text of a warning.
 const BUDGETS = [
-  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 3.5 * 1024 },
-  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 3.7 * 1024 },
+  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 3.9 * 1024 },
+  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 4.1 * 1024 },
   { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 1.4 * 1024 }
 ]
 

@@ -7,6 +7,7 @@ import { DEFAULT_REDACTED_QUERY_PARAMS } from '@bymax-one/nest-telemetry'
 
 import { startCollector } from './fixtures/collector'
 import type { Collector } from './fixtures/collector'
+import { allowRestart } from './fixtures/restart'
 
 // The real function runs; the wrapper only records what the library passed it.
 jest.mock('@opentelemetry/auto-instrumentations-node', () => {
@@ -36,6 +37,7 @@ afterEach(async () => {
   trace.disable()
   context.disable()
   propagation.disable()
+  allowRestart()
   delete process.env['OTEL_EXPORTER_OTLP_ENDPOINT']
   await collector.close()
 })
@@ -143,6 +145,8 @@ describe('the configuration handed to the real auto-instrumentations', () => {
     trace.disable()
     context.disable()
     propagation.disable()
+    // This case compares two SDKs started in one process, which the library refuses.
+    allowRestart()
     const alone = await configFor({ env: {}, unsafe: { disableRedisArgumentRedaction: true } })
     expect(alone).not.toHaveProperty([IOREDIS])
   })

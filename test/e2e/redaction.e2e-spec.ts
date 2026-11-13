@@ -5,6 +5,7 @@ import type { TelemetryHandle } from '@bymax-one/nest-telemetry'
 
 import { spanAttributes, startCollector } from './fixtures/collector'
 import type { Collector } from './fixtures/collector'
+import { allowRestart } from './fixtures/restart'
 
 /** The secret every test plants; its bytes must not appear in anything exported. */
 const SECRET = 'S3CR3T-VALUE-9f2c'
@@ -28,6 +29,7 @@ afterEach(async () => {
   trace.disable()
   context.disable()
   propagation.disable()
+  allowRestart()
   delete process.env['OTEL_EXPORTER_OTLP_ENDPOINT']
   await collector.close()
 })

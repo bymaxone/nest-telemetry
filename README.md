@@ -128,6 +128,8 @@ import { TelemetryModule } from '@bymax-one/nest-telemetry/nest'
 export class AppModule {}
 ```
 
+`TelemetryModule` is global, and Nest closes global modules last, in the reverse of the order it registers them. List it **first** in the application module's imports, before any module that is global or that imports a global module, so it closes after them: a span that another global module, such as a queue drain or a database module, ends in its own shutdown hook is exported only if `TelemetryModule` was registered first. Measured with Nest 11: listed first, the span arrives whether the other global module is imported directly or through a feature module; listed after a feature module that imports a global module, or after the global module itself, the span is dropped.
+
 Things to know before you rely on it:
 
 1. **Traces only, by default.** Metrics and logs stay off unless `OTEL_METRICS_EXPORTER` or `OTEL_LOGS_EXPORTER` names an exporter. This departs from the OpenTelemetry default, which exports both through OTLP, and it does so on purpose: otherwise a host that already ships metrics and logs another way would send them twice.
@@ -202,13 +204,14 @@ The OpenTelemetry SDK reads these itself, and the library never touches them: `O
 
 The start emits these warnings:
 
-| Code                                        | Meaning                                                                                                                            |
-| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `BYMAX_TELEMETRY_START_FAILED`              | The SDK could not start (a peer is missing, or the SDK threw). Tracing is off.                                                     |
-| `BYMAX_TELEMETRY_ESM_HOOK_UNAVAILABLE`      | The loader hook could not be registered. Native-ESM code is not instrumented.                                                      |
-| `BYMAX_TELEMETRY_SERVICE_NAME_MISSING`      | No service name is set; spans use `unknown_service:node`.                                                                          |
-| `BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED` | A redaction was turned off through an `unsafe` option.                                                                             |
-| `BYMAX_TELEMETRY_OPTIONS_IGNORED`           | A `startTelemetry` call reached an SDK that was already running, so its options were ignored, or `enabled: false` did not stop it. |
+| Code                                        | Meaning                                                                                                                                                                       |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BYMAX_TELEMETRY_START_FAILED`              | The SDK could not start (a peer is missing, or the SDK threw). Tracing is off.                                                                                                |
+| `BYMAX_TELEMETRY_ESM_HOOK_UNAVAILABLE`      | The loader hook could not be registered. Native-ESM code is not instrumented.                                                                                                 |
+| `BYMAX_TELEMETRY_SERVICE_NAME_MISSING`      | No service name is set; spans use `unknown_service:node`.                                                                                                                     |
+| `BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED` | A redaction was turned off through an `unsafe` option.                                                                                                                        |
+| `BYMAX_TELEMETRY_OPTIONS_IGNORED`           | A `startTelemetry` call reached an SDK that was already running, so its options were ignored, or `enabled: false` did not stop it. Any defined option counts, `env` included. |
+| `BYMAX_TELEMETRY_RESTART_UNSUPPORTED`       | `startTelemetry` was called after a shutdown in the same process, and is refused.                                                                                             |
 
 The programmatic `startTelemetry` keeps its rejection when the SDK cannot start, for callers that want it.
 
@@ -221,6 +224,8 @@ The programmatic `startTelemetry` keeps its rejection when the SDK cannot start,
 ### Flushing
 
 Awaiting `shutdown()` or `shutdownTelemetry()` means the spans were exported, whoever started the flush: overlapping callers wait for the same flush, and a shutdown that arrives while the SDK is still starting waits for the start and then stops what it built. A flush the collector refuses is reported, never thrown into your shutdown path, by the Nest module; the programmatic functions reject, so their caller decides.
+
+A start after a shutdown in the same process is refused: `startTelemetry` rejects, with an error that says to start once per process (in a test suite, once in a global setup), and the process emits `BYMAX_TELEMETRY_RESTART_UNSUPPORTED`. Auto-instrumented spans can never resume after a shutdown, because the modules the first start instrumented are already patched against its tracer provider; spans created through the API could, but a half-working restart is refused on purpose. Measured with an in-process HTTP request and one manual span per run: after a restart that released the API globals, the manual span was exported and the HTTP spans were not. The preload turns the refusal into a `BYMAX_TELEMETRY_START_FAILED` warning and the application still boots.
 
 ---
 
@@ -244,16 +249,17 @@ A caret on a `0.x` version allows patch releases only, so each OpenTelemetry min
 
 ## 🩺 Troubleshooting
 
-| You see                                                  | Look at                                                                                                                                                                                                                                                              |
-| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| No spans at all                                          | `OTEL_SDK_DISABLED`; that the application was started with `--import`; `OTEL_EXPORTER_OTLP_ENDPOINT`; the start warnings.                                                                                                                                            |
-| Spans from a CommonJS app but none from a native-ESM app | `BYMAX_TELEMETRY_ESM_HOOK_UNAVAILABLE`: install `@opentelemetry/instrumentation`.                                                                                                                                                                                    |
-| Spans arrive but carry no service name                   | `BYMAX_TELEMETRY_SERVICE_NAME_MISSING`: set `OTEL_SERVICE_NAME` or the `serviceName` option. A name set only through `OTEL_RESOURCE_ATTRIBUTES` still reaches the spans, unless `OTEL_NODE_RESOURCE_DETECTORS` leaves out both the `env` and the `service` detector. |
-| `BYMAX_TELEMETRY_START_FAILED`                           | The warning names the cause, usually an OpenTelemetry peer that is not installed.                                                                                                                                                                                    |
-| HTTP spans but no Redis spans                            | `ioredis` commands are traced under an active span only, and the client must be loaded after the preload.                                                                                                                                                            |
-| Metrics or logs missing                                  | They are off unless `OTEL_METRICS_EXPORTER` or `OTEL_LOGS_EXPORTER` names an exporter.                                                                                                                                                                               |
-| The last spans are lost on `SIGTERM`                     | Call `app.enableShutdownHooks()` in Nest, or `shutdownTelemetry()` from your own shutdown path.                                                                                                                                                                      |
-| A query string still appears in a span                   | It is on an attribute other than `url.query`, `url.full`, `http.url` or `http.target`: see [What This Library Does NOT Do](#-what-this-library-does-not-do).                                                                                                         |
+| You see                                                               | Look at                                                                                                                                                                                                                                                              |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No spans at all                                                       | `OTEL_SDK_DISABLED`; that the application was started with `--import`; `OTEL_EXPORTER_OTLP_ENDPOINT`; the start warnings.                                                                                                                                            |
+| Spans from a CommonJS app but none from a native-ESM app              | `BYMAX_TELEMETRY_ESM_HOOK_UNAVAILABLE`: install `@opentelemetry/instrumentation`.                                                                                                                                                                                    |
+| Spans arrive but carry no service name                                | `BYMAX_TELEMETRY_SERVICE_NAME_MISSING`: set `OTEL_SERVICE_NAME` or the `serviceName` option. A name set only through `OTEL_RESOURCE_ATTRIBUTES` still reaches the spans, unless `OTEL_NODE_RESOURCE_DETECTORS` leaves out both the `env` and the `service` detector. |
+| `BYMAX_TELEMETRY_START_FAILED`                                        | The warning names the cause, usually an OpenTelemetry peer that is not installed.                                                                                                                                                                                    |
+| HTTP spans but no Redis spans                                         | `ioredis` commands are traced under an active span only, and the client must be loaded after the preload.                                                                                                                                                            |
+| Metrics or logs missing                                               | They are off unless `OTEL_METRICS_EXPORTER` or `OTEL_LOGS_EXPORTER` names an exporter.                                                                                                                                                                               |
+| The last spans of another module are lost when the application closes | List `TelemetryModule` first in the application module's imports, so it closes last.                                                                                                                                                                                 |
+| The last spans are lost on `SIGTERM`                                  | Call `app.enableShutdownHooks()` in Nest, or `shutdownTelemetry()` from your own shutdown path.                                                                                                                                                                      |
+| A query string still appears in a span                                | It is on an attribute other than `url.query`, `url.full`, `http.url` or `http.target`: see [What This Library Does NOT Do](#-what-this-library-does-not-do).                                                                                                         |
 
 ---
 
@@ -355,17 +361,17 @@ pnpm check:runtime     # packed-tarball consumer proofs
 
 ### SDK: `@bymax-one/nest-telemetry`
 
-| Export                          | Signature                                                  | Purpose                                                                                                                     |
-| ------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `startTelemetry`                | `(options?: TelemetryOptions) => Promise<TelemetryHandle>` | Assembles and starts the SDK; returns the running handle when one exists; rejects when the SDK cannot start                 |
-| `shutdownTelemetry`             | `() => Promise<void>`                                      | Waits for a start in progress, then flushes and stops the SDK; resolves at once when none was started                       |
-| `ignorePaths`                   | `(patterns: readonly RegExp[]) => (request) => boolean`    | Predicate for `ignoreIncomingRequest`: matches the request path with its query cut; a request with no target is not matched |
-| `DEFAULT_REDACTED_QUERY_PARAMS` | `readonly string[]`                                        | The credential-parameter list redacted from outgoing request URLs                                                           |
-| `TelemetryOptions`              | type                                                       | The options of `startTelemetry` ([Configuration](#-configuration))                                                          |
-| `TelemetryHandle`               | type                                                       | `{ enabled: boolean, shutdown(): Promise<void> }`                                                                           |
-| `UnsafeOptions`                 | type                                                       | The literal-`true` redaction opt-outs                                                                                       |
-| `InstrumentationOptions`        | type                                                       | `fs`, `sendLogs` and `overrides`                                                                                            |
-| `IncomingRequestTarget`         | type                                                       | What an incoming-request predicate sees: the request `url`                                                                  |
+| Export                          | Signature                                                  | Purpose                                                                                                                                              |
+| ------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `startTelemetry`                | `(options?: TelemetryOptions) => Promise<TelemetryHandle>` | Assembles and starts the SDK; returns the running handle when one exists; rejects when the SDK cannot start or was already shut down in this process |
+| `shutdownTelemetry`             | `() => Promise<void>`                                      | Waits for a start in progress, then flushes and stops the SDK; resolves at once when none was started                                                |
+| `ignorePaths`                   | `(patterns: readonly RegExp[]) => (request) => boolean`    | Predicate for `ignoreIncomingRequest`: matches the request path with its query cut; a request with no target is not matched                          |
+| `DEFAULT_REDACTED_QUERY_PARAMS` | `readonly string[]`                                        | The credential-parameter list redacted from outgoing request URLs                                                                                    |
+| `TelemetryOptions`              | type                                                       | The options of `startTelemetry` ([Configuration](#-configuration))                                                                                   |
+| `TelemetryHandle`               | type                                                       | `{ enabled: boolean, shutdown(): Promise<void> }`                                                                                                    |
+| `UnsafeOptions`                 | type                                                       | The literal-`true` redaction opt-outs                                                                                                                |
+| `InstrumentationOptions`        | type                                                       | `fs`, `sendLogs` and `overrides`                                                                                                                     |
+| `IncomingRequestTarget`         | type                                                       | What an incoming-request predicate sees: the request `url`                                                                                           |
 
 `ignorePaths` copies each pattern without its `g` and `y` flags, which would keep state between calls. Anchor the patterns at both ends; an unanchored one also matches routes that merely contain the word.
 
@@ -377,7 +383,7 @@ No exports. `node --import @bymax-one/nest-telemetry/register` registers the loa
 
 | Export                       | Kind     | Purpose                                                                                              |
 | ---------------------------- | -------- | ---------------------------------------------------------------------------------------------------- |
-| `TelemetryModule`            | module   | Registers `TelemetryShutdownHook`                                                                    |
+| `TelemetryModule`            | module   | Global; registers `TelemetryShutdownHook`. List it first in the application module's imports         |
 | `TelemetryShutdownHook`      | provider | `OnApplicationShutdown`: awaits `shutdownTelemetry()`; a refused flush is reported and never rejects |
 | `TELEMETRY_LOGGER`           | token    | Optional provider with an `errorStructured(logKey, error)` method, used to report a failed flush     |
 | `TELEMETRY_FLUSH_FAILED_KEY` | constant | The stable key, `TRACING_FLUSH_FAILED`, under which a failed flush is reported                       |
@@ -405,6 +411,7 @@ By design, the following are out of scope:
 - ❌ **Choose a sampler** — configure `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG`
 - ❌ **Run a collector or a backend** — point `OTEL_EXPORTER_OTLP_ENDPOINT` at one
 - ❌ **Decide your span names** — those come from the instrumentations and from your code
+- ❌ **Start again after a shutdown in the same process** — `startTelemetry` is refused, because auto-instrumented modules stay patched against the first SDK
 - ❌ **Install a signal handler** — handling `SIGTERM` belongs to the application
 - ❌ **Provide strict semantic versioning** — each release in the [CHANGELOG](./CHANGELOG.md) says what changed and what to do about it, and the version number alone is not the compatibility information
 

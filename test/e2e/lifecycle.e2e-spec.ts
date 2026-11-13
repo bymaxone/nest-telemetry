@@ -5,6 +5,7 @@ import type { TelemetryHandle, TelemetryOptions } from '@bymax-one/nest-telemetr
 
 import { forceFlush, resourceAttributes, startCollector } from './fixtures/collector'
 import type { Collector } from './fixtures/collector'
+import { allowRestart } from './fixtures/restart'
 
 let collector: Collector
 
@@ -23,6 +24,7 @@ afterEach(async () => {
   trace.disable()
   context.disable()
   propagation.disable()
+  allowRestart()
   delete process.env['OTEL_EXPORTER_OTLP_ENDPOINT']
   delete process.env['OTEL_SDK_DISABLED']
   await collector.close()
@@ -260,19 +262,21 @@ describe('the process command line in the exported resource', () => {
 })
 
 describe('overlapping shutdowns', () => {
-  it('make every caller wait for the flush, and a start during it starts a fresh SDK', async () => {
+  it('make every caller wait for the flush, and refuse a start that arrives during it', async () => {
     // Scenario: a signal handler and the application hook both shut down, and a start arrives
-    // while the flush is under way. Nobody resolves before the span is delivered, and the new
-    // start does not receive the handle that is stopping.
+    // while the flush is under way. Nobody resolves before the span is delivered, the new start
+    // does not receive the handle that is stopping, and once the SDK is gone it is refused.
     const first = await startAndRecord({ env: {} })
     const direct = first.shutdown()
     const viaApi = shutdownTelemetry()
     const restarted = startTelemetry({ env: {} })
+    const outcome = restarted.then(
+      () => 'started',
+      (error: Error) => error.message
+    )
     await Promise.all([direct, viaApi])
     expect(collector.bodies).toHaveLength(1)
-    const second = await restarted
-    expect(second).not.toBe(first)
-    expect(second.enabled).toBe(true)
+    await expect(outcome).resolves.toContain('once per process')
   })
 })
 
@@ -285,10 +289,8 @@ describe('a shutdown during a start', () => {
     const handle = await starting
     await stopping
     expect(handle.enabled).toBe(true)
-    // The SDK was stopped, so the registry is empty and a new start builds a fresh one.
-    const again = await startTelemetry({ env: {} })
-    expect(again).not.toBe(handle)
-    await again.shutdown()
+    // The SDK was stopped, so the registry is empty and a new start is refused.
+    await expect(startTelemetry({ env: {} })).rejects.toThrow('once per process')
   })
 })
 
@@ -317,10 +319,13 @@ describe('a later call while the SDK is running', () => {
       env: {}
     })
     expect(second).toBe(first)
-    expect(emitWarning).toHaveBeenCalledWith(expect.stringContaining('options ignored'), {
-      type: 'Warning',
-      code: 'BYMAX_TELEMETRY_OPTIONS_IGNORED'
-    })
+    expect(emitWarning).toHaveBeenCalledWith(
+      expect.stringContaining('the options of this call were ignored'),
+      {
+        type: 'Warning',
+        code: 'BYMAX_TELEMETRY_OPTIONS_IGNORED'
+      }
+    )
     await shutdownTelemetry()
     const attributes = resourceAttributes(collector.bodies[0] ?? '')
     expect(attributes['service.name']).toBe('first')
@@ -345,10 +350,13 @@ describe('a later call while the SDK is running', () => {
     await startTelemetry({ serviceName: 'api', env: {} })
     const handle = await startTelemetry({ enabled: false, env: {} })
     expect(handle.enabled).toBe(false)
-    expect(emitWarning).toHaveBeenCalledWith(expect.stringContaining('does not stop the SDK'), {
-      type: 'Warning',
-      code: 'BYMAX_TELEMETRY_OPTIONS_IGNORED'
-    })
+    expect(emitWarning).toHaveBeenCalledWith(
+      expect.stringContaining('does not stop the running SDK'),
+      {
+        type: 'Warning',
+        code: 'BYMAX_TELEMETRY_OPTIONS_IGNORED'
+      }
+    )
     trace.getTracer('e2e').startSpan('after-disable').end()
     await shutdownTelemetry()
     expect(collector.bodies.join('')).toContain('after-disable')
