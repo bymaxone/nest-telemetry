@@ -172,7 +172,7 @@ async function boot(options: TelemetryOptions, env: TelemetryEnvironment): Promi
   warnAboutMissingServiceName(options, env)
   const sdk = buildSdk(await loadPackages(), options, env)
   sdk.start()
-  const handle = createHandle(() => sdk.shutdown())
+  const handle = createHandle(() => sdk.shutdown(), options.shutdownTimeoutMs)
   registerHandle(handle)
   return handle
 }
