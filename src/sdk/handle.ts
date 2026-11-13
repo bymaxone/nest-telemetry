@@ -50,9 +50,6 @@ export function currentHandle(): RunningHandle | undefined {
 /**
  * Reads whether an SDK this process started has been shut down.
  *
- * The modules a start instrumented stay patched against its tracer provider, so a second SDK would
- * export nothing for them; a start that sees this mark is refused.
- *
  * @returns `true` once a started SDK has finished shutting down, whether or not its flush failed.
  */
 export function hasStopped(): boolean {
