@@ -504,6 +504,27 @@ describe('startTelemetry', () => {
     })
   })
 
+  describe('shutdownTimeoutMs', () => {
+    it('is handed to the handle, so a hung flush ends at the host deadline', async () => {
+      // Scenario: the host's option reaches the flush; the SDK's shutdown never settles here.
+      jest.useFakeTimers()
+      try {
+        jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+        mockSdkInstance.shutdown.mockReturnValue(new Promise<void>(() => undefined))
+        const handle = await startTelemetry({ serviceName: 'api', shutdownTimeoutMs: 300, env: {} })
+        const settled = jest.fn()
+        const done = handle.shutdown().then(settled)
+        await jest.advanceTimersByTimeAsync(299)
+        expect(settled).not.toHaveBeenCalled()
+        await jest.advanceTimersByTimeAsync(1)
+        await done
+        expect(settled).toHaveBeenCalledTimes(1)
+      } finally {
+        jest.useRealTimers()
+      }
+    })
+  })
+
   describe('shutdown', () => {
     it('waits for a start in progress and then drains the SDK it started', async () => {
       // Scenario: a shutdown arrives while the packages are still loading; with no handle yet it

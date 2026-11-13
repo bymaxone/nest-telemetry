@@ -88,6 +88,22 @@ export function clearPendingStart(): void {
   delete store[PENDING_KEY]
 }
 
+/** The shutdown deadline used when the host gives none, or gives a value that cannot be used. */
+const DEFAULT_SHUTDOWN_TIMEOUT_MS = 5000
+
+/** The largest shutdown deadline a host may ask for; above it the default applies. */
+const MAX_SHUTDOWN_TIMEOUT_MS = 120_000
+
+/** Reads the deadline, falling back to the default for anything that is not a usable duration. */
+function shutdownDeadline(requested: number | undefined): number {
+  return requested !== undefined &&
+    Number.isFinite(requested) &&
+    requested > 0 &&
+    requested <= MAX_SHUTDOWN_TIMEOUT_MS
+    ? requested
+    : DEFAULT_SHUTDOWN_TIMEOUT_MS
+}
+
 /**
  * Creates the handle of a started SDK.
  *
@@ -96,10 +112,20 @@ export function clearPendingStart(): void {
  * handle stays registered until the flush settles, so `shutdownTelemetry` finds it too, and clears
  * its own registration then, success or failure, leaving a handle another copy registered alone.
  *
+ * A flush that has not finished by the deadline stops holding the caller: `shutdown` warns and
+ * resolves, so a collector that accepts a connection and never answers cannot spend a container's
+ * termination grace period. The flush itself keeps running in the background, and a failure that
+ * arrives after the deadline is dropped, because nobody is waiting for it.
+ *
  * @param stopSdk - Flushes and stops the SDK.
+ * @param shutdownTimeoutMs - The deadline in milliseconds; 5000 when absent, not a finite number
+ * above zero, or above 120000.
  * @returns The handle.
  */
-export function createHandle(stopSdk: () => Promise<void>): RunningHandle {
+export function createHandle(
+  stopSdk: () => Promise<void>,
+  shutdownTimeoutMs?: number
+): RunningHandle {
   let flush: Promise<void> | undefined
   let finished = false
   const handle: RunningHandle = {
@@ -111,12 +137,38 @@ export function createHandle(stopSdk: () => Promise<void>): RunningHandle {
       if (finished) {
         return Promise.resolve()
       }
-      flush ??= stopSdk().finally(() => {
-        finished = true
-        Reflect.set(globalThis, STOPPED_KEY, true)
-        if (currentHandle() === handle) {
-          Reflect.deleteProperty(globalThis, HANDLE_KEY)
+      flush ??= new Promise<void>((resolve, reject) => {
+        const deadline = shutdownDeadline(shutdownTimeoutMs)
+        const finish = (): void => {
+          finished = true
+          Reflect.set(globalThis, STOPPED_KEY, true)
+          if (currentHandle() === handle) {
+            Reflect.deleteProperty(globalThis, HANDLE_KEY)
+          }
         }
+        const timer = setTimeout(() => {
+          process.emitWarning(
+            `The telemetry flush did not finish within ${deadline} ms, so shutdown stopped waiting for it. Spans still queued may be lost. Raise shutdownTimeoutMs or check that the collector answers.`,
+            { type: 'Warning', code: 'BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT' }
+          )
+          finish()
+          resolve()
+        }, deadline)
+        timer.unref()
+        new Promise<void>((started) => {
+          started(stopSdk())
+        }).then(
+          () => {
+            clearTimeout(timer)
+            finish()
+            resolve()
+          },
+          (error: unknown) => {
+            clearTimeout(timer)
+            finish()
+            reject(error)
+          }
+        )
       })
       return flush
     }

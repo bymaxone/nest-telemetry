@@ -165,20 +165,21 @@ This package installs no signal handler and shows none, because handling signals
 
 Every field is the host's policy, and none is required.
 
-| Option                                 | Default                      | What it does                                                                                                                        |
-| -------------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `enabled`                              | `true`                       | `false` never starts the SDK. `OTEL_SDK_DISABLED=true` disables it regardless.                                                      |
-| `serviceName`                          | `unknown_service:node`       | The service name. `OTEL_SERVICE_NAME` overrides it.                                                                                 |
-| `serviceVersion`                       | none                         | The service version.                                                                                                                |
-| `ignoreIncomingRequest`                | none                         | Returns `true` for an incoming request that must produce no server span. `ignorePaths(patterns)` builds one from anchored patterns. |
-| `instrumentations.fs`                  | `false`                      | File-system instrumentation.                                                                                                        |
-| `instrumentations.sendLogs`            | follows `OTEL_LOGS_EXPORTER` | Whether pino's records are forwarded to the OpenTelemetry logs pipeline.                                                            |
-| `instrumentations.overrides`           | none                         | Per-instrumentation configuration, merged over the library's. Redaction settings cannot be replaced here.                           |
-| `extraRedactedQueryParams`             | none                         | Names added to the list redacted from outgoing request URLs. They add to the defaults and never replace them.                       |
-| `unsafe.disableUrlRedaction`           | off                          | Keeps `url.query`, `url.full`, `http.url` and `http.target` as recorded. Literal `true`. Warns.                                     |
-| `unsafe.disableRedisArgumentRedaction` | off                          | Keeps Redis command arguments in `db.query.text`. Literal `true`. Warns.                                                            |
-| `unsafe.exportProcessCommandArgs`      | off                          | Keeps `process.command_args` and `process.command_line` in the resource. Literal `true`. Warns.                                     |
-| `env`                                  | the process environment      | The environment the library reads. The OpenTelemetry SDK itself always reads the process environment.                               |
+| Option                                 | Default                      | What it does                                                                                                                                                   |
+| -------------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enabled`                              | `true`                       | `false` never starts the SDK. `OTEL_SDK_DISABLED=true` disables it regardless.                                                                                 |
+| `serviceName`                          | `unknown_service:node`       | The service name. `OTEL_SERVICE_NAME` overrides it.                                                                                                            |
+| `serviceVersion`                       | none                         | The service version.                                                                                                                                           |
+| `ignoreIncomingRequest`                | none                         | Returns `true` for an incoming request that must produce no server span. `ignorePaths(patterns)` builds one from anchored patterns.                            |
+| `instrumentations.fs`                  | `false`                      | File-system instrumentation.                                                                                                                                   |
+| `instrumentations.sendLogs`            | follows `OTEL_LOGS_EXPORTER` | Whether pino's records are forwarded to the OpenTelemetry logs pipeline.                                                                                       |
+| `instrumentations.overrides`           | none                         | Per-instrumentation configuration, merged over the library's. Redaction settings cannot be replaced here.                                                      |
+| `extraRedactedQueryParams`             | none                         | Names added to the list redacted from outgoing request URLs. They add to the defaults and never replace them.                                                  |
+| `unsafe.disableUrlRedaction`           | off                          | Keeps `url.query`, `url.full`, `http.url` and `http.target` as recorded. Literal `true`. Warns.                                                                |
+| `unsafe.disableRedisArgumentRedaction` | off                          | Keeps Redis command arguments in `db.query.text`. Literal `true`. Warns.                                                                                       |
+| `unsafe.exportProcessCommandArgs`      | off                          | Keeps `process.command_args` and `process.command_line` in the resource. Literal `true`. Warns.                                                                |
+| `shutdownTimeoutMs`                    | `5000`                       | The longest shutdown waits for the final flush. Past it, shutdown warns and resolves. A value that is not above zero, or is above `120000`, means the default. |
+| `env`                                  | the process environment      | The environment the library reads. The OpenTelemetry SDK itself always reads the process environment.                                                          |
 
 ### Environment variables
 
@@ -212,6 +213,7 @@ The start emits these warnings:
 | `BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED` | A redaction was turned off through an `unsafe` option.                                                                                                                        |
 | `BYMAX_TELEMETRY_OPTIONS_IGNORED`           | A `startTelemetry` call reached an SDK that was already running, so its options were ignored, or `enabled: false` did not stop it. Any defined option counts, `env` included. |
 | `BYMAX_TELEMETRY_RESTART_UNSUPPORTED`       | `startTelemetry` was called after a shutdown in the same process, and is refused.                                                                                             |
+| `BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT`          | The final flush did not finish within `shutdownTimeoutMs`. Shutdown resolved without it, and spans still queued may be lost.                                                  |
 
 The programmatic `startTelemetry` keeps its rejection when the SDK cannot start, for callers that want it.
 
@@ -224,6 +226,8 @@ The programmatic `startTelemetry` keeps its rejection when the SDK cannot start,
 ### Flushing
 
 Awaiting `shutdown()` or `shutdownTelemetry()` means the spans were exported, whoever started the flush: overlapping callers wait for the same flush, and a shutdown that arrives while the SDK is still starting waits for the start and then stops what it built. A flush the collector refuses is reported, never thrown into your shutdown path, by the Nest module; the programmatic functions reject, so their caller decides.
+
+The wait is bounded. A collector that accepts a connection and never answers would otherwise hold shutdown for the exporter's own timeout, ten seconds by default, so a flush that has not finished within `shutdownTimeoutMs` (5 seconds unless set, at most 120 seconds) stops holding the caller: shutdown emits `BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT` and resolves. The flush keeps running in the background and a failure after the deadline is dropped. Spans still queued at that point may be lost.
 
 A start after a shutdown in the same process is refused: `startTelemetry` rejects, with an error that says to start once per process (in a test suite, once in a global setup), and the process emits `BYMAX_TELEMETRY_RESTART_UNSUPPORTED`. Auto-instrumented spans can never resume after a shutdown, because the modules the first start instrumented are already patched against its tracer provider; spans created through the API could, but a half-working restart is refused on purpose. Measured with an in-process HTTP request and one manual span per run: after a restart that released the API globals, the manual span was exported and the HTTP spans were not. The preload turns the refusal into a `BYMAX_TELEMETRY_START_FAILED` warning and the application still boots.
 

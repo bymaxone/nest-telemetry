@@ -180,6 +180,150 @@ describe('createHandle', () => {
   })
 })
 
+describe('createHandle shutdown deadline', () => {
+  const CODE = 'BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT'
+
+  beforeEach(() => {
+    jest.useFakeTimers()
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  it('resolves with a warning when the flush has not finished within the default deadline', async () => {
+    // Scenario: a collector that accepts the export and never answers must not hold shutdown past
+    // the deadline, so a container's termination grace period is never spent on it.
+    const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    const { stop } = deferredStop()
+    const settled = jest.fn()
+    const done = createHandle(stop).shutdown().then(settled)
+    await jest.advanceTimersByTimeAsync(4999)
+    expect(settled).not.toHaveBeenCalled()
+    await jest.advanceTimersByTimeAsync(1)
+    await done
+    expect(settled).toHaveBeenCalledTimes(1)
+    expect(emitWarning).toHaveBeenCalledTimes(1)
+    expect(emitWarning).toHaveBeenCalledWith(
+      expect.stringContaining('did not finish within 5000 ms'),
+      {
+        type: 'Warning',
+        code: CODE
+      }
+    )
+  })
+
+  it('uses the deadline the host passes', async () => {
+    // Scenario: shutdownTimeoutMs lets a host fit its own grace period.
+    jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    const { stop } = deferredStop()
+    const settled = jest.fn()
+    const done = createHandle(stop, 250).shutdown().then(settled)
+    await jest.advanceTimersByTimeAsync(249)
+    expect(settled).not.toHaveBeenCalled()
+    await jest.advanceTimersByTimeAsync(1)
+    await done
+    expect(settled).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY, 120001, 3_600_000])(
+    'falls back to the default deadline for an unusable value (%p)',
+    async (value) => {
+      // Scenario: a typo must neither disable the deadline nor recreate the hang it guards against,
+      // so zero, a negative, a non-number and anything above two minutes mean the default.
+      jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      const { stop } = deferredStop()
+      const settled = jest.fn()
+      const done = createHandle(stop, value).shutdown().then(settled)
+      await jest.advanceTimersByTimeAsync(4999)
+      expect(settled).not.toHaveBeenCalled()
+      await jest.advanceTimersByTimeAsync(1)
+      await done
+      expect(settled).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  it('accepts the largest usable deadline', async () => {
+    // Scenario: the cap is inclusive, so a host that really wants two minutes gets them.
+    jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    const { stop } = deferredStop()
+    const settled = jest.fn()
+    const done = createHandle(stop, 120_000).shutdown().then(settled)
+    await jest.advanceTimersByTimeAsync(119_999)
+    expect(settled).not.toHaveBeenCalled()
+    await jest.advanceTimersByTimeAsync(1)
+    await done
+    expect(settled).toHaveBeenCalledTimes(1)
+  })
+
+  it('warns nothing and clears its timer when the flush finishes in time', async () => {
+    // Scenario: the healthy path leaves no timer behind and no warning.
+    const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    const { stop, finish } = deferredStop()
+    const done = createHandle(stop).shutdown()
+    finish()
+    await done
+    expect(jest.getTimerCount()).toBe(0)
+    expect(emitWarning).not.toHaveBeenCalled()
+  })
+
+  it('still rejects with the failure of a flush that fails before the deadline', async () => {
+    // Scenario: a quick, definite failure is the caller's to see, as before; only a hang is cut.
+    const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    const { stop, fail } = deferredStop()
+    const done = createHandle(stop).shutdown()
+    const outcome = expect(done).rejects.toThrow('refused')
+    fail(new Error('refused'))
+    await outcome
+    expect(jest.getTimerCount()).toBe(0)
+    expect(emitWarning).not.toHaveBeenCalled()
+  })
+
+  it('does not keep the process alive for the deadline', () => {
+    // Scenario: the timer is a safety net, never a reason for the process to wait.
+    const unref = jest.spyOn(global, 'setTimeout')
+    createHandle(deferredStop().stop)
+      .shutdown()
+      .catch(() => undefined)
+    const timer = unref.mock.results[unref.mock.results.length - 1]?.value as { hasRef(): boolean }
+    expect(timer.hasRef()).toBe(false)
+    unref.mockRestore()
+  })
+
+  it('marks the SDK as stopped and clears its registration at the deadline', async () => {
+    // Scenario: a restart must stay refused and the registry must not hold a handle whose flush the
+    // caller already moved past, whichever way the flush ends.
+    jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    const { stop } = deferredStop()
+    const handle = createHandle(stop)
+    registerHandle(handle)
+    const done = handle.shutdown()
+    expect(hasStopped()).toBe(false)
+    await jest.advanceTimersByTimeAsync(5000)
+    await done
+    expect(hasStopped()).toBe(true)
+    expect(currentHandle()).toBeUndefined()
+    expect(handle.stopping).toBe(false)
+  })
+
+  it('absorbs the rejection of a flush that fails after the deadline', async () => {
+    // Scenario: the background shutdown cannot be cancelled, and when it finally fails nobody is
+    // waiting, so the failure must not surface as an unhandled rejection.
+    jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    const unhandled = jest.fn()
+    process.on('unhandledRejection', unhandled)
+    const { stop, fail } = deferredStop()
+    const done = createHandle(stop).shutdown()
+    await jest.advanceTimersByTimeAsync(5000)
+    await done
+    fail(new Error('late'))
+    jest.useRealTimers()
+    await settle()
+    process.off('unhandledRejection', unhandled)
+    expect(unhandled).not.toHaveBeenCalled()
+  })
+})
+
 describe('hasStopped', () => {
   it('is false until a started SDK has been shut down', () => {
     // Scenario: a process that never stopped an SDK may start one.

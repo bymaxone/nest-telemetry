@@ -71,6 +71,13 @@ export interface TelemetryOptions {
   /** Explicit opt-outs from redaction. */
   readonly unsafe?: UnsafeOptions
   /**
+   * The longest `shutdown` waits for the final flush, in milliseconds. A collector that accepts a
+   * connection and never answers cannot hold the process past it: shutdown warns with
+   * `BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT` and resolves, and spans still queued may be lost. Defaults
+   * to 5000; a value that is not a finite number above zero, or is above 120000, means the default.
+   */
+  readonly shutdownTimeoutMs?: number
+  /**
    * The environment the library reads, which defaults to the process environment. The OTel SDK
    * reads `OTEL_EXPORTER_OTLP_*` and the sampler variables from the process environment itself.
    */
