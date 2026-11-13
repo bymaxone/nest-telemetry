@@ -15,6 +15,7 @@ import {
   buildInstrumentationConfig,
   buildResourceAttributes,
   planSignals,
+  warnAboutIgnoredOptions,
   warnAboutMissingServiceName,
   warnAboutUnsafeOptions
 } from './assembly'
@@ -43,7 +44,8 @@ const DISABLED_HANDLE: TelemetryHandle = {
  * Starts the OpenTelemetry SDK, unless it is disabled.
  *
  * The SDK is off when the host passes `enabled: false` or the standard `OTEL_SDK_DISABLED=true`
- * switch is set, whichever the host says. Starting twice returns the handle already running.
+ * switch is set, whichever the host says. Starting twice returns the handle already running and warns
+ * when the later call passed options, which it ignores.
  *
  * @param options - The host's policy.
  * @returns The handle, which flushes and stops the SDK.
@@ -51,6 +53,9 @@ const DISABLED_HANDLE: TelemetryHandle = {
 export async function startTelemetry(options: TelemetryOptions = {}): Promise<TelemetryHandle> {
   const env = readTelemetryEnvironment(options.env)
   if (options.enabled === false || env.sdkDisabled) {
+    // Turning telemetry off by a later call hands back a disabled handle and leaves a running SDK
+    // running.
+    if (currentHandle()?.stopping === false || pendingStart()) warnAboutIgnoredOptions(options)
     return DISABLED_HANDLE
   }
   let running = currentHandle()
@@ -61,12 +66,14 @@ export async function startTelemetry(options: TelemetryOptions = {}): Promise<Te
     running = currentHandle()
   }
   if (running !== undefined) {
+    warnAboutIgnoredOptions(options)
     return running
   }
   // A second caller that arrives while the first is still loading gets the same start, whichever
   // copy of the library it runs in, so two overlapping calls never build two SDKs.
   const joined = pendingStart()
   if (joined !== undefined) {
+    warnAboutIgnoredOptions(options)
     return joined
   }
   const start = boot(options, env).finally(clearPendingStart)

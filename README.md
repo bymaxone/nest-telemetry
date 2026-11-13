@@ -153,7 +153,7 @@ const telemetry = await startTelemetry({
 await telemetry.shutdown()
 ```
 
-This package installs no signal handler and shows none, because handling signals belongs to the application: a `SIGTERM` listener replaces Node's default termination, so it has to end the process itself once its work is done. `startTelemetry` resolves to a handle with `enabled` and `shutdown()`. Starting twice returns the handle already running, including across two copies of the module (an ES-module preload and a CommonJS application share the handle through `globalThis`).
+This package installs no signal handler and shows none, because handling signals belongs to the application: a `SIGTERM` listener replaces Node's default termination, so it has to end the process itself once its work is done. `startTelemetry` resolves to a handle with `enabled` and `shutdown()`. Starting twice returns the handle already running, including across two copies of the module (an ES-module preload and a CommonJS application share the handle through `globalThis`). A later call that passes options is told they were ignored, and `enabled: false` against a running SDK is told it does not stop it: `shutdownTelemetry()` does.
 
 ---
 
@@ -184,7 +184,7 @@ The library reads these in one source file, and a test fails if any other file n
 
 | Variable                                                                                                          | Effect                                                                                                                                    |
 | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `OTEL_SDK_DISABLED`                                                                                               | `true` (any letter case) disables the SDK.                                                                                                |
+| `OTEL_SDK_DISABLED`                                                                                               | `true` disables the SDK, in any letter case and with surrounding whitespace ignored, as the SDK reads it.                                 |
 | `OTEL_SERVICE_NAME`                                                                                               | Service name; overrides the option, because the operator's standard variable wins over what the code chose. Blank values count as absent. |
 | `OTEL_METRICS_EXPORTER`, `OTEL_LOGS_EXPORTER`                                                                     | Metrics and logs are exported only when these name an exporter.                                                                           |
 | `OTEL_BSP_MAX_QUEUE_SIZE`, `OTEL_BSP_SCHEDULE_DELAY`, `OTEL_BSP_EXPORT_TIMEOUT`, `OTEL_BSP_MAX_EXPORT_BATCH_SIZE` | Mapped onto the batch span processor the library passes; the SDK applies them only to one it builds itself.                               |
@@ -202,12 +202,13 @@ The OpenTelemetry SDK reads these itself, and the library never touches them: `O
 
 The start emits these warnings:
 
-| Code                                        | Meaning                                                                        |
-| ------------------------------------------- | ------------------------------------------------------------------------------ |
-| `BYMAX_TELEMETRY_START_FAILED`              | The SDK could not start (a peer is missing, or the SDK threw). Tracing is off. |
-| `BYMAX_TELEMETRY_ESM_HOOK_UNAVAILABLE`      | The loader hook could not be registered. Native-ESM code is not instrumented.  |
-| `BYMAX_TELEMETRY_SERVICE_NAME_MISSING`      | No service name is set; spans use `unknown_service:node`.                      |
-| `BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED` | A redaction was turned off through an `unsafe` option.                         |
+| Code                                        | Meaning                                                                                                                            |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `BYMAX_TELEMETRY_START_FAILED`              | The SDK could not start (a peer is missing, or the SDK threw). Tracing is off.                                                     |
+| `BYMAX_TELEMETRY_ESM_HOOK_UNAVAILABLE`      | The loader hook could not be registered. Native-ESM code is not instrumented.                                                      |
+| `BYMAX_TELEMETRY_SERVICE_NAME_MISSING`      | No service name is set; spans use `unknown_service:node`.                                                                          |
+| `BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED` | A redaction was turned off through an `unsafe` option.                                                                             |
+| `BYMAX_TELEMETRY_OPTIONS_IGNORED`           | A `startTelemetry` call reached an SDK that was already running, so its options were ignored, or `enabled: false` did not stop it. |
 
 The programmatic `startTelemetry` keeps its rejection when the SDK cannot start, for callers that want it.
 

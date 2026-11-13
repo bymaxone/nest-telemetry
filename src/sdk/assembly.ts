@@ -26,6 +26,9 @@ const WARNING_OPTIONS = {
   code: 'BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED'
 }
 
+/** The type and code of the warning about a call that has no effect on a running SDK. */
+const IGNORED_WARNING = { type: 'Warning', code: 'BYMAX_TELEMETRY_OPTIONS_IGNORED' }
+
 /** Overrides that keep a signal other than traces off. */
 export interface SignalPlan {
   readonly overrides: { metricReaders?: never[]; logRecordProcessors?: never[] }
@@ -171,6 +174,28 @@ export function warnAboutUnsafeOptions(options: TelemetryOptions): void {
     process.emitWarning(
       'Redis argument redaction is disabled: command arguments, EVAL and EVALSHA payloads included, are exported in db.query.text.',
       WARNING_OPTIONS
+    )
+  }
+}
+
+/**
+ * Emits a warning when a call reaches an SDK that is already running and so changes nothing.
+ *
+ * A call with `enabled: false` is told that it does not stop the running SDK; any other call is
+ * told that its options were ignored, but only when it passed at least one, so a bare repeated
+ * start stays silent. Comparing the options with the first call's was rejected: a predicate built
+ * by `ignorePaths` is a new function every call, so every repeat would differ.
+ *
+ * @param options - The options of the later call.
+ */
+export function warnAboutIgnoredOptions(options: TelemetryOptions): void {
+  const stop = options.enabled === false
+  if (stop || Object.values(options).some((v) => v !== undefined)) {
+    process.emitWarning(
+      stop
+        ? 'enabled: false does not stop the SDK: use shutdownTelemetry().'
+        : 'Telemetry already running: options ignored.',
+      IGNORED_WARNING
     )
   }
 }

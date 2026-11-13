@@ -303,3 +303,54 @@ describe('overlapping starts', () => {
     await shutdownTelemetry()
   })
 })
+
+describe('a later call while the SDK is running', () => {
+  it('keeps the first start in force, and says the options of the later call were ignored', async () => {
+    // Scenario: an application passes its policy after the preload started the SDK. The exported
+    // resource still carries the first start's name and still leaves the command line out, and the
+    // host is told so, instead of finding out from a span.
+    const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    const first = await startAndRecord({ serviceName: 'first', env: {} })
+    const second = await startTelemetry({
+      serviceName: 'second',
+      unsafe: { exportProcessCommandArgs: true },
+      env: {}
+    })
+    expect(second).toBe(first)
+    expect(emitWarning).toHaveBeenCalledWith(expect.stringContaining('options ignored'), {
+      type: 'Warning',
+      code: 'BYMAX_TELEMETRY_OPTIONS_IGNORED'
+    })
+    await shutdownTelemetry()
+    const attributes = resourceAttributes(collector.bodies[0] ?? '')
+    expect(attributes['service.name']).toBe('first')
+    expect(attributes).not.toHaveProperty(['process.command_args'])
+  })
+
+  it('stays silent when the later call passes no option', async () => {
+    // Scenario: a bare repeated start, as a library makes to be sure telemetry is on, has nothing
+    // to ignore, so it returns the running handle and says nothing.
+    const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    const first = await startTelemetry({ serviceName: 'api', env: {} })
+    emitWarning.mockClear()
+    const second = await startTelemetry()
+    expect(second).toBe(first)
+    expect(emitWarning).not.toHaveBeenCalled()
+  })
+
+  it('says enabled:false does not stop the SDK, which keeps exporting', async () => {
+    // Scenario: a host that asks for telemetry off after it started gets a disabled handle; the
+    // running SDK is untouched, so a span recorded afterwards is still delivered.
+    const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    await startTelemetry({ serviceName: 'api', env: {} })
+    const handle = await startTelemetry({ enabled: false, env: {} })
+    expect(handle.enabled).toBe(false)
+    expect(emitWarning).toHaveBeenCalledWith(expect.stringContaining('does not stop the SDK'), {
+      type: 'Warning',
+      code: 'BYMAX_TELEMETRY_OPTIONS_IGNORED'
+    })
+    trace.getTracer('e2e').startSpan('after-disable').end()
+    await shutdownTelemetry()
+    expect(collector.bodies.join('')).toContain('after-disable')
+  })
+})
