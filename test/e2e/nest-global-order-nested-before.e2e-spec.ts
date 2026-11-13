@@ -46,7 +46,7 @@ class FeatureModule {}
 
 describe('TelemetryModule beside another global module', () => {
   it('drops the span a global module ends while closing when a feature module that imports it is listed before TelemetryModule', async () => {
-    // Scenario: Registering the feature module registers the global queue module with it, ahead of TelemetryModule, so the flush runs first and the span is dropped. This pins the order dependence the README documents.
+    // Scenario: Registering the feature module registers the global queue module with it, ahead of TelemetryModule, so the flush runs first and the span is dropped.
     await startTelemetry({ serviceName: 'api', env: {} })
     const app = await Test.createTestingModule({
       imports: [FeatureModule, TelemetryModule]
