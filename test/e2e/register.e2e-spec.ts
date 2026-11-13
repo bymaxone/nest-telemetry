@@ -9,6 +9,7 @@ import { bootFromEnvironment } from '../../src/register/boot'
 
 import { startCollector } from './fixtures/collector'
 import type { Collector } from './fixtures/collector'
+import { allowRestart } from './fixtures/restart'
 
 /** A URL inside this repository, from which `@opentelemetry/instrumentation` resolves. */
 const PARENT = pathToFileURL(join(__dirname, 'preload.mjs')).href
@@ -26,6 +27,7 @@ afterEach(async () => {
   trace.disable()
   context.disable()
   propagation.disable()
+  allowRestart()
   delete process.env['OTEL_EXPORTER_OTLP_ENDPOINT']
   await collector.close()
 })

@@ -310,10 +310,13 @@ describe('startTelemetry', () => {
       })
       expect(second).toBe(first)
       expect(emitWarning).toHaveBeenCalledTimes(1)
-      expect(emitWarning).toHaveBeenCalledWith(expect.stringContaining('options ignored'), {
-        type: 'Warning',
-        code: IGNORED
-      })
+      expect(emitWarning).toHaveBeenCalledWith(
+        expect.stringContaining('the options of this call were ignored'),
+        {
+          type: 'Warning',
+          code: IGNORED
+        }
+      )
       expect(mockNodeSdk).toHaveBeenCalledTimes(1)
     })
 
@@ -362,10 +365,13 @@ describe('startTelemetry', () => {
       const handle = await startTelemetry({ enabled: false, env: {} })
       expect(handle.enabled).toBe(false)
       expect(emitWarning).toHaveBeenCalledTimes(1)
-      expect(emitWarning).toHaveBeenCalledWith(expect.stringContaining('does not stop the SDK'), {
-        type: 'Warning',
-        code: IGNORED
-      })
+      expect(emitWarning).toHaveBeenCalledWith(
+        expect.stringContaining('does not stop the running SDK'),
+        {
+          type: 'Warning',
+          code: IGNORED
+        }
+      )
       expect(emitWarning.mock.calls[0]?.[0]).toContain('shutdownTelemetry()')
       expect(currentHandle()).toBe(running)
       expect(mockSdkInstance.shutdown).not.toHaveBeenCalled()
@@ -378,10 +384,13 @@ describe('startTelemetry', () => {
       await startTelemetry({ enabled: false, env: {} })
       await starting
       expect(emitWarning).toHaveBeenCalledTimes(1)
-      expect(emitWarning).toHaveBeenCalledWith(expect.stringContaining('does not stop the SDK'), {
-        type: 'Warning',
-        code: IGNORED
-      })
+      expect(emitWarning).toHaveBeenCalledWith(
+        expect.stringContaining('does not stop the running SDK'),
+        {
+          type: 'Warning',
+          code: IGNORED
+        }
+      )
     })
 
     it('says the options were ignored when OTEL_SDK_DISABLED turns a later call off', async () => {
@@ -392,10 +401,13 @@ describe('startTelemetry', () => {
       const handle = await startTelemetry({ env: { OTEL_SDK_DISABLED: 'true' } })
       expect(handle.enabled).toBe(false)
       expect(emitWarning).toHaveBeenCalledTimes(1)
-      expect(emitWarning).toHaveBeenCalledWith(expect.stringContaining('options ignored'), {
-        type: 'Warning',
-        code: IGNORED
-      })
+      expect(emitWarning).toHaveBeenCalledWith(
+        expect.stringContaining('the options of this call were ignored'),
+        {
+          type: 'Warning',
+          code: IGNORED
+        }
+      )
       expect(currentHandle()).toBe(running)
     })
 
@@ -420,9 +432,9 @@ describe('startTelemetry', () => {
       expect(emitWarning).not.toHaveBeenCalled()
     })
 
-    it('does not count an SDK that is already stopping as running', async () => {
-      // Scenario: a start that arrives during a flush waits for it and builds a fresh SDK, so its
-      // options are used, not ignored, and the warning would be wrong.
+    it('does not call a start that arrives during a flush a later call on a running SDK', async () => {
+      // Scenario: a start that arrives during a flush waits for it, finds the SDK gone and is
+      // refused as a restart, not warned about as a call that changed nothing.
       const running = await startTelemetry({ serviceName: 'api', env: {} })
       let release: () => void = () => undefined
       mockSdkInstance.shutdown.mockReturnValue(new Promise<void>((resolve) => (release = resolve)))
@@ -431,9 +443,13 @@ describe('startTelemetry', () => {
       const restarted = startTelemetry({ serviceName: 'next', env: {} })
       release()
       await flushing
-      await restarted
-      expect(emitWarning).not.toHaveBeenCalled()
-      expect(mockNodeSdk).toHaveBeenCalledTimes(2)
+      await expect(restarted).rejects.toThrow('once per process')
+      expect(emitWarning).toHaveBeenCalledTimes(1)
+      expect(emitWarning).toHaveBeenCalledWith(expect.any(String), {
+        type: 'Warning',
+        code: 'BYMAX_TELEMETRY_RESTART_UNSUPPORTED'
+      })
+      expect(mockNodeSdk).toHaveBeenCalledTimes(1)
     })
 
     it('stays silent when enabled:false arrives while the SDK is stopping', async () => {
@@ -448,6 +464,43 @@ describe('startTelemetry', () => {
       expect(emitWarning).not.toHaveBeenCalled()
       release()
       await flushing
+    })
+  })
+
+  describe('after a shutdown', () => {
+    it('refuses to start again, with a warning and an error that says how to start once', async () => {
+      // Scenario: modules the first start patched stay patched against its tracer provider, so a
+      // second SDK would export nothing for them while reporting enabled. The refusal says what to
+      // do instead, including for a test suite that starts per case.
+      await startTelemetry({ serviceName: 'api', env: {} })
+      await shutdownTelemetry()
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      const refused = startTelemetry({ serviceName: 'api', env: {} })
+      await expect(refused).rejects.toThrow('once per process')
+      await expect(refused).rejects.toThrow('global setup')
+      expect(emitWarning).toHaveBeenCalledTimes(1)
+      expect(emitWarning).toHaveBeenCalledWith(
+        expect.stringContaining('cannot start again after it was shut down'),
+        { type: 'Warning', code: 'BYMAX_TELEMETRY_RESTART_UNSUPPORTED' }
+      )
+      expect(mockNodeSdk).toHaveBeenCalledTimes(1)
+    })
+
+    it('still returns a disabled handle when the host turns telemetry off', async () => {
+      // Scenario: starting nothing is not a restart, so a host that asks for telemetry off is not
+      // refused.
+      await startTelemetry({ serviceName: 'api', env: {} })
+      await shutdownTelemetry()
+      const handle = await startTelemetry({ enabled: false, env: {} })
+      expect(handle.enabled).toBe(false)
+    })
+
+    it('does not count the shutdown of a disabled handle', async () => {
+      // Scenario: a disabled boot started nothing, so stopping it leaves the first real start free.
+      await (await startTelemetry({ enabled: false, env: {} })).shutdown()
+      await shutdownTelemetry()
+      const handle = await startTelemetry({ serviceName: 'api', env: {} })
+      expect(handle.enabled).toBe(true)
     })
   })
 
@@ -501,9 +554,10 @@ describe('startTelemetry', () => {
       expect(mockSdkInstance.shutdown).toHaveBeenCalledTimes(1)
     })
 
-    it('waits for a flush in progress before starting a new SDK', async () => {
-      // Scenario: a start arrives while the previous SDK is still flushing; it must not be handed
-      // the handle that is stopping, and must not start before the flush ends.
+    it('waits for a flush in progress and then refuses to start another SDK', async () => {
+      // Scenario: a start arrives while the previous SDK is still flushing; it is not handed the
+      // handle that is stopping, does not start before the flush ends, and once the SDK is gone it
+      // is refused, because modules the first start patched cannot be patched again.
       let finish = (): void => undefined
       mockSdkInstance.shutdown.mockImplementationOnce(
         () =>
@@ -514,18 +568,21 @@ describe('startTelemetry', () => {
       const first = await startTelemetry({ env: {} })
       const flush = first.shutdown()
       const restarted = startTelemetry({ env: {} })
+      const outcome = restarted.then(
+        () => 'started',
+        () => 'refused'
+      )
       await new Promise((resolve) => setImmediate(resolve))
       expect(mockNodeSdk).toHaveBeenCalledTimes(1)
       finish()
       await flush
-      const second = await restarted
-      expect(second).not.toBe(first)
-      expect(mockNodeSdk).toHaveBeenCalledTimes(2)
+      await expect(outcome).resolves.toBe('refused')
+      expect(mockNodeSdk).toHaveBeenCalledTimes(1)
     })
 
-    it('starts a new SDK after a flush in progress fails', async () => {
-      // Scenario: the flush that a start was waiting on fails; the start still proceeds, and the
-      // failure belongs to the caller that asked for the flush.
+    it('refuses a start that waited on a flush that failed, and leaves the failure to the flush caller', async () => {
+      // Scenario: the flush that a start was waiting on fails; the failure belongs to the caller
+      // that asked for the flush, and the waiting start is refused like any restart.
       let fail = (_error: Error): void => undefined
       mockSdkInstance.shutdown.mockImplementationOnce(
         () =>
@@ -539,8 +596,8 @@ describe('startTelemetry', () => {
       await new Promise((resolve) => setImmediate(resolve))
       fail(new Error('refused'))
       await expect(flush).rejects.toThrow('refused')
-      await expect(restarted).resolves.toMatchObject({ enabled: true })
-      expect(mockNodeSdk).toHaveBeenCalledTimes(2)
+      await expect(restarted).rejects.toThrow('once per process')
+      expect(mockNodeSdk).toHaveBeenCalledTimes(1)
     })
   })
 })

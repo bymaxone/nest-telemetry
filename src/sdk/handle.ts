@@ -20,6 +20,9 @@ const HANDLE_KEY = Symbol.for('@bymax-one/nest-telemetry/handle')
 /** The registry symbol under which the start in progress is published. */
 const PENDING_KEY = Symbol.for('@bymax-one/nest-telemetry/pending-start')
 
+/** The registry symbol under which the fact that an SDK was shut down is published. */
+const STOPPED_KEY = Symbol.for('@bymax-one/nest-telemetry/stopped')
+
 /** `globalThis` seen as the store of the handle and of the start in progress. */
 const store = globalThis as typeof globalThis & {
   [HANDLE_KEY]?: RunningHandle
@@ -44,9 +47,22 @@ export function currentHandle(): RunningHandle | undefined {
   return store[HANDLE_KEY]
 }
 
-/** Clears the registered handle. */
+/**
+ * Reads whether an SDK this process started has been shut down.
+ *
+ * The modules a start instrumented stay patched against its tracer provider, so a second SDK would
+ * export nothing for them; a start that sees this mark is refused.
+ *
+ * @returns `true` once a started SDK has finished shutting down, whether or not its flush failed.
+ */
+export function hasStopped(): boolean {
+  return Reflect.get(globalThis, STOPPED_KEY) === true
+}
+
+/** Clears the registered handle and the mark that an SDK was shut down, for a test harness. */
 export function clearHandle(): void {
   delete store[HANDLE_KEY]
+  Reflect.deleteProperty(globalThis, STOPPED_KEY)
 }
 
 /**
@@ -100,8 +116,9 @@ export function createHandle(stopSdk: () => Promise<void>): RunningHandle {
       }
       flush ??= stopSdk().finally(() => {
         finished = true
+        Reflect.set(globalThis, STOPPED_KEY, true)
         if (currentHandle() === handle) {
-          clearHandle()
+          Reflect.deleteProperty(globalThis, HANDLE_KEY)
         }
       })
       return flush

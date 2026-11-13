@@ -193,8 +193,8 @@ export function warnAboutIgnoredOptions(options: TelemetryOptions): void {
   if (stop || Object.values(options).some((v) => v !== undefined)) {
     process.emitWarning(
       stop
-        ? 'enabled: false does not stop the SDK: use shutdownTelemetry().'
-        : 'Telemetry already running: options ignored.',
+        ? 'startTelemetry({ enabled: false }) was called while telemetry is already running. It does not stop the running SDK: call shutdownTelemetry() for that.'
+        : 'startTelemetry was called while telemetry is already running, so the options of this call were ignored. Pass them to the first call.',
       IGNORED_WARNING
     )
   }
