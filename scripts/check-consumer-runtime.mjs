@@ -103,6 +103,18 @@ const PROBES = [
     calls: [{ entry: '.', fn: 'startTelemetry', args: [], expect: { enabled: false } }]
   },
   {
+    label:
+      'sdk without any OpenTelemetry package, disabled by OTEL_SDK_DISABLED with whitespace around it',
+    deny: ['@nestjs/', ...OTEL_PACKAGES],
+    // The SDK ignores the whitespace, so a start that read it as "on" would load every package for
+    // an SDK that then does nothing.
+    env: { OTEL_SDK_DISABLED: ' true ' },
+    expectNoWarnings: true,
+    entries: { '.': ['startTelemetry'], './register': [] },
+    esmOnly: ['./register'],
+    calls: [{ entry: '.', fn: 'startTelemetry', args: [], expect: { enabled: false } }]
+  },
+  {
     label: 'positive control: an enabled start reaches the denied packages',
     deny: ['@nestjs/', ...OTEL_PACKAGES],
     entries: { '.': ['startTelemetry'] },

@@ -21,7 +21,7 @@ export interface BatchSpanProcessorTuning {
 
 /** The environment values the library acts on. */
 export interface TelemetryEnvironment {
-  /** Whether `OTEL_SDK_DISABLED` is the word `true`, in any letter case. */
+  /** Whether `OTEL_SDK_DISABLED` is the word `true`, in any letter case and ignoring surrounding whitespace. */
   readonly sdkDisabled: boolean
   /** `OTEL_SERVICE_NAME`, or `undefined` when it is unset or blank. */
   readonly serviceName: string | undefined
@@ -82,7 +82,7 @@ export function readTelemetryEnvironment(
   const serviceName = source['OTEL_SERVICE_NAME']?.trim()
   const detectors = source['OTEL_NODE_RESOURCE_DETECTORS']
   return {
-    sdkDisabled: source['OTEL_SDK_DISABLED']?.toLowerCase() === 'true',
+    sdkDisabled: source['OTEL_SDK_DISABLED']?.trim().toLowerCase() === 'true',
     serviceName: serviceName === '' ? undefined : serviceName,
     metricsExporters: readExporterList(source['OTEL_METRICS_EXPORTER']),
     logsExporters: readExporterList(source['OTEL_LOGS_EXPORTER']),

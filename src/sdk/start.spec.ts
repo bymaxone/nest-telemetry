@@ -293,6 +293,164 @@ describe('startTelemetry', () => {
     })
   })
 
+  describe('when the SDK is already running', () => {
+    const IGNORED = 'BYMAX_TELEMETRY_OPTIONS_IGNORED'
+
+    it('warns once that the options of a later call were ignored, and returns the running handle', async () => {
+      // Scenario: an application passes its policy to a start that arrives after the preload's. The
+      // first start's options stand, so the host is told its own were dropped rather than left to
+      // find out from a span that carries what it asked to keep out.
+      const first = await startTelemetry({ serviceName: 'api', env: {} })
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      const second = await startTelemetry({
+        serviceName: 'other',
+        unsafe: { disableUrlRedaction: true },
+        extraRedactedQueryParams: ['x'],
+        env: {}
+      })
+      expect(second).toBe(first)
+      expect(emitWarning).toHaveBeenCalledTimes(1)
+      expect(emitWarning).toHaveBeenCalledWith(expect.stringContaining('options ignored'), {
+        type: 'Warning',
+        code: IGNORED
+      })
+      expect(mockNodeSdk).toHaveBeenCalledTimes(1)
+    })
+
+    it.each([
+      [undefined],
+      [{}],
+      // A host that spreads optional configuration into the call leaves unset keys as undefined.
+      [Object.defineProperty({}, 'serviceName', { value: undefined, enumerable: true })]
+    ])('stays silent when a later call passes no defined option (%p)', async (options) => {
+      // Scenario: a bare second start, as a library might make to be sure telemetry is on, has
+      // nothing to ignore, so it says nothing.
+      await startTelemetry({ serviceName: 'api', env: {} })
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      await startTelemetry(options)
+      expect(emitWarning).not.toHaveBeenCalled()
+    })
+
+    it('warns when a call joins a start that is still loading', async () => {
+      // Scenario: two overlapping calls share one start; the second one's options are dropped too.
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      const [first, second] = await Promise.all([
+        startTelemetry({ serviceName: 'api', env: {} }),
+        startTelemetry({ serviceName: 'other', env: {} })
+      ])
+      expect(second).toBe(first)
+      expect(emitWarning).toHaveBeenCalledTimes(1)
+      expect(emitWarning).toHaveBeenCalledWith(expect.any(String), {
+        type: 'Warning',
+        code: IGNORED
+      })
+    })
+
+    it('warns when a call joins a start that another copy of the module began', async () => {
+      // Scenario: the copy that started is not this one; its options are still the ones in force.
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      setPendingStart(Promise.resolve(createHandle(() => Promise.resolve())))
+      await startTelemetry({ serviceName: 'api', env: {} })
+      expect(emitWarning).toHaveBeenCalledTimes(1)
+    })
+
+    it('says that enabled:false does not stop a running SDK, and leaves it running', async () => {
+      // Scenario: a host that asks for telemetry off after it started gets a disabled handle, but
+      // the SDK keeps exporting; the warning names the call that does stop it.
+      const running = await startTelemetry({ serviceName: 'api', env: {} })
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      const handle = await startTelemetry({ enabled: false, env: {} })
+      expect(handle.enabled).toBe(false)
+      expect(emitWarning).toHaveBeenCalledTimes(1)
+      expect(emitWarning).toHaveBeenCalledWith(expect.stringContaining('does not stop the SDK'), {
+        type: 'Warning',
+        code: IGNORED
+      })
+      expect(emitWarning.mock.calls[0]?.[0]).toContain('shutdownTelemetry()')
+      expect(currentHandle()).toBe(running)
+      expect(mockSdkInstance.shutdown).not.toHaveBeenCalled()
+    })
+
+    it('says that enabled:false does not stop an SDK that is still loading', async () => {
+      // Scenario: the SDK a start is still building is already running as far as the host can tell.
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      const starting = startTelemetry({ serviceName: 'api', env: {} })
+      await startTelemetry({ enabled: false, env: {} })
+      await starting
+      expect(emitWarning).toHaveBeenCalledTimes(1)
+      expect(emitWarning).toHaveBeenCalledWith(expect.stringContaining('does not stop the SDK'), {
+        type: 'Warning',
+        code: IGNORED
+      })
+    })
+
+    it('says the options were ignored when OTEL_SDK_DISABLED turns a later call off', async () => {
+      // Scenario: the operator's switch reaches a call made after the SDK started. It returns a
+      // disabled handle and leaves the SDK running, so the host hears that its options did nothing.
+      const running = await startTelemetry({ serviceName: 'api', env: {} })
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      const handle = await startTelemetry({ env: { OTEL_SDK_DISABLED: 'true' } })
+      expect(handle.enabled).toBe(false)
+      expect(emitWarning).toHaveBeenCalledTimes(1)
+      expect(emitWarning).toHaveBeenCalledWith(expect.stringContaining('options ignored'), {
+        type: 'Warning',
+        code: IGNORED
+      })
+      expect(currentHandle()).toBe(running)
+    })
+
+    it('stays silent when OTEL_SDK_DISABLED turns off a later call that passes no option', async () => {
+      // Scenario: a bare call under the process-wide switch has nothing to ignore.
+      await startTelemetry({ serviceName: 'api', env: {} })
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      process.env['OTEL_SDK_DISABLED'] = 'true'
+      try {
+        const handle = await startTelemetry()
+        expect(handle.enabled).toBe(false)
+      } finally {
+        delete process.env['OTEL_SDK_DISABLED']
+      }
+      expect(emitWarning).not.toHaveBeenCalled()
+    })
+
+    it('stays silent when enabled:false meets no running SDK', async () => {
+      // Scenario: turning telemetry off before anything started is ordinary, not a surprise.
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      await startTelemetry({ enabled: false, env: {} })
+      expect(emitWarning).not.toHaveBeenCalled()
+    })
+
+    it('does not count an SDK that is already stopping as running', async () => {
+      // Scenario: a start that arrives during a flush waits for it and builds a fresh SDK, so its
+      // options are used, not ignored, and the warning would be wrong.
+      const running = await startTelemetry({ serviceName: 'api', env: {} })
+      let release: () => void = () => undefined
+      mockSdkInstance.shutdown.mockReturnValue(new Promise<void>((resolve) => (release = resolve)))
+      const flushing = running.shutdown()
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      const restarted = startTelemetry({ serviceName: 'next', env: {} })
+      release()
+      await flushing
+      await restarted
+      expect(emitWarning).not.toHaveBeenCalled()
+      expect(mockNodeSdk).toHaveBeenCalledTimes(2)
+    })
+
+    it('stays silent when enabled:false arrives while the SDK is stopping', async () => {
+      // Scenario: during a flush there is no running SDK to keep, so a host that asks for
+      // telemetry off is not told it failed to stop one.
+      const running = await startTelemetry({ serviceName: 'api', env: {} })
+      let release: () => void = () => undefined
+      mockSdkInstance.shutdown.mockReturnValue(new Promise<void>((resolve) => (release = resolve)))
+      const flushing = running.shutdown()
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      await startTelemetry({ enabled: false, env: {} })
+      expect(emitWarning).not.toHaveBeenCalled()
+      release()
+      await flushing
+    })
+  })
+
   describe('shutdown', () => {
     it('waits for a start in progress and then drains the SDK it started', async () => {
       // Scenario: a shutdown arrives while the packages are still loading; with no handle yet it
