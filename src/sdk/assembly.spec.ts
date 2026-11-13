@@ -14,6 +14,7 @@ const FS = '@opentelemetry/instrumentation-fs'
 const HTTP = '@opentelemetry/instrumentation-http'
 const IOREDIS = '@opentelemetry/instrumentation-ioredis'
 const PINO = '@opentelemetry/instrumentation-pino'
+const REDIS = '@opentelemetry/instrumentation-redis'
 
 /** The parsed environment for a map of raw variables. */
 function environment(raw: NodeJS.ProcessEnv = {}): TelemetryEnvironment {
@@ -100,7 +101,8 @@ describe('buildInstrumentationConfig', () => {
       [FS]: { enabled: false },
       [HTTP]: { redactedQueryParams: [...DEFAULT_REDACTED_QUERY_PARAMS] },
       [IOREDIS]: { dbStatementSerializer: serializeRedisCommandName },
-      [PINO]: { disableLogSending: true }
+      [PINO]: { disableLogSending: true },
+      [REDIS]: { dbStatementSerializer: serializeRedisCommandName }
     })
   })
 
@@ -163,12 +165,13 @@ describe('buildInstrumentationConfig', () => {
   })
 
   it('drops the Redis serializer only when the host opts out explicitly', () => {
-    // Scenario: with disableRedisArgumentRedaction no ioredis entry is emitted at all.
+    // Scenario: with disableRedisArgumentRedaction no entry is emitted for either Redis client.
     const config = buildInstrumentationConfig(
       { unsafe: { disableRedisArgumentRedaction: true } },
       noLogs
     )
     expect(config).not.toHaveProperty([IOREDIS])
+    expect(config).not.toHaveProperty([REDIS])
   })
 
   describe('host overrides', () => {
@@ -225,15 +228,31 @@ describe('buildInstrumentationConfig', () => {
       })
     })
 
-    it('does not let an override replace the Redis serializer', () => {
-      // Scenario: a host override cannot silently put Redis arguments back into spans.
+    it.each([IOREDIS, REDIS] as const)(
+      'does not let an override replace the serializer of %s',
+      (name) => {
+        // Scenario: a host override cannot silently put Redis arguments back into spans, whichever
+        // client the application uses.
+        const config = buildInstrumentationConfig(
+          {
+            instrumentations: { overrides: { [name]: { dbStatementSerializer: () => 'leaked' } } }
+          },
+          noLogs
+        )
+        expect(config[name]).toEqual({ dbStatementSerializer: serializeRedisCommandName })
+      }
+    )
+
+    it('keeps another setting of a Redis client override next to the library serializer', () => {
+      // Scenario: the override is merged, not replaced: only the serializer is the library's.
       const config = buildInstrumentationConfig(
-        {
-          instrumentations: { overrides: { [IOREDIS]: { dbStatementSerializer: () => 'leaked' } } }
-        },
+        { instrumentations: { overrides: { [REDIS]: { requireParentSpan: true } } } },
         noLogs
       )
-      expect(config[IOREDIS]).toEqual({ dbStatementSerializer: serializeRedisCommandName })
+      expect(config[REDIS]).toEqual({
+        requireParentSpan: true,
+        dbStatementSerializer: serializeRedisCommandName
+      })
     })
 
     it('uses an override predicate unless the option names one', () => {
@@ -252,18 +271,21 @@ describe('buildInstrumentationConfig', () => {
       ).toMatchObject({ ignoreIncomingRequestHook: viaOption })
     })
 
-    it('honours the host serializer once the Redis redaction is opted out', () => {
-      // Scenario: with the explicit opt-out, the override is the host's decision.
-      const serializer = (): string => 'custom'
-      const config = buildInstrumentationConfig(
-        {
-          unsafe: { disableRedisArgumentRedaction: true },
-          instrumentations: { overrides: { [IOREDIS]: { dbStatementSerializer: serializer } } }
-        },
-        noLogs
-      )
-      expect(config[IOREDIS]).toEqual({ dbStatementSerializer: serializer })
-    })
+    it.each([IOREDIS, REDIS] as const)(
+      'honours the host serializer of %s once the Redis redaction is opted out',
+      (name) => {
+        // Scenario: with the explicit opt-out, the override is the host's decision.
+        const serializer = (): string => 'custom'
+        const config = buildInstrumentationConfig(
+          {
+            unsafe: { disableRedisArgumentRedaction: true },
+            instrumentations: { overrides: { [name]: { dbStatementSerializer: serializer } } }
+          },
+          noLogs
+        )
+        expect(config[name]).toEqual({ dbStatementSerializer: serializer })
+      }
+    )
 
     it('keeps the library lists when the override holds the redaction list and the host adds more', () => {
       // Scenario: the override list and the extra option are both added to the defaults, once each.
@@ -286,13 +308,13 @@ describe('buildInstrumentationConfig', () => {
       const config = buildInstrumentationConfig(
         {
           instrumentations: {
-            overrides: { [HTTP]: undefined, '@opentelemetry/instrumentation-redis': undefined }
+            overrides: { [HTTP]: undefined, '@opentelemetry/instrumentation-mysql2': undefined }
           }
         },
         noLogs
       )
       expect(config[HTTP]).toEqual({ redactedQueryParams: [...DEFAULT_REDACTED_QUERY_PARAMS] })
-      expect(config).not.toHaveProperty('@opentelemetry/instrumentation-redis')
+      expect(config).not.toHaveProperty('@opentelemetry/instrumentation-mysql2')
     })
 
     it('does not let a host list that is not an array break the merge', () => {

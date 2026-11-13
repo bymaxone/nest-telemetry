@@ -11,6 +11,7 @@ import type { TelemetryOptions } from './types'
 const FS_INSTRUMENTATION = '@opentelemetry/instrumentation-fs'
 const HTTP_INSTRUMENTATION = '@opentelemetry/instrumentation-http'
 const IOREDIS_INSTRUMENTATION = '@opentelemetry/instrumentation-ioredis'
+const REDIS_INSTRUMENTATION = '@opentelemetry/instrumentation-redis'
 const PINO_INSTRUMENTATION = '@opentelemetry/instrumentation-pino'
 
 /** The exporter names under which the SDK exports logs; any other value sets up no log export. */
@@ -123,9 +124,8 @@ export function buildInstrumentationConfig(
     merged[HTTP_INSTRUMENTATION]['ignoreIncomingRequestHook'] = options.ignoreIncomingRequest
   }
   if (redactRedis) {
-    merged[IOREDIS_INSTRUMENTATION] = {
-      ...merged[IOREDIS_INSTRUMENTATION],
-      dbStatementSerializer: serializeRedisCommandName
+    for (const name of [IOREDIS_INSTRUMENTATION, REDIS_INSTRUMENTATION]) {
+      merged[name] = { ...merged[name], dbStatementSerializer: serializeRedisCommandName }
     }
   }
   return merged as InstrumentationConfigMap
