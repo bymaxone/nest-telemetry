@@ -58,4 +58,42 @@ describe('ignorePaths', () => {
     expect(predicate({ url: '/b' })).toBe(false)
     expect(predicate({ url: '/a' })).toBe(true)
   })
+
+  describe('the length cap', () => {
+    const MAX = 2048
+    const pad = (length: number): string => '/' + 'a'.repeat(length - 1)
+
+    it('still tests a path of exactly the cap', () => {
+      // Scenario: the cap is inclusive, so the longest path a router accepts is still matched.
+      expect(ignorePaths([/^\/a+$/])({ url: pad(MAX) })).toBe(true)
+    })
+
+    it('never ignores a path one character past the cap, and never tests it', () => {
+      // Scenario: a path longer than the cap fails safe, so the request keeps its span, and the
+      // patterns are not run against it at all.
+      const test = jest.spyOn(RegExp.prototype, 'test')
+      try {
+        expect(ignorePaths([/^\/a+$/])({ url: pad(MAX + 1) })).toBe(false)
+        expect(test).not.toHaveBeenCalled()
+      } finally {
+        test.mockRestore()
+      }
+    })
+
+    it('measures the path, not the query', () => {
+      // Scenario: the query is cut before the length is read, so a long query neither hides a short
+      // path from the patterns nor gets a long path through.
+      expect(ignorePaths([/^\/metrics$/])({ url: `/metrics?${'q'.repeat(5000)}` })).toBe(true)
+      expect(ignorePaths([/^\/a+$/])({ url: `${pad(MAX + 1)}?x=1` })).toBe(false)
+    })
+
+    it('bounds a pattern with nested quantifiers on a long path', () => {
+      // Scenario: /^\/(a+)+$/ takes exponential time on a long run of a's ending in another
+      // character. The cap turns that path into an immediate "not ignored".
+      const hostile = ignorePaths([/^\/(a+)+$/])
+      const started = Date.now()
+      expect(hostile({ url: `/${'a'.repeat(5000)}!` })).toBe(false)
+      expect(Date.now() - started).toBeLessThan(250)
+    })
+  })
 })
