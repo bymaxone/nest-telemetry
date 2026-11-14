@@ -170,7 +170,7 @@ Every field is the host's policy, and none is required.
 | `enabled`                              | `true`                       | `false` never starts the SDK. `OTEL_SDK_DISABLED=true` disables it regardless.                                                                                                 |
 | `serviceName`                          | `unknown_service:node`       | The service name. `OTEL_SERVICE_NAME` overrides it.                                                                                                                            |
 | `serviceVersion`                       | none                         | The service version.                                                                                                                                                           |
-| `ignoreIncomingRequest`                | none                         | Returns `true` for an incoming request that must produce no server span. `ignorePaths(patterns)` builds one from anchored patterns with no nested quantifiers.                 |
+| `ignoreIncomingRequest`                | none                         | Returns `true` for an incoming request that must produce no server span.                                                                                                       |
 | `instrumentations.fs`                  | `false`                      | File-system instrumentation.                                                                                                                                                   |
 | `instrumentations.sendLogs`            | follows `OTEL_LOGS_EXPORTER` | Whether pino's records are forwarded to the OpenTelemetry logs pipeline.                                                                                                       |
 | `instrumentations.overrides`           | none                         | Per-instrumentation configuration, merged over the library's. Redaction settings cannot be replaced here.                                                                      |
@@ -379,7 +379,7 @@ pnpm check:runtime     # packed-tarball consumer proofs
 | `InstrumentationOptions`        | type                                                       | `fs`, `sendLogs` and `overrides`                                                                                                                              |
 | `IncomingRequestTarget`         | type                                                       | What an incoming-request predicate sees: the request `url`                                                                                                    |
 
-`ignorePaths` copies each pattern without its `g` and `y` flags, which would keep state between calls. Anchor the patterns at both ends, with no nested quantifiers: an unanchored one also matches routes that merely contain the word, and `/^\/(a+)+$/` took about 2.5 s on a 28-character path, doubling with each character. A path longer than 2,048 characters is never ignored and the patterns are not run against it, so a long path costs nothing.
+`ignorePaths` copies each pattern without its `g` and `y` flags, which would keep state between calls. Anchor the patterns at both ends, with no nested quantifiers: an unanchored one also matches routes that merely contain the word, and `/^\/(a+)+$/` took about 2.5 s on a 28-character path, doubling with each character.
 
 ### Register: `@bymax-one/nest-telemetry/register`
 
