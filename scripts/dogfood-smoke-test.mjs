@@ -6,10 +6,11 @@
  *   1. Build artifacts exist for every subpath (ESM, CJS, .d.ts)
  *   2. ESM import resolves all expected named exports
  *   3. CJS require resolves all expected named exports
- *   4. Tarball contents (via npm pack --dry-run output) contain only dist/ + meta files
+ *   4. Tarball contents (the listing of `PACKAGE_TARBALL`, or `npm pack --dry-run` without it)
+ *      contain only dist/ + meta files
  *   5. Scaffolds a minimal consumer in an OS temp dir (os.tmpdir()), installs
- *      via file: link, and verifies the package resolves from the consumer side
- *      through its published `exports` map
+ *      via file: link (to the tarball, when `PACKAGE_TARBALL` is set), and verifies the
+ *      package resolves from the consumer side through its published `exports` map
  *
  * Exit codes:
  *   0 — all assertions pass
@@ -18,15 +19,30 @@
  *
  * Usage:
  *   pnpm build && node scripts/dogfood-smoke-test.mjs
+ *   PACKAGE_TARBALL=/path/to/package.tgz node scripts/dogfood-smoke-test.mjs
  */
 
 import { existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { resolve, dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
-import { execSync, spawnSync } from 'node:child_process'
+import { execFileSync, execSync, spawnSync } from 'node:child_process'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+
+// `PACKAGE_TARBALL` names the tarball a release gate has already packed: the package is inspected
+// from that file and installed by the consumer from it, not read from the working tree. Without it
+// the script inspects `dist/` and packs a dry run, for a run on a developer machine.
+const TARBALL = process.env['PACKAGE_TARBALL'] ?? ''
+let packageRoot = ROOT
+if (TARBALL !== '') {
+  // Inside the repository, so Node resolves the peer dependencies from its `node_modules`. It is
+  // removed when the process exits, whatever the exit code.
+  const extracted = mkdtempSync(join(ROOT, '.dogfood-package-'))
+  process.on('exit', () => rmSync(extracted, { recursive: true, force: true }))
+  execFileSync('tar', ['-xzf', TARBALL, '-C', extracted, '--strip-components=1'])
+  packageRoot = extracted
+}
 // Created lazily inside section 6 (not at module load) so the earlier
 // build-artifact check can `process.exit(2)` without leaking a temp dir.
 let consumerDir
@@ -77,7 +93,7 @@ function section(title) {
 
 section('1. Build artifacts')
 for (const f of EXPECTED_DIST_FILES) {
-  const abs = resolve(ROOT, f)
+  const abs = resolve(packageRoot, f)
   if (!existsSync(abs)) {
     console.error(`Missing build artifact: ${f} — run \`pnpm build\` first.`)
     process.exit(2)
@@ -89,7 +105,7 @@ for (const f of EXPECTED_DIST_FILES) {
 
 section('2. ESM named exports')
 for (const [sub, names] of Object.entries(EXPECTED_EXPORTS)) {
-  const esm = await import(resolve(ROOT, `dist/${sub}/index.mjs`))
+  const esm = await import(resolve(packageRoot, `dist/${sub}/index.mjs`))
   for (const name of names) {
     if (name in esm) {
       pass(`${sub}: export ${name}`)
@@ -107,7 +123,7 @@ const req = createRequire(import.meta.url)
 for (const [sub, names] of Object.entries(EXPECTED_EXPORTS)) {
   if (ESM_ONLY.includes(sub)) {
     try {
-      req(resolve(ROOT, `dist/${sub}/index.cjs`))
+      req(resolve(packageRoot, `dist/${sub}/index.cjs`))
       fail(`${sub}: the CommonJS entry loaded, but it must refuse`)
     } catch (error) {
       if (String(error.message).includes('node --import'))
@@ -116,7 +132,7 @@ for (const [sub, names] of Object.entries(EXPECTED_EXPORTS)) {
     }
     continue
   }
-  const cjs = req(resolve(ROOT, `dist/${sub}/index.cjs`))
+  const cjs = req(resolve(packageRoot, `dist/${sub}/index.cjs`))
   for (const name of names) {
     if (name in cjs) {
       pass(`${sub}: cjs export ${name}`)
@@ -128,19 +144,28 @@ for (const [sub, names] of Object.entries(EXPECTED_EXPORTS)) {
 
 // ── 5. Tarball contents ──────────────────────────────────────────────────────
 
-section('5. Tarball contents (npm pack --dry-run)')
+section(TARBALL === '' ? '5. Tarball contents (npm pack --dry-run)' : '5. Tarball contents')
 try {
-  const packOut = execSync('npm pack --dry-run 2>&1', { cwd: ROOT, encoding: 'utf8' })
-  // extract the paths listed under "Tarball Contents"
-  // Lines with file sizes look like: "npm notice  2.4kB  CHANGELOG.md"
-  // Match B, kB, KB, MB etc. Exclude metadata lines (shasum, integrity, total-files).
-  const SIZE_RE = /\s+[\d.]+\s*(?:[Mm][Bb]|[Kk][Bb]?|[Bb])\s+\S+/
-  const SIZE_STRIP_RE = /.*npm notice\s+[\d.]+\s*(?:[Mm][Bb]|[Kk][Bb]?|[Bb])\s+/
-  const contentLines = packOut
-    .split('\n')
-    .filter((l) => l.includes('npm notice') && SIZE_RE.test(l))
-    .map((l) => l.replace(SIZE_STRIP_RE, '').trim())
-    .filter((l) => Boolean(l) && !l.startsWith('npm notice') && !/^sha\d+:/i.test(l))
+  let contentLines
+  if (TARBALL !== '') {
+    // The member names of the file that is published, without the `package/` prefix npm adds.
+    contentLines = execFileSync('tar', ['-tzf', TARBALL], { encoding: 'utf8' })
+      .split('\n')
+      .map((line) => line.replace(/^package\//, '').trim())
+      .filter((line) => line !== '' && line !== 'package')
+  } else {
+    const packOut = execSync('npm pack --dry-run 2>&1', { cwd: ROOT, encoding: 'utf8' })
+    // extract the paths listed under "Tarball Contents"
+    // Lines with file sizes look like: "npm notice  2.4kB  CHANGELOG.md"
+    // Match B, kB, KB, MB etc. Exclude metadata lines (shasum, integrity, total-files).
+    const SIZE_RE = /\s+[\d.]+\s*(?:[Mm][Bb]|[Kk][Bb]?|[Bb])\s+\S+/
+    const SIZE_STRIP_RE = /.*npm notice\s+[\d.]+\s*(?:[Mm][Bb]|[Kk][Bb]?|[Bb])\s+/
+    contentLines = packOut
+      .split('\n')
+      .filter((l) => l.includes('npm notice') && SIZE_RE.test(l))
+      .map((l) => l.replace(SIZE_STRIP_RE, '').trim())
+      .filter((l) => Boolean(l) && !l.startsWith('npm notice') && !/^sha\d+:/i.test(l))
+  }
 
   const unexpectedFiles = contentLines.filter(
     (f) => !ALLOWED_TARBALL_PATHS.some((prefix) => f === prefix || f.startsWith(prefix))
@@ -154,7 +179,7 @@ try {
   }
   // No cleanup needed: `npm pack --dry-run` never writes a .tgz to disk.
 } catch (err) {
-  fail(`npm pack --dry-run failed: ${String(err.message)}`)
+  fail(`Listing the tarball contents failed: ${String(err.message)}`)
 }
 
 // ── 6. Consumer file: link smoke ─────────────────────────────────────────────
@@ -170,7 +195,7 @@ try {
     version: '0.0.1',
     type: 'module',
     dependencies: {
-      '@bymax-one/nest-telemetry': `file:${ROOT}`,
+      '@bymax-one/nest-telemetry': `file:${TARBALL === '' ? ROOT : TARBALL}`,
       // The peers `./nest` imports at load time; the consumer installs them as a Nest application would.
       '@nestjs/common': '^11.0.16',
       '@nestjs/core': '^11.1.18',
@@ -181,7 +206,8 @@ try {
   writeFileSync(resolve(consumerDir, 'package.json'), JSON.stringify(consumerPkgJson, null, 2))
 
   // Install via pnpm (resolves the file: link)
-  const installResult = spawnSync('pnpm', ['install', '--no-frozen-lockfile'], {
+  // `--ignore-scripts`: no install script of the package or of anything it pulls in runs here.
+  const installResult = spawnSync('pnpm', ['install', '--no-frozen-lockfile', '--ignore-scripts'], {
     cwd: consumerDir,
     encoding: 'utf8',
     timeout: 60_000
