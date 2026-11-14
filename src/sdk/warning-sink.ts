@@ -4,8 +4,8 @@
  *
  * The SDK entry and the preload import no Nest package, and the preload is a separate copy of this
  * code from the application's, so the two share one optional sink through `globalThis`, under a
- * registry symbol, as they share the handle. With no sink registered a warning is the process
- * warning it has always been.
+ * registry symbol, as they share the handle. With no sink registered a warning is emitted as a
+ * process warning.
  */
 
 /** A warning the library reports. */
