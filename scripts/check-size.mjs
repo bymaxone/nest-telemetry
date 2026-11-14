@@ -33,24 +33,25 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
-//   - sdk: 4.30 KiB real -> 4.35 KiB budget (~1% headroom), the whole subpath: redaction, the
+//   - sdk: 4.43 KiB real -> 4.48 KiB budget (~1% headroom), the whole subpath: redaction, the
 //     environment reader, the SDK assembly, the resource-detector selection that keeps the process
 //     command line out of the exported resource, the start cache and the handle lifecycle with its
 //     shutdown deadline (about 0.1 KiB: the timer, its warning and the clamp of the configured
 //     value), the export-failure warning (about 0.33 KiB: the exporter wrapper, the code reader and
-//     the warning text), the refusal of a start after a shutdown and the warnings for a later call that
+//     the warning text), the warning sink (about 0.1 KiB), the refusal of a start after a shutdown and the warnings for a later call that
 //     changes nothing, with their full explanatory text.
-//   - register: 4.51 KiB real -> 4.56 KiB budget (~1% headroom). The preload bundles its own copy
-//     of the start logic, shutdown deadline and export-failure warning included: the copies share their state through
+//   - register: 4.61 KiB real -> 4.66 KiB budget (~1% headroom). The preload bundles its own copy
+//     of the start logic, shutdown deadline, export-failure warning and warning sink included: the copies share their state through
 //     `globalThis`, not through a module.
-//   - nest: 1.31 KiB real -> 1.4 KiB budget (~7% headroom), the global module and the shutdown hook
-//     with every step of failure reporting guarded.
+//   - nest: 1.67 KiB real -> 1.72 KiB budget (~3% headroom), the global module and the shutdown hook
+//     with every step of failure reporting guarded, and the route that hands the two runtime warnings to
+//     a bound structured logger.
 //   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
 //   met by shortening the text of a warning.
 const BUDGETS = [
-  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 4.35 * 1024 },
-  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 4.56 * 1024 },
-  { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 1.4 * 1024 }
+  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 4.48 * 1024 },
+  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 4.66 * 1024 },
+  { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 1.72 * 1024 }
 ]
 
 const fmt = (n) => `${(n / 1024).toFixed(2)} kB`
