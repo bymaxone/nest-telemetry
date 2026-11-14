@@ -54,9 +54,9 @@ describe('batch processor tuning from the standard variables', () => {
   })
 
   it('does not export once per span when the schedule delay is longer than a timer holds', async () => {
-    // Scenario: Node clamps a timer of 3000000000 ms to 1 ms, so the delay used to export one
-    // request per span. The value is ignored and the default of five seconds applies, so twenty
-    // spans over a second reach the collector in no request, and the start says why.
+    // Scenario: Node clamps a timer of 3000000000 ms to 1 ms, which would export one request per
+    // span. The value is ignored and the default of five seconds applies, so twenty spans over a
+    // second reach the collector in no request, and the start says why.
     const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
     const handle = await startTelemetry({
       serviceName: 'api',

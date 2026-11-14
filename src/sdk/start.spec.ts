@@ -251,9 +251,9 @@ describe('startTelemetry', () => {
     })
 
     it('selects the resource detectors and removes the command line and the host id by default', async () => {
-      // Scenario: the five built-in detectors run in the SDK's default order. What the process
-      // detector reports no longer includes the command-line arguments or process.command, and the
-      // host detector no longer reports the machine identifier.
+      // Scenario: the five built-in detectors run in the SDK's default order. The process
+      // detector's report holds no command-line argument and no process.command, and the host
+      // detector's holds no machine identifier.
       await startTelemetry({ env: {} })
       const [options] = mockNodeSdk.mock.calls[0] as unknown as [
         { resourceDetectors: { detect: () => { attributes: Record<string, unknown> } }[] }
@@ -541,8 +541,9 @@ describe('startTelemetry', () => {
 
   describe('a batch-processor timer value a timer cannot hold', () => {
     it('is left out of the processor config and said out loud', async () => {
-      // Scenario: a delay of 3000000000 ms made the SDK export once per span. The value is not
-      // handed to the processor, so its default applies, and the start names the variable.
+      // Scenario: Node clamps a timer of 3000000000 ms to 1 ms, which would export once per span.
+      // The value is not handed to the processor, so its default applies, and the start names the
+      // variable.
       const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
       await startTelemetry({
         serviceName: 'api',

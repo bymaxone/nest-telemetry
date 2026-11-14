@@ -174,9 +174,8 @@ describe('readTelemetryEnvironment', () => {
       ['OTEL_BSP_SCHEDULE_DELAY', 'OTEL_BSP_SCHEDULE_DELAY'],
       ['OTEL_BSP_EXPORT_TIMEOUT', 'OTEL_BSP_EXPORT_TIMEOUT']
     ])('ignores %s above the largest value a timer holds, and names it', (name) => {
-      // Scenario: Node clamps a longer timer to 1 ms, so a delay of 3000000000 exported once per
-      // span. The value is ignored, the SDK default applies, and the variable is named so the
-      // start can say so.
+      // Scenario: Node clamps a longer timer to 1 ms, which would export once per span. The value
+      // is ignored, the SDK default applies, and the variable is named so the start can say so.
       const env = readTelemetryEnvironment({ [name]: '3000000000' })
       expect(env.batchSpanProcessor).toEqual({})
       expect(env.oversizedTimers).toEqual([name])

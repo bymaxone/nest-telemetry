@@ -496,7 +496,7 @@ describe('warnAboutOversizedTimers', () => {
   })
 
   it('warns once per ignored variable, naming it and the ceiling', () => {
-    // Scenario: a delay of 3000000000 used to export once per span; now it is ignored out loud.
+    // Scenario: an ignored timer variable is reported, so the operator learns why the default applies.
     warnAboutOversizedTimers(
       environment({ OTEL_BSP_SCHEDULE_DELAY: '3000000000', OTEL_BSP_EXPORT_TIMEOUT: '3000000000' })
     )
