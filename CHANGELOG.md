@@ -8,6 +8,49 @@ The `release.yml` workflow extracts the section matching the pushed `vX.Y.Z` tag
 as the GitHub Release body, so each released version needs a matching `## [X.Y.Z]`
 heading here.
 
+## [1.0.3] - 2026-11-14
+
+### Added
+
+- **`shutdownTimeoutMs`** on `TelemetryOptions`: the longest `shutdown()` and `shutdownTelemetry()` wait for the
+  final flush, in milliseconds. It defaults to 5000. A value that is not a finite number above zero, or is above
+  120000, means the default. When the flush has not finished by then, shutdown emits
+  `BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT` and resolves; the flush keeps running in the background and a failure after
+  the deadline is dropped. Spans still queued at that point may be lost.
+- `BYMAX_TELEMETRY_EXPORT_FAILED`: a span export failed, so the batch was dropped. The warning names the
+  exporter and a short upper-case error code (`UNKNOWN` when there is none), never the payload, the endpoint or
+  the error message, and repeats at most once a minute. Before, a collector that was down left the application
+  silent.
+- A **Production** section in the README with measured, scoped figures for sampling, TLS to the collector, a
+  collector that is down, CPU, memory and the optional `--max-semi-space-size` lever. "What This Library Does
+  NOT Do" says that log records forwarded through `OTEL_LOGS_EXPORTER` are not redacted by this library.
+
+### Changed
+
+- **`ignorePaths` never ignores a path longer than 2,048 characters**, and the patterns are not run against it,
+  so the request keeps its span. Before, the patterns ran against a path of any length. The query is cut first,
+  so only the path counts. The cap does not bound a pattern with nested quantifiers on a short path, so anchor
+  patterns with no nested quantifiers.
+- **A down collector now ends shutdown at the deadline with a warning, where it used to reject.** Against a
+  closed port, shutdown took 7 seconds before this release and rejected with the connection error. The
+  exporter's retries outlast the 5-second default, so shutdown now resolves with
+  `BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT`.
+
+### Apply to a derived backend
+
+The new option is the only change to the declarations; a derived backend acts on these behaviours:
+
+1. A caller that branches on the rejection of `shutdown()` or `shutdownTelemetry()` to detect a collector that
+   is down now has to read the `BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT` and `BYMAX_TELEMETRY_EXPORT_FAILED`
+   warnings instead, or set `shutdownTimeoutMs` above the time the exporter needs to give up. Measured against a
+   closed port, a deadline of 5000 ms resolved at 5002 ms with the warning, and a deadline of 20000 ms rejected
+   with the connection error after 7.8 s. A collector that accepts a connection and never answers took 10
+   seconds, the exporter's own timeout.
+2. Set `shutdownTimeoutMs` to fit the termination grace period of the platform: a shutdown that waits longer
+   than the grace period is killed before it finishes.
+3. A route that `ignorePaths` was ignoring with a path over 2,048 characters now produces a span. Anchor the
+   patterns, with no nested quantifiers.
+
 ## [1.0.2] - 2026-11-13
 
 ### Security
@@ -113,6 +156,7 @@ First release.
 - Verification from the packed tarball: real `node --import` processes in a CommonJS and a native-ESM
   application, with planted secrets absent from the exported body and negative controls.
 
+[1.0.3]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.3
 [1.0.2]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.2
 [1.0.1]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.1
 [1.0.0]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.0
