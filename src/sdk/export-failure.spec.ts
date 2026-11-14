@@ -70,7 +70,7 @@ describe('warnOnExportFailure', () => {
   })
 
   it('hands the result to the caller unchanged, failure included', () => {
-    // Scenario: the batch processor receives the failure itself, so its own retry and drop accounting applies.
+    // Scenario: the callback receives the very result the exporter produced, failure included.
     const double = fakeExporter()
     const failure = { code: FAILED, error: new Error('boom') }
     double.next = failure
