@@ -40,13 +40,13 @@ function codeOf(error: unknown): string {
  *
  * @param exporter - The exporter to watch, changed in place.
  * @param kind - What the exporter is, named in the warning.
- * @param clock - The time source in milliseconds, for tests.
+ * @param clock - The time source in milliseconds, monotonic by default so a step of the wall clock cannot stretch or shorten the window; replaced in tests.
  * @returns The exporter that was passed.
  */
 export function warnOnExportFailure<E extends ObservableExporter>(
   exporter: E,
   kind: string,
-  clock: () => number = Date.now
+  clock: () => number = () => performance.now()
 ): E {
   const original = exporter.export.bind(exporter)
   let lastWarning = Number.NEGATIVE_INFINITY
