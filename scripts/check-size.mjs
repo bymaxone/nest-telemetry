@@ -8,6 +8,7 @@
 // compromised devDep cannot tamper with the bundle before `pnpm publish`.
 // `node:zlib`'s brotli matches what npm/CDN compression produces on the wire.
 
+import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -60,11 +61,33 @@ const BROTLI_OPTS = {
   params: { [constants.BROTLI_PARAM_QUALITY]: constants.BROTLI_MAX_QUALITY }
 }
 
+// `PACKAGE_TARBALL` names the tarball a release gate has already packed: the bundles are read from
+// the file that is published, not from `dist/`.
+const TARBALL = process.env['PACKAGE_TARBALL']
+
+/**
+ * Reads one built artifact, from the tarball when there is one, else from `dist/`.
+ *
+ * @param {string} path - The artifact path relative to the package root.
+ * @returns {Buffer} The file content.
+ */
+function readArtifact(path) {
+  if (TARBALL === undefined || TARBALL === '') return readFileSync(resolve(ROOT, path))
+  try {
+    return execFileSync('tar', ['-xzOf', TARBALL, `package/${path}`], {
+      maxBuffer: 16 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'pipe']
+    })
+  } catch (cause) {
+    // `tar` reports a member that is not in the archive through its exit status, with no errno.
+    throw Object.assign(new Error(`${path} is not in the tarball`, { cause }), { code: 'ENOENT' })
+  }
+}
+
 let failed = 0
 const rows = []
 
 for (const { name, path, brotli: limit } of BUDGETS) {
-  const abs = resolve(ROOT, path)
   // Read straight away rather than testing for the file first. A `statSync`
   // followed by `readFileSync` states a fact about the past: the file can be
   // gone, replaced, or truncated between the two calls. `readFileSync` already
@@ -72,13 +95,16 @@ for (const { name, path, brotli: limit } of BUDGETS) {
   // without the window.
   let raw
   try {
-    raw = readFileSync(abs)
+    raw = readArtifact(path)
   } catch (error) {
     // Only a missing file earns the friendly message. A permission error or a
     // directory where a file belongs is a different problem, and reporting it as
     // "run pnpm build" sends the reader to the wrong place — rethrow so the real
     // code and stack reach the log.
-    if (/** @type {NodeJS.ErrnoException} */ (error).code !== 'ENOENT') throw error
+    const code = /** @type {NodeJS.ErrnoException} */ (error).code
+    // `tar` reports a missing member through its exit status, with no errno.
+    if (code !== 'ENOENT' && (TARBALL === undefined || TARBALL === '' || code !== undefined))
+      throw error
     console.error(`Missing build artifact: ${path} — run \`pnpm build\` first.`)
     process.exit(2)
   }
