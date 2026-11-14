@@ -21,6 +21,12 @@ heading here.
   exporter and a short upper-case error code (`UNKNOWN` when there is none), never the payload, the endpoint or
   the error message, and repeats at most once a minute. Before, a collector that was down left the application
   silent.
+- **A bound `TELEMETRY_LOGGER` now receives the two runtime warnings.** `BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT` is
+  reported through `errorStructured` under `TELEMETRY_SHUTDOWN_TIMEOUT_KEY` (`TRACING_SHUTDOWN_TIMEOUT`), and
+  `BYMAX_TELEMETRY_EXPORT_FAILED` through the optional `warnStructured` under `TELEMETRY_EXPORT_FAILED_KEY`
+  (`TRACING_EXPORT_FAILED`), with the exporter kind and the error code as metadata and never a message, an
+  endpoint or a payload. With no logger bound, or a logger without the method, they stay process warnings,
+  unchanged. Both keys are exported from `./nest`.
 - A **Production** section in the README with measured, scoped figures for sampling, TLS to the collector, a
   collector that is down, CPU, memory and the optional `--max-semi-space-size` lever. "What This Library Does
   NOT Do" says that log records forwarded through `OTEL_LOGS_EXPORTER` are not redacted by this library.
@@ -38,7 +44,7 @@ heading here.
 
 ### Apply to a derived backend
 
-The new option is the only change to the declarations; a derived backend acts on these behaviours:
+The declarations gained `shutdownTimeoutMs`, two exported log keys and an optional `warnStructured` on the logger shape; a derived backend acts on these behaviours:
 
 1. A caller that branches on the rejection of `shutdown()` or `shutdownTelemetry()` to detect a collector that
    is down now has to read the `BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT` and `BYMAX_TELEMETRY_EXPORT_FAILED`
@@ -48,7 +54,11 @@ The new option is the only change to the declarations; a derived backend acts on
    seconds, the exporter's own timeout.
 2. Set `shutdownTimeoutMs` to fit the termination grace period of the platform: a shutdown that waits longer
    than the grace period is killed before it finishes.
-3. A route that `ignorePaths` was ignoring with a path over 2,048 characters now produces a span. Anchor the
+3. A host on `TelemetryModule` that binds `TELEMETRY_LOGGER` now gets a structured entry for a down collector.
+   Alert on `TRACING_SHUTDOWN_TIMEOUT` and `TRACING_EXPORT_FAILED`; the first replaces the rejection a down
+   collector used to cause at shutdown. A logger that should receive the export failure needs a
+   `warnStructured(logKey, message, userId, metadata)` method.
+4. A route that `ignorePaths` was ignoring with a path over 2,048 characters now produces a span. Anchor the
    patterns, with no nested quantifiers.
 
 ## [1.0.2] - 2026-11-13

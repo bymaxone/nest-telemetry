@@ -7,6 +7,7 @@
  * there under a registry symbol that no application key can collide with.
  */
 import type { TelemetryHandle } from './types'
+import { reportWarning } from './warning-sink'
 
 /** A registered handle, which also knows whether its shutdown is under way. */
 export interface RunningHandle extends TelemetryHandle {
@@ -147,10 +148,11 @@ export function createHandle(
           }
         }
         const timer = setTimeout(() => {
-          process.emitWarning(
-            `The telemetry flush did not finish within ${deadline} ms, so shutdown stopped waiting for it. Spans still queued may be lost. Raise shutdownTimeoutMs or check that the collector answers.`,
-            { type: 'Warning', code: 'BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT' }
-          )
+          reportWarning({
+            code: 'BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT',
+            text: `The telemetry flush did not finish within ${deadline} ms, so shutdown stopped waiting for it. Spans still queued may be lost. Raise shutdownTimeoutMs or check that the collector answers.`,
+            fields: { timeoutMs: deadline }
+          })
           finish()
           resolve()
         }, deadline)

@@ -10,7 +10,9 @@ describe('entry points', () => {
     expect(Object.keys(register)).toEqual([])
     expect(typeof nest.TelemetryModule).toBe('function')
     // Reading every export resolves each re-export to the real value.
-    expect(Object.values(nest)).toHaveLength(4)
+    expect(Object.values(nest)).toHaveLength(6)
     expect(nest.TELEMETRY_FLUSH_FAILED_KEY).toBe('TRACING_FLUSH_FAILED')
+    expect(nest.TELEMETRY_SHUTDOWN_TIMEOUT_KEY).toBe('TRACING_SHUTDOWN_TIMEOUT')
+    expect(nest.TELEMETRY_EXPORT_FAILED_KEY).toBe('TRACING_EXPORT_FAILED')
   })
 })

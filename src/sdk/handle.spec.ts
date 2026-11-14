@@ -10,6 +10,7 @@ import {
   shutdownTelemetry
 } from './handle'
 import type { RunningHandle } from './handle'
+import { clearWarningSink, registerWarningSink } from './warning-sink'
 
 /** A stop function whose completion the test controls. */
 function deferredStop(): {
@@ -211,6 +212,27 @@ describe('createHandle shutdown deadline', () => {
         code: CODE
       }
     )
+  })
+
+  it('hands the timeout to a registered warning sink, with the deadline, instead of printing it', async () => {
+    // Scenario: a bound logger takes the warning, so the timeout is structured and alertable and is
+    // not also printed as a process warning. The sink still stands when the deadline passes.
+    const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    const sink = jest.fn(() => true)
+    registerWarningSink(sink)
+    try {
+      const { stop } = deferredStop()
+      const done = createHandle(stop, 250).shutdown()
+      await jest.advanceTimersByTimeAsync(250)
+      await done
+      expect(sink).toHaveBeenCalledTimes(1)
+      expect(sink).toHaveBeenCalledWith(
+        expect.objectContaining({ code: CODE, fields: { timeoutMs: 250 } })
+      )
+      expect(emitWarning).not.toHaveBeenCalled()
+    } finally {
+      clearWarningSink()
+    }
   })
 
   it('uses the deadline the host passes', async () => {

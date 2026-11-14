@@ -524,6 +524,24 @@ describe('startTelemetry', () => {
     })
   })
 
+  describe('the warning route and the logs pipeline', () => {
+    it('wraps only the trace exporter, so a failed logs export reports nothing', async () => {
+      // Scenario: a bound logger can forward its records to OTLP logs. A logs exporter that reported
+      // its own failures through the warning sink would write a record that exports and fails in
+      // turn, so the library builds one exporter, the trace one, and leaves the logs pipeline to
+      // the SDK. This guards the next person who thinks of wrapping the logs exporter too.
+      jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      await startTelemetry({
+        serviceName: 'api',
+        env: { OTEL_LOGS_EXPORTER: 'otlp', OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:1' }
+      })
+      expect(mockOtlpExporter).toHaveBeenCalledTimes(1)
+      const [options] = mockNodeSdk.mock.calls[0] as unknown as [Record<string, unknown>]
+      expect(options).not.toHaveProperty('logRecordProcessors')
+      expect(options).not.toHaveProperty('logRecordExporter')
+    })
+  })
+
   describe('shutdownTimeoutMs', () => {
     it('is handed to the handle, so a hung flush ends at the host deadline', async () => {
       // Scenario: the host's option reaches the flush; the SDK's shutdown never settles here.
