@@ -38,8 +38,7 @@ heading here.
 
 ### Apply to a derived backend
 
-The new option is the only change to the declarations, and three behaviours changed that a derived backend
-acts on:
+The new option is the only change to the declarations; a derived backend acts on these behaviours:
 
 1. A caller that branches on the rejection of `shutdown()` or `shutdownTelemetry()` to detect a collector that
    is down now has to read the `BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT` and `BYMAX_TELEMETRY_EXPORT_FAILED`
