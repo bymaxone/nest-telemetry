@@ -73,6 +73,15 @@ describe('registerWarningSink', () => {
     expect(sink).not.toHaveBeenCalled()
   })
 
+  it('is emptied by clearWarningSink, whichever module registered the sink', () => {
+    // Scenario: a test harness drops whatever sink an earlier case left behind.
+    const sink = jest.fn(() => true)
+    registerWarningSink(sink)
+    clearWarningSink()
+    reportWarning(warning)
+    expect(sink).not.toHaveBeenCalled()
+  })
+
   it('releases only the sink it registered', () => {
     // Scenario: two module instances in one process, as in a test suite or a hot reload. The first
     // one shutting down must not remove the sink the second one registered.

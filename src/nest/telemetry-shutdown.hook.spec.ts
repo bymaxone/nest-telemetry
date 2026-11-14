@@ -201,6 +201,9 @@ describe('the warning route', () => {
   it('registers nothing when no logger is bound, so the process warning stays as it was', () => {
     // Scenario: a host without TELEMETRY_LOGGER gets the warning it always got.
     new TelemetryShutdownHook(moduleRef()).onModuleInit()
+    expect(
+      Reflect.get(globalThis, Symbol.for('@bymax-one/nest-telemetry/warning-sink'))
+    ).toBeUndefined()
     reportWarning(EXPORT_WARNING)
     expect(emitWarning).toHaveBeenCalledTimes(1)
   })
