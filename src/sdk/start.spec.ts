@@ -15,7 +15,10 @@ const mockSdkInstance = {
 }
 const mockNodeSdk = jest.fn((..._args: unknown[]) => mockSdkInstance)
 const mockBatchSpanProcessor = jest.fn((..._args: unknown[]) => ({ kind: 'batch' }))
-const mockOtlpExporter = jest.fn((..._args: unknown[]) => ({ kind: 'exporter' }))
+const mockOtlpExporter = jest.fn((..._args: unknown[]) => ({
+  kind: 'exporter',
+  export: jest.fn((_spans: unknown, done: (result: { code: number }) => void) => done({ code: 1 }))
+}))
 const mockAutoInstrumentations = jest.fn((..._args: unknown[]) => ['instrumentation'])
 const mockResourceFromAttributes = jest.fn((..._args: unknown[]) => ({ kind: 'resource' }))
 
@@ -129,7 +132,7 @@ describe('startTelemetry', () => {
       })
       expect(mockOtlpExporter).toHaveBeenCalledWith()
       expect(mockBatchSpanProcessor).toHaveBeenCalledWith({
-        exporter: { kind: 'exporter' },
+        exporter: expect.objectContaining({ kind: 'exporter' }),
         scheduledDelayMillis: 250
       })
       expect(mockAutoInstrumentations).toHaveBeenCalledWith(
@@ -501,6 +504,23 @@ describe('startTelemetry', () => {
       await shutdownTelemetry()
       const handle = await startTelemetry({ serviceName: 'api', env: {} })
       expect(handle.enabled).toBe(true)
+    })
+  })
+
+  describe('export failures', () => {
+    it('hands the batch processor an exporter that warns when an export fails', async () => {
+      // Scenario: the exporter the batch processor receives is the watched one, so a collector that
+      // refuses the export is reported with the exporter kind and no payload.
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      await startTelemetry({ serviceName: 'api', env: {} })
+      const [config] = mockBatchSpanProcessor.mock.calls[0] as unknown as [
+        { exporter: { export(spans: unknown[], done: (result: { code: number }) => void): void } }
+      ]
+      config.exporter.export([], () => undefined)
+      expect(emitWarning).toHaveBeenCalledWith(expect.stringContaining('otlp-http traces'), {
+        type: 'Warning',
+        code: 'BYMAX_TELEMETRY_EXPORT_FAILED'
+      })
     })
   })
 

@@ -21,6 +21,7 @@ import {
 } from './assembly'
 import { readTelemetryEnvironment } from './environment'
 import type { TelemetryEnvironment } from './environment'
+import { warnOnExportFailure } from './export-failure'
 import {
   clearPendingStart,
   createHandle,
@@ -150,7 +151,7 @@ function buildSdk(
       // Ordered before the batch processor, so each span is redacted in place before it is exported.
       ...(options.unsafe?.disableUrlRedaction === true ? [] : [createUrlQueryRedactor()]),
       new sdkTrace.BatchSpanProcessor({
-        exporter: new exporter.OTLPTraceExporter(),
+        exporter: warnOnExportFailure(new exporter.OTLPTraceExporter(), 'otlp-http traces'),
         ...env.batchSpanProcessor
       })
     ],

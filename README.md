@@ -214,6 +214,7 @@ The start emits these warnings:
 | `BYMAX_TELEMETRY_OPTIONS_IGNORED`           | A `startTelemetry` call reached an SDK that was already running, so its options were ignored, or `enabled: false` did not stop it. Any defined option counts, `env` included. |
 | `BYMAX_TELEMETRY_RESTART_UNSUPPORTED`       | `startTelemetry` was called after a shutdown in the same process, and is refused.                                                                                             |
 | `BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT`          | The final flush did not finish within `shutdownTimeoutMs`. Shutdown resolved without it, and spans still queued may be lost.                                                  |
+| `BYMAX_TELEMETRY_EXPORT_FAILED`             | A span export failed, so the batch was dropped. The warning names the exporter and a short error code, never the payload or the endpoint, and repeats at most once a minute.  |
 
 The programmatic `startTelemetry` keeps its rejection when the SDK cannot start, for callers that want it.
 
@@ -262,6 +263,7 @@ A caret on a `0.x` version allows patch releases only, so each OpenTelemetry min
 | HTTP spans but no Redis spans                                         | `ioredis` commands are traced under an active span only, and the client must be loaded after the preload.                                                                                                                                                            |
 | Metrics or logs missing                                               | They are off unless `OTEL_METRICS_EXPORTER` or `OTEL_LOGS_EXPORTER` names an exporter.                                                                                                                                                                               |
 | The last spans of another module are lost when the application closes | List `TelemetryModule` first in the application module's imports, so it closes last.                                                                                                                                                                                 |
+| No spans arrive and nothing else is logged                            | `BYMAX_TELEMETRY_EXPORT_FAILED`: the collector did not accept the export. Check the endpoint in `OTEL_EXPORTER_OTLP_ENDPOINT` and that the collector is reachable.                                                                                                   |
 | The last spans are lost on `SIGTERM`                                  | Call `app.enableShutdownHooks()` in Nest, or `shutdownTelemetry()` from your own shutdown path.                                                                                                                                                                      |
 | A query string still appears in a span                                | It is on an attribute other than `url.query`, `url.full`, `http.url` or `http.target`: see [What This Library Does NOT Do](#-what-this-library-does-not-do).                                                                                                         |
 
