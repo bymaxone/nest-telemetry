@@ -81,11 +81,11 @@ Install it with the OpenTelemetry peers you use: the command is in [Quick Start]
 
 One package, separate entry points. Import only what your app needs:
 
-| Subpath      | Import                               | Purpose                                                                                                                      |    Dependencies     |
-| ------------ | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | :-----------------: |
-| **SDK**      | `@bymax-one/nest-telemetry`          | `startTelemetry`, `shutdownTelemetry`, `ignorePaths`, `DEFAULT_REDACTED_QUERY_PARAMS`, types                                 | OpenTelemetry peers |
-| **Register** | `@bymax-one/nest-telemetry/register` | The preload for `node --import`; importing it runs it, and it exports nothing                                                | OpenTelemetry peers |
-| **Nest**     | `@bymax-one/nest-telemetry/nest`     | `TelemetryModule`, `TelemetryShutdownHook`, `TELEMETRY_LOGGER`, `TELEMETRY_FLUSH_FAILED_KEY`, `ITelemetryErrorLogger` (type) |      NestJS 11      |
+| Subpath      | Import                               | Purpose                                                                                                                                                                                       |    Dependencies     |
+| ------------ | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :-----------------: |
+| **SDK**      | `@bymax-one/nest-telemetry`          | `startTelemetry`, `shutdownTelemetry`, `ignorePaths`, `DEFAULT_REDACTED_QUERY_PARAMS`, types                                                                                                  | OpenTelemetry peers |
+| **Register** | `@bymax-one/nest-telemetry/register` | The preload for `node --import`; importing it runs it, and it exports nothing                                                                                                                 | OpenTelemetry peers |
+| **Nest**     | `@bymax-one/nest-telemetry/nest`     | `TelemetryModule`, `TelemetryShutdownHook`, `TELEMETRY_LOGGER`, `TELEMETRY_FLUSH_FAILED_KEY`, `TELEMETRY_SHUTDOWN_TIMEOUT_KEY`, `TELEMETRY_EXPORT_FAILED_KEY`, `ITelemetryErrorLogger` (type) |      NestJS 11      |
 
 The SDK entry and `./register` import no `@nestjs/*` package; only `./nest` does. Requiring `./register` from CommonJS throws and names `node --import`.
 
@@ -205,16 +205,16 @@ The OpenTelemetry SDK reads these itself, and the library never touches them: `O
 
 The start emits these warnings:
 
-| Code                                        | Meaning                                                                                                                                                                       |
-| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `BYMAX_TELEMETRY_START_FAILED`              | The SDK could not start (a peer is missing, or the SDK threw). Tracing is off.                                                                                                |
-| `BYMAX_TELEMETRY_ESM_HOOK_UNAVAILABLE`      | The loader hook could not be registered. Native-ESM code is not instrumented.                                                                                                 |
-| `BYMAX_TELEMETRY_SERVICE_NAME_MISSING`      | No service name is set; spans use `unknown_service:node`.                                                                                                                     |
-| `BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED` | A redaction was turned off through an `unsafe` option.                                                                                                                        |
-| `BYMAX_TELEMETRY_OPTIONS_IGNORED`           | A `startTelemetry` call reached an SDK that was already running, so its options were ignored, or `enabled: false` did not stop it. Any defined option counts, `env` included. |
-| `BYMAX_TELEMETRY_RESTART_UNSUPPORTED`       | `startTelemetry` was called after a shutdown in the same process, and is refused.                                                                                             |
-| `BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT`          | The final flush did not finish within `shutdownTimeoutMs`. Shutdown resolved without it, and spans still queued may be lost.                                                  |
-| `BYMAX_TELEMETRY_EXPORT_FAILED`             | A span export failed, so the batch was dropped. The warning names the exporter and a short error code, never the payload or the endpoint, and repeats at most once a minute.  |
+| Code                                        | Meaning                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `BYMAX_TELEMETRY_START_FAILED`              | The SDK could not start (a peer is missing, or the SDK threw). Tracing is off.                                                                                                                                                                                                                                                 |
+| `BYMAX_TELEMETRY_ESM_HOOK_UNAVAILABLE`      | The loader hook could not be registered. Native-ESM code is not instrumented.                                                                                                                                                                                                                                                  |
+| `BYMAX_TELEMETRY_SERVICE_NAME_MISSING`      | No service name is set; spans use `unknown_service:node`.                                                                                                                                                                                                                                                                      |
+| `BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED` | A redaction was turned off through an `unsafe` option.                                                                                                                                                                                                                                                                         |
+| `BYMAX_TELEMETRY_OPTIONS_IGNORED`           | A `startTelemetry` call reached an SDK that was already running, so its options were ignored, or `enabled: false` did not stop it. Any defined option counts, `env` included.                                                                                                                                                  |
+| `BYMAX_TELEMETRY_RESTART_UNSUPPORTED`       | `startTelemetry` was called after a shutdown in the same process, and is refused.                                                                                                                                                                                                                                              |
+| `BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT`          | The final flush did not finish within `shutdownTimeoutMs`. Shutdown resolved without it, and spans still queued may be lost. With `TelemetryModule` and a bound `TELEMETRY_LOGGER`, it is reported through `errorStructured` under `TRACING_SHUTDOWN_TIMEOUT` instead.                                                         |
+| `BYMAX_TELEMETRY_EXPORT_FAILED`             | A span export failed, so the batch was dropped. The warning names the exporter and a short error code, never the payload or the endpoint, and repeats at most once a minute. With `TelemetryModule` and a bound `TELEMETRY_LOGGER` that has `warnStructured`, it is reported through it under `TRACING_EXPORT_FAILED` instead. |
 
 The programmatic `startTelemetry` keeps its rejection when the SDK cannot start, for callers that want it.
 
@@ -398,13 +398,15 @@ No exports. `node --import @bymax-one/nest-telemetry/register` registers the loa
 
 ### Nest: `@bymax-one/nest-telemetry/nest`
 
-| Export                       | Kind     | Purpose                                                                                              |
-| ---------------------------- | -------- | ---------------------------------------------------------------------------------------------------- |
-| `TelemetryModule`            | module   | Global; registers `TelemetryShutdownHook`. List it first in the application module's imports         |
-| `TelemetryShutdownHook`      | provider | `OnApplicationShutdown`: awaits `shutdownTelemetry()`; a refused flush is reported and never rejects |
-| `TELEMETRY_LOGGER`           | token    | Optional provider with an `errorStructured(logKey, error)` method, used to report a failed flush     |
-| `TELEMETRY_FLUSH_FAILED_KEY` | constant | The stable key, `TRACING_FLUSH_FAILED`, under which a failed flush is reported                       |
-| `ITelemetryErrorLogger`      | type     | The shape `TELEMETRY_LOGGER` provides: `errorStructured(logKey, error)`                              |
+| Export                           | Kind     | Purpose                                                                                                                                                                                                            |
+| -------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `TelemetryModule`                | module   | Global; registers `TelemetryShutdownHook`. List it first in the application module's imports                                                                                                                       |
+| `TelemetryShutdownHook`          | provider | `OnApplicationShutdown`: awaits `shutdownTelemetry()`; a refused flush is reported and never rejects                                                                                                               |
+| `TELEMETRY_LOGGER`               | token    | Optional provider with an `errorStructured(logKey, error)` method for a failed flush and a shutdown that hit its deadline, and an optional `warnStructured(logKey, message, userId, metadata)` for a failed export |
+| `TELEMETRY_FLUSH_FAILED_KEY`     | constant | The stable key, `TRACING_FLUSH_FAILED`, under which a failed flush is reported                                                                                                                                     |
+| `TELEMETRY_SHUTDOWN_TIMEOUT_KEY` | constant | The stable key, `TRACING_SHUTDOWN_TIMEOUT`, under which a shutdown that hit `shutdownTimeoutMs` is reported                                                                                                        |
+| `TELEMETRY_EXPORT_FAILED_KEY`    | constant | The stable key, `TRACING_EXPORT_FAILED`, under which a failed span export is reported, with the exporter kind and the error code as metadata                                                                       |
+| `ITelemetryErrorLogger`          | type     | The shape `TELEMETRY_LOGGER` provides: `errorStructured(logKey, error)` and an optional `warnStructured`                                                                                                           |
 
 ---
 

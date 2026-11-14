@@ -3,13 +3,21 @@
  * @layer nest
  */
 import { Inject, Injectable, Logger } from '@nestjs/common'
-import type { OnApplicationShutdown } from '@nestjs/common'
+import type { OnApplicationShutdown, OnModuleInit } from '@nestjs/common'
 import { ModuleRef } from '@nestjs/core'
 
 import { shutdownTelemetry } from '../sdk/handle'
+import { registerWarningSink } from '../sdk/warning-sink'
+import type { TelemetryWarning } from '../sdk/warning-sink'
 
 /** Log key of the entry a failed flush leaves, stable so an alert can match it. */
 export const TELEMETRY_FLUSH_FAILED_KEY = 'TRACING_FLUSH_FAILED'
+
+/** Log key of the entry a shutdown that hit its deadline leaves, stable so an alert can match it. */
+export const TELEMETRY_SHUTDOWN_TIMEOUT_KEY = 'TRACING_SHUTDOWN_TIMEOUT'
+
+/** Log key of the entry a failed span export leaves, stable so an alert can match it. */
+export const TELEMETRY_EXPORT_FAILED_KEY = 'TRACING_EXPORT_FAILED'
 
 /** Injection token of the optional structured logger a failed flush is reported through. */
 export const TELEMETRY_LOGGER = Symbol('TELEMETRY_LOGGER')
@@ -23,6 +31,22 @@ export interface ITelemetryErrorLogger {
    * @param error - The failure.
    */
   errorStructured(logKey: string, error: Error): void
+
+  /**
+   * Writes a warning entry under a log key, for a failed span export. Optional: a logger without
+   * it gets that warning as a process warning.
+   *
+   * @param logKey - The entry's log key.
+   * @param message - The library's own text, never anything from the exporter.
+   * @param userId - Always `undefined`.
+   * @param metadata - The exporter kind and a short error code.
+   */
+  warnStructured?(
+    logKey: string,
+    message: string,
+    userId?: string,
+    metadata?: Record<string, unknown>
+  ): void
 }
 
 /** What the hook needs of Nest's module reference: to look a provider up anywhere in the application. */
@@ -38,11 +62,24 @@ export interface IProviderLookup {
 
 /** Awaits the SDK flush as part of the application's own graceful shutdown. */
 @Injectable()
-export class TelemetryShutdownHook implements OnApplicationShutdown {
+export class TelemetryShutdownHook implements OnApplicationShutdown, OnModuleInit {
+  /** Removes this hook's warning sink, when it registered one. */
+  private releaseSink: (() => void) | undefined
+
   /**
    * @param moduleRef - Resolves the optional structured logger when a flush fails.
    */
   public constructor(@Inject(ModuleRef) private readonly moduleRef: IProviderLookup) {}
+
+  /**
+   * Routes the library's two runtime warnings to the structured logger the application bound, when
+   * there is one. Without it they stay process warnings.
+   */
+  public onModuleInit(): void {
+    if (this.structuredLogger() !== undefined) {
+      this.releaseSink = registerWarningSink((warning) => this.route(warning))
+    }
+  }
 
   /**
    * Flushes and stops the SDK, if one was started.
@@ -60,7 +97,37 @@ export class TelemetryShutdownHook implements OnApplicationShutdown {
       await shutdownTelemetry()
     } catch (error: unknown) {
       this.report(error)
+    } finally {
+      this.releaseSink?.()
     }
+  }
+
+  /**
+   * Writes a warning to the structured logger under its key.
+   *
+   * @param warning - The warning.
+   * @returns Whether the logger took it; a warning with no key or no method on the logger is left
+   *   to the process warning.
+   */
+  private route(warning: TelemetryWarning): boolean {
+    const logger = this.structuredLogger()
+    if (
+      warning.code === 'BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT' &&
+      typeof logger?.errorStructured === 'function'
+    ) {
+      logger.errorStructured(TELEMETRY_SHUTDOWN_TIMEOUT_KEY, new Error(warning.text))
+      return true
+    }
+    if (
+      warning.code === 'BYMAX_TELEMETRY_EXPORT_FAILED' &&
+      typeof logger?.warnStructured === 'function'
+    ) {
+      logger.warnStructured(TELEMETRY_EXPORT_FAILED_KEY, warning.text, undefined, {
+        ...warning.fields
+      })
+      return true
+    }
+    return false
   }
 
   /**

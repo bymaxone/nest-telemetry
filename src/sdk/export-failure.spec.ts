@@ -1,5 +1,6 @@
 import { warnOnExportFailure } from './export-failure'
 import type { ExportOutcome, ObservableExporter } from './export-failure'
+import { clearWarningSink, registerWarningSink } from './warning-sink'
 
 const FAILED = 1
 const CODE = 'BYMAX_TELEMETRY_EXPORT_FAILED'
@@ -167,5 +168,54 @@ describe('warnOnExportFailure', () => {
     exportOnce(double.exporter)
     expect(emitWarning).toHaveBeenCalledTimes(1)
     expect(wall).not.toHaveBeenCalled()
+  })
+
+  it('hands the failure to a registered warning sink with the kind and the code only', () => {
+    // Scenario: a bound logger takes the warning. The fields carry the exporter kind and the code
+    // token, never the error message or anything about the endpoint.
+    const sink = jest.fn(() => true)
+    registerWarningSink(sink)
+    try {
+      const double = fakeExporter()
+      double.next = {
+        code: FAILED,
+        error: Object.assign(new Error('connect to http://user:pw@host/?token=secret'), {
+          code: 'ECONNREFUSED'
+        })
+      }
+      warnOnExportFailure(double.exporter, 'otlp-http traces')
+      exportOnce(double.exporter)
+      expect(sink).toHaveBeenCalledTimes(1)
+      expect(sink).toHaveBeenCalledWith(
+        expect.objectContaining({
+          code: CODE,
+          fields: { kind: 'otlp-http traces', code: 'ECONNREFUSED' }
+        })
+      )
+      expect(JSON.stringify(sink.mock.calls)).not.toContain('secret')
+      expect(emitWarning).not.toHaveBeenCalled()
+    } finally {
+      clearWarningSink()
+    }
+  })
+
+  it('reports to the sink once per window however many exports fail', () => {
+    // Scenario: the rate limit applies to the structured route too, so a down collector is one
+    // entry a minute in the host's logs.
+    let now = 0
+    const sink = jest.fn(() => true)
+    registerWarningSink(sink)
+    try {
+      const double = fakeExporter()
+      double.next = { code: FAILED, error: new Error('x') }
+      warnOnExportFailure(double.exporter, 'otlp-http traces', () => now)
+      for (let index = 0; index < 100; index += 1) {
+        now = index * 500
+        exportOnce(double.exporter)
+      }
+      expect(sink).toHaveBeenCalledTimes(1)
+    } finally {
+      clearWarningSink()
+    }
   })
 })
