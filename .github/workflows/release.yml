@@ -1,6 +1,6 @@
-# Canonical shape of an npm release: the code that builds runs without a credential, and the job that
-# holds the credential runs no code from the package. Copy to `.github/workflows/release.yml` in the
-# repository (the file name matters, see "npm trusted publishing" below) and fill in the marked parts.
+# The shape of an npm release: the code that builds runs without a credential, and the job that holds
+# the credential runs no code from the package. The file name matters, see "npm trusted publishing"
+# below.
 #
 # Why two jobs
 #   `build` installs dependencies, runs the gates and packs. That runs a lot of code (the dependency
@@ -41,7 +41,8 @@
 #     `v*.*.*` only.
 #   - A tag ruleset on `v*.*.*` limiting who can create them.
 #
-# What is NOT measured here: provenance on a publish from a tarball.
+# The provenance npm generates for a publish of a tarball names that tarball's sha512 as its subject,
+# which is the integrity the registry reports for the version.
 name: Release
 
 on:
