@@ -87,13 +87,20 @@ describe('ignorePaths', () => {
       expect(ignorePaths([/^\/a+$/])({ url: `${pad(MAX + 1)}?x=1` })).toBe(false)
     })
 
-    it('bounds a pattern with nested quantifiers on a long path', () => {
-      // Scenario: /^\/(a+)+$/ takes exponential time on a long run of a's ending in another
-      // character. The cap turns that path into an immediate "not ignored".
-      const hostile = ignorePaths([/^\/(a+)+$/])
-      const started = Date.now()
-      expect(hostile({ url: `/${'a'.repeat(5000)}!` })).toBe(false)
-      expect(Date.now() - started).toBeLessThan(250)
+    it('never runs a pattern with nested quantifiers on a path past the cap', () => {
+      // Scenario: /^\/(a+)+$/ backtracks exponentially on a long run of a's that ends in another
+      // character. The cap keeps the pattern from running on that path at all, so the bound is a count
+      // of calls, not a time. The spy takes the place of the pattern's own test, so a missing cap
+      // shows as a call and not as a hang, and the assertions run after the spy is released.
+      const test = jest.spyOn(RegExp.prototype, 'test').mockReturnValue(false)
+      let observed: { ignored: boolean; calls: number }
+      try {
+        const ignored = ignorePaths([/^\/(a+)+$/])({ url: `/${'a'.repeat(5000)}!` })
+        observed = { ignored, calls: test.mock.calls.length }
+      } finally {
+        test.mockRestore()
+      }
+      expect(observed).toEqual({ ignored: false, calls: 0 })
     })
   })
 })

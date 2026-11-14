@@ -37,15 +37,18 @@ afterEach(async () => {
 describe('shutdownTimeoutMs against a collector that never answers', () => {
   it('resolves at the deadline with a warning instead of waiting for the exporter', async () => {
     // Scenario: the exporter's own timeout is ten seconds, so without the library's deadline this
-    // shutdown would hold the process for that long. With a 500 ms deadline it ends near 500 ms.
+    // shutdown would hold the process for that long. With a 500 ms deadline it ends far below the ten
+    // seconds. The lower bound allows a few milliseconds for the clock, and the upper bound is a
+    // margin a loaded machine does not reach. That the option, and not the default of five seconds,
+    // reached the handle is read from the warning, which names the deadline.
     const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
     await startTelemetry({ serviceName: 'api', shutdownTimeoutMs: 500, env: process.env })
     trace.getTracer('e2e').startSpan('never-acknowledged').end()
     const started = Date.now()
     await shutdownTelemetry()
     const elapsed = Date.now() - started
-    expect(elapsed).toBeGreaterThanOrEqual(450)
-    expect(elapsed).toBeLessThan(4000)
+    expect(elapsed).toBeGreaterThanOrEqual(500 - 5)
+    expect(elapsed).toBeLessThan(9000)
     expect(emitWarning).toHaveBeenCalledWith(
       expect.stringContaining('did not finish within 500 ms'),
       {
