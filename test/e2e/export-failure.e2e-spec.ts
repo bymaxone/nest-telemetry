@@ -36,7 +36,7 @@ afterEach(() => {
 
 describe('a collector that is down', () => {
   it('produces one export warning per window, naming the exporter and the error code only', async () => {
-    // Scenario: every batch fails, which used to leave the application silent. Three spans go out
+    // Scenario: every batch fails, and the application must hear about it. Three spans go out
     // in separate batches; the first failure warns and the rest fall inside the window.
     const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
     const port = await closedPort()
@@ -57,6 +57,7 @@ describe('a collector that is down', () => {
     expect(exportWarnings).toHaveLength(1)
     const text = String(exportWarnings[0]?.[0])
     expect(text).toContain('otlp-http traces')
+    expect(text).toContain('code ECONNREFUSED')
     expect(text).not.toContain('secret-span')
     expect(text).not.toContain(String(port))
     expect(text).not.toContain('hunter2')
