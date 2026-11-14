@@ -1,10 +1,16 @@
+import { readdirSync, readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
+
 import {
   buildInstrumentationConfig,
   buildResourceAttributes,
   planSignals,
   warnAboutMissingServiceName,
+  warnAboutOversizedTimers,
   warnAboutUnsafeOptions
 } from './assembly'
+import type { SignalPlan } from './assembly'
 import { readTelemetryEnvironment } from './environment'
 import type { TelemetryEnvironment } from './environment'
 import { DEFAULT_REDACTED_QUERY_PARAMS, serializeRedisCommandName } from './redaction'
@@ -13,8 +19,10 @@ import type { TelemetryOptions, UnsafeOptions } from './types'
 const FS = '@opentelemetry/instrumentation-fs'
 const HTTP = '@opentelemetry/instrumentation-http'
 const IOREDIS = '@opentelemetry/instrumentation-ioredis'
+const BUNYAN = '@opentelemetry/instrumentation-bunyan'
 const PINO = '@opentelemetry/instrumentation-pino'
 const REDIS = '@opentelemetry/instrumentation-redis'
+const WINSTON = '@opentelemetry/instrumentation-winston'
 
 /** The parsed environment for a map of raw variables. */
 function environment(raw: NodeJS.ProcessEnv = {}): TelemetryEnvironment {
@@ -98,11 +106,13 @@ describe('buildInstrumentationConfig', () => {
     // Scenario: a host that passes nothing gets file-system tracing off, URL and Redis redaction
     // on, and no log forwarding.
     expect(buildInstrumentationConfig({}, noLogs)).toEqual({
+      [BUNYAN]: { disableLogSending: true },
       [FS]: { enabled: false },
       [HTTP]: { redactedQueryParams: [...DEFAULT_REDACTED_QUERY_PARAMS] },
       [IOREDIS]: { dbStatementSerializer: serializeRedisCommandName },
       [PINO]: { disableLogSending: true },
-      [REDIS]: { dbStatementSerializer: serializeRedisCommandName }
+      [REDIS]: { dbStatementSerializer: serializeRedisCommandName },
+      [WINSTON]: { disableLogSending: true }
     })
   })
 
@@ -134,6 +144,39 @@ describe('buildInstrumentationConfig', () => {
   it('forwards pino logs when the environment exports logs and the host is silent', () => {
     // Scenario: the default follows the signal plan.
     expect(buildInstrumentationConfig({}, logs)[PINO]).toEqual({ disableLogSending: false })
+  })
+
+  it.each([BUNYAN, PINO, WINSTON])(
+    'sends the records of %s only when the logs pipeline is on',
+    (name) => {
+      // Scenario: sendLogs is one option for every logging library the SDK instruments, so a host
+      // that sets it to false keeps winston and bunyan records off OTLP as well as pino's.
+      const keyOf = (options: TelemetryOptions, plan: SignalPlan): unknown =>
+        (buildInstrumentationConfig(options, plan) as Record<string, unknown>)[name]
+      expect(keyOf({}, logs)).toEqual({ disableLogSending: false })
+      expect(keyOf({}, noLogs)).toEqual({ disableLogSending: true })
+      expect(keyOf({ instrumentations: { sendLogs: false } }, logs)).toEqual({
+        disableLogSending: true
+      })
+      expect(keyOf({ instrumentations: { sendLogs: true } }, noLogs)).toEqual({
+        disableLogSending: false
+      })
+    }
+  )
+
+  it('lets a host override replace the log-sending key of one library', () => {
+    // Scenario: the per-instrumentation override still has the last word for its own library.
+    const config = buildInstrumentationConfig(
+      {
+        instrumentations: {
+          sendLogs: false,
+          overrides: { [WINSTON]: { disableLogSending: false } }
+        }
+      },
+      logs
+    )
+    expect(config[WINSTON]).toEqual({ disableLogSending: false })
+    expect(config[BUNYAN]).toEqual({ disableLogSending: true })
   })
 
   it('lets the host switch pino log forwarding off or on regardless of the environment', () => {
@@ -354,6 +397,16 @@ describe('warnAboutUnsafeOptions', () => {
     )
   })
 
+  it('warns once, with the library code, when the host id is exported', () => {
+    // Scenario: keeping host.id, the machine identifier, in the resource is loud, like the others.
+    warnAboutUnsafeOptions(options({ exportHostId: true }))
+    expect(emitWarning).toHaveBeenCalledTimes(1)
+    expect(emitWarning).toHaveBeenCalledWith(
+      'Host id redaction is disabled: host.id, the machine identifier, is exported in the resource, and it identifies the machine to every collector and backend.',
+      { type: 'SecurityWarning', code: 'BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED' }
+    )
+  })
+
   it('warns once, with the library code, when Redis argument redaction is off', () => {
     // Scenario: the second flag has its own message.
     warnAboutUnsafeOptions(options({ disableRedisArgumentRedaction: true }))
@@ -369,7 +422,7 @@ describe('warnAboutUnsafeOptions', () => {
     warnAboutUnsafeOptions(options({ exportProcessCommandArgs: true }))
     expect(emitWarning).toHaveBeenCalledTimes(1)
     expect(emitWarning).toHaveBeenCalledWith(
-      'Process command-line redaction is disabled: process.command_args and process.command_line are exported in the resource, and command-line arguments can carry secrets.',
+      'Process command-line redaction is disabled: process.command_args, process.command_line and process.command are exported in the resource, and command-line arguments can carry secrets.',
       { type: 'SecurityWarning', code: 'BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED' }
     )
   })
@@ -426,4 +479,49 @@ describe('warnAboutMissingServiceName', () => {
       expect(emitWarning).toHaveBeenCalledTimes(1)
     }
   )
+})
+
+describe('warnAboutOversizedTimers', () => {
+  let emitWarning: jest.SpyInstance
+
+  beforeEach(() => {
+    emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+  })
+
+  it('stays silent when no timer value is too long', () => {
+    // Scenario: the default configuration, and a configuration inside the ceiling, say nothing.
+    warnAboutOversizedTimers(environment())
+    warnAboutOversizedTimers(environment({ OTEL_BSP_SCHEDULE_DELAY: '2147483647' }))
+    expect(emitWarning).not.toHaveBeenCalled()
+  })
+
+  it('warns once per ignored variable, naming it and the ceiling', () => {
+    // Scenario: a delay of 3000000000 used to export once per span; now it is ignored out loud.
+    warnAboutOversizedTimers(
+      environment({ OTEL_BSP_SCHEDULE_DELAY: '3000000000', OTEL_BSP_EXPORT_TIMEOUT: '3000000000' })
+    )
+    expect(emitWarning).toHaveBeenCalledTimes(2)
+    expect(emitWarning).toHaveBeenCalledWith(
+      'OTEL_BSP_SCHEDULE_DELAY is above 2147483647 ms, which a timer cannot hold, so the default applies. Set a value up to 2147483647.',
+      { type: 'Warning', code: 'BYMAX_TELEMETRY_BSP_VALUE_IGNORED' }
+    )
+    expect(emitWarning).toHaveBeenCalledWith(
+      expect.stringContaining('OTEL_BSP_EXPORT_TIMEOUT is above 2147483647 ms'),
+      { type: 'Warning', code: 'BYMAX_TELEMETRY_BSP_VALUE_IGNORED' }
+    )
+  })
+})
+
+describe('the log-sending keys of the installed instrumentations', () => {
+  it.each([BUNYAN, PINO, WINSTON])('%s reads disableLogSending', (name) => {
+    // Scenario: OpenTelemetry renames the key in a later release, or a library moves; a copied
+    // name would never notice, so the installed package is read and must still know the key.
+    const fromBundle = createRequire(require.resolve('@opentelemetry/auto-instrumentations-node'))
+    const dist = dirname(fromBundle.resolve(name))
+    const source = readdirSync(dist)
+      .filter((file) => file.endsWith('.cjs') && !file.endsWith('.d.cts'))
+      .map((file) => readFileSync(join(dist, file), 'utf8'))
+      .join('\n')
+    expect(source).toContain('disableLogSending')
+  })
 })

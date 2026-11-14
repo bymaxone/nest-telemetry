@@ -53,6 +53,28 @@ describe('batch processor tuning from the standard variables', () => {
     await handle.shutdown()
   })
 
+  it('does not export once per span when the schedule delay is longer than a timer holds', async () => {
+    // Scenario: Node clamps a timer of 3000000000 ms to 1 ms, so the delay used to export one
+    // request per span. The value is ignored and the default of five seconds applies, so twenty
+    // spans over a second reach the collector in no request, and the start says why.
+    const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    const handle = await startTelemetry({
+      serviceName: 'api',
+      env: { OTEL_BSP_SCHEDULE_DELAY: '3000000000' }
+    })
+    for (let index = 0; index < 20; index += 1) {
+      trace.getTracer('e2e').startSpan(`span-${index}`).end()
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    expect(collector.bodies).toHaveLength(0)
+    expect(emitWarning).toHaveBeenCalledWith(
+      expect.stringContaining('OTEL_BSP_SCHEDULE_DELAY is above 2147483647 ms'),
+      { type: 'Warning', code: 'BYMAX_TELEMETRY_BSP_VALUE_IGNORED' }
+    )
+    await handle.shutdown()
+    expect(collector.bodies.join('\n')).toContain('span-19')
+  })
+
   it('keeps the SDK defaults when the variables are unusable', async () => {
     // Scenario: blank, non-numeric, non-positive and infinite values are ignored, so the span
     // stays queued until shutdown flushes it.
@@ -225,6 +247,32 @@ describe('the process command line in the exported resource', () => {
     expect(attributes).toHaveProperty(['process.runtime.name'], 'nodejs')
     expect(attributes).toHaveProperty(['process.executable.name'])
     expect(attributes).not.toHaveProperty(['process.command_args'])
+  })
+
+  it('leaves the host id and process.command out of the resource by default', async () => {
+    // Scenario: host.id is the machine identifier and process.command is argv[1], which is the
+    // first argument for `node -e code ARG`. Neither goes to the collector, while host.name stays.
+    const handle = await startAndRecord({ env: {} })
+    await handle.shutdown()
+    const attributes = resourceAttributes(collector.bodies[0] ?? '')
+    expect(attributes).toHaveProperty(['host.name'])
+    expect(attributes).not.toHaveProperty(['host.id'])
+    expect(attributes).not.toHaveProperty(['process.command'])
+  })
+
+  it('exports the host id, with a warning, when the host opts in', async () => {
+    // Scenario: the explicit opt-out does something and is loud.
+    const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    const handle = await startAndRecord({ env: {}, unsafe: { exportHostId: true } })
+    await handle.shutdown()
+    expect(resourceAttributes(collector.bodies[0] ?? '')).toHaveProperty(['host.id'])
+    expect(emitWarning).toHaveBeenCalledWith(
+      expect.stringContaining('Host id redaction is disabled'),
+      {
+        type: 'SecurityWarning',
+        code: 'BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED'
+      }
+    )
   })
 
   it('exports the command line, with a warning, when the host opts in', async () => {

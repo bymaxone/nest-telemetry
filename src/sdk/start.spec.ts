@@ -44,7 +44,11 @@ jest.mock('@opentelemetry/resources', () => {
   const detector = (name: string): { name: string; detect: () => { attributes: object } } => ({
     name,
     detect: () => ({
-      attributes: { [`${name}.id`]: 1, 'process.command_args': ['node', '--api-key=secret'] }
+      attributes: {
+        [`${name}.id`]: 1,
+        'process.command_args': ['node', '--api-key=secret'],
+        'process.command': 'SECRET-FIRST-ARG'
+      }
     })
   })
   return {
@@ -246,22 +250,32 @@ describe('startTelemetry', () => {
       expect(handle.enabled).toBe(true)
     })
 
-    it('selects the resource detectors and removes the process command line by default', async () => {
-      // Scenario: the five built-in detectors run in the SDK's default order, and what the process
-      // detector reports no longer includes the command-line arguments.
+    it('selects the resource detectors and removes the command line and the host id by default', async () => {
+      // Scenario: the five built-in detectors run in the SDK's default order. What the process
+      // detector reports no longer includes the command-line arguments or process.command, and the
+      // host detector no longer reports the machine identifier.
       await startTelemetry({ env: {} })
       const [options] = mockNodeSdk.mock.calls[0] as unknown as [
         { resourceDetectors: { detect: () => { attributes: Record<string, unknown> } }[] }
       ]
       const reports = options.resourceDetectors.map((detector) => detector.detect().attributes)
-      expect(reports.map((attributes) => Object.keys(attributes)[0])).toEqual([
-        'serviceinstance.id',
-        'process.id',
-        'host.id',
-        'os.id',
-        'env.id'
-      ])
+      expect(reports).toHaveLength(5)
+      expect(
+        [reports[0], reports[1], reports[3], reports[4]].map((r) => Object.keys(r ?? {})[0])
+      ).toEqual(['serviceinstance.id', 'process.id', 'os.id', 'env.id'])
       expect(reports[1]).not.toHaveProperty(['process.command_args'])
+      expect(reports[1]).not.toHaveProperty(['process.command'])
+      expect(reports[2]).not.toHaveProperty(['host.id'])
+    })
+
+    it('keeps the host id when the host exports it explicitly', async () => {
+      // Scenario: with exportHostId the host detector is the SDK's own.
+      jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      await startTelemetry({ env: {}, unsafe: { exportHostId: true } })
+      const [options] = mockNodeSdk.mock.calls[0] as unknown as [
+        { resourceDetectors: { detect: () => { attributes: Record<string, unknown> } }[] }
+      ]
+      expect(options.resourceDetectors[2]?.detect().attributes).toHaveProperty(['host.id'])
     })
 
     it('honours OTEL_NODE_RESOURCE_DETECTORS and keeps the command line on explicit opt-in', async () => {
@@ -279,6 +293,7 @@ describe('startTelemetry', () => {
       expect(options.resourceDetectors[0]?.detect().attributes).toHaveProperty([
         'process.command_args'
       ])
+      expect(options.resourceDetectors[0]?.detect().attributes).toHaveProperty(['process.command'])
     })
 
     it('registers the handle for the application to drain', async () => {
@@ -521,6 +536,27 @@ describe('startTelemetry', () => {
         type: 'Warning',
         code: 'BYMAX_TELEMETRY_EXPORT_FAILED'
       })
+    })
+  })
+
+  describe('a batch-processor timer value a timer cannot hold', () => {
+    it('is left out of the processor config and said out loud', async () => {
+      // Scenario: a delay of 3000000000 ms made the SDK export once per span. The value is not
+      // handed to the processor, so its default applies, and the start names the variable.
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      await startTelemetry({
+        serviceName: 'api',
+        env: { OTEL_BSP_SCHEDULE_DELAY: '3000000000', OTEL_BSP_EXPORT_TIMEOUT: '20000' }
+      })
+      expect(mockBatchSpanProcessor).toHaveBeenCalledWith({
+        exporter: expect.objectContaining({ kind: 'exporter' }),
+        exportTimeoutMillis: 20000
+      })
+      expect(emitWarning).toHaveBeenCalledTimes(1)
+      expect(emitWarning).toHaveBeenCalledWith(
+        expect.stringContaining('OTEL_BSP_SCHEDULE_DELAY is above 2147483647 ms'),
+        { type: 'Warning', code: 'BYMAX_TELEMETRY_BSP_VALUE_IGNORED' }
+      )
     })
   })
 

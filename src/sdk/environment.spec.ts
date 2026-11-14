@@ -160,6 +160,62 @@ describe('readTelemetryEnvironment', () => {
       }
     )
 
+    it.each([
+      ['OTEL_BSP_SCHEDULE_DELAY', 'scheduledDelayMillis'],
+      ['OTEL_BSP_EXPORT_TIMEOUT', 'exportTimeoutMillis']
+    ])('accepts %s at the largest value a timer holds', (name, key) => {
+      // Scenario: the ceiling is inclusive, so 2147483647 ms, about 24.8 days, is still a value.
+      const env = readTelemetryEnvironment({ [name]: '2147483647' })
+      expect(env.batchSpanProcessor).toEqual({ [key]: 2147483647 })
+      expect(env.oversizedTimers).toEqual([])
+    })
+
+    it.each([
+      ['OTEL_BSP_SCHEDULE_DELAY', 'OTEL_BSP_SCHEDULE_DELAY'],
+      ['OTEL_BSP_EXPORT_TIMEOUT', 'OTEL_BSP_EXPORT_TIMEOUT']
+    ])('ignores %s above the largest value a timer holds, and names it', (name) => {
+      // Scenario: Node clamps a longer timer to 1 ms, so a delay of 3000000000 exported once per
+      // span. The value is ignored, the SDK default applies, and the variable is named so the
+      // start can say so.
+      const env = readTelemetryEnvironment({ [name]: '3000000000' })
+      expect(env.batchSpanProcessor).toEqual({})
+      expect(env.oversizedTimers).toEqual([name])
+    })
+
+    it('names each oversized timer once, in a stable order', () => {
+      // Scenario: both timers are too long.
+      const env = readTelemetryEnvironment({
+        OTEL_BSP_EXPORT_TIMEOUT: '2147483648',
+        OTEL_BSP_SCHEDULE_DELAY: '1e12'
+      })
+      expect(env.oversizedTimers).toEqual(['OTEL_BSP_SCHEDULE_DELAY', 'OTEL_BSP_EXPORT_TIMEOUT'])
+    })
+
+    it('does not apply the timer ceiling to the sizes', () => {
+      // Scenario: a queue or a batch size is not fed to a timer, so a large one is the host's call.
+      const env = readTelemetryEnvironment({
+        OTEL_BSP_MAX_QUEUE_SIZE: '3000000000',
+        OTEL_BSP_MAX_EXPORT_BATCH_SIZE: '3000000000'
+      })
+      expect(env.batchSpanProcessor).toEqual({
+        maxQueueSize: 3000000000,
+        maxExportBatchSize: 3000000000
+      })
+      expect(env.oversizedTimers).toEqual([])
+    })
+
+    it.each(['abc', '0', '-5', 'Infinity'])(
+      'does not name a timer whose value is unusable for another reason (%p)',
+      (value) => {
+        // Scenario: only a value that is too long is reported; the others keep being ignored quietly.
+        const env = readTelemetryEnvironment({
+          OTEL_BSP_SCHEDULE_DELAY: value,
+          OTEL_BSP_EXPORT_TIMEOUT: value
+        })
+        expect(env.oversizedTimers).toEqual([])
+      }
+    )
+
     it('keeps the variables independent of each other', () => {
       // Scenario: one usable and three unusable values map only the usable one.
       const env = readTelemetryEnvironment({
