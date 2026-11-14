@@ -234,6 +234,17 @@ A start after a shutdown in the same process is refused: `startTelemetry` reject
 
 ---
 
+## 🏭 Production
+
+Every figure here was measured on one laptop, with Node 24 and a handler that does nothing but answer. Read them as orders of magnitude for your own measurement to confirm, not as promises.
+
+- **Sampling.** The default samples every trace. For high traffic set `OTEL_TRACES_SAMPLER=parentbased_traceidratio` and `OTEL_TRACES_SAMPLER_ARG=0.1`. Of 2,000 spans created in one run each, the default exported all of them, a ratio of `0.1` exported 210 and a ratio of `0.01` exported 25.
+- **TLS to the collector.** Against a collector whose certificate Node does not trust, every export failed with `self-signed certificate`. Setting `OTEL_EXPORTER_OTLP_CERTIFICATE` to the CA file, or `NODE_EXTRA_CA_CERTS`, exported all 2,000 spans in the same setup.
+- **A collector that is down.** The batch is dropped and the library emits `BYMAX_TELEMETRY_EXPORT_FAILED`, at most once a minute. Shutdown stops waiting at `shutdownTimeoutMs`, 5 seconds by default. Before that deadline existed, shutdown against a closed port took 7,048 ms and 7,214 ms in two runs.
+- **CPU.** One process, 4 runs per mode, median CPU time per request: 25 µs without the library, 26 µs with it loaded and disabled, 58 µs with a healthy collector (range 35 to 66) and 43 µs with the collector down (range 26 to 65). The extra cost in that handler is roughly 10 to 40 µs per request, and a handler that does real I/O dilutes it. The same configuration varied by up to a factor of two between runs.
+- **Memory.** After 10 seconds idle, RSS was 61 to 63 MB without the library and with it disabled, 83 to 95 MB with a healthy collector and 142 to 160 MB with the collector unreachable. Under sustained load with the collector unreachable, the default settings reached between about 195 and 310 MB in one 90-second run.
+- **Small containers.** `node --max-semi-space-size=8` is an optional V8 lever that shrinks the young generation. Under the same unreachable-collector load, RSS had a median of 138 MB (maximum 158) against about 195 to 310 MB for the default settings. The memory figures are one run each, so they are noisy, and a setting of 4 did not do better than 8 (RSS levelled at about 220 MB). At 1,000 requests per second against an unreachable collector, p99 latency over three runs each was 3.6 to 7.3 ms with the default settings and 4.8 to 6.8 ms with 8, so no cost showed at that load. The extra memory with the collector down is most likely churn from failed exports, which was not measured separately.
+
 ## 🔄 OpenTelemetry Versions
 
 Every `@opentelemetry/*` package is an optional peer. The `0.x` packages break between minors, and `sdk-node` pins its own dependencies to exact versions, so the ranges here name only the generation the tests run against:
@@ -414,6 +425,7 @@ By design, the following are out of scope:
 - ❌ **Redact baggage**
 - ❌ **Redact request and response bodies, or HTTP headers** — they are not captured by default, and they are not redacted if you enable capturing them
 - ❌ **Redact attributes your own code sets**
+- ❌ **Redact log records forwarded through `OTEL_LOGS_EXPORTER`** — the library redacts spans, and a log record is exported as the logger produced it, so redact in the logger. Measured with `@bymax-one/nest-logger` 1.4.16, which redacts before it hands the record over: a password and a nested token never reached the collector, and the `[REDACTED]` marker did. A plain pino logger with no redaction exported its password
 - ❌ **Choose a sampler** — configure `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG`
 - ❌ **Run a collector or a backend** — point `OTEL_EXPORTER_OTLP_ENDPOINT` at one
 - ❌ **Decide your span names** — those come from the instrumentations and from your code
