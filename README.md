@@ -379,7 +379,7 @@ pnpm check:runtime     # packed-tarball consumer proofs
 | `InstrumentationOptions`        | type                                                       | `fs`, `sendLogs` and `overrides`                                                                                                                              |
 | `IncomingRequestTarget`         | type                                                       | What an incoming-request predicate sees: the request `url`                                                                                                    |
 
-`ignorePaths` copies each pattern without its `g` and `y` flags, which would keep state between calls. Anchor the patterns at both ends, with no nested quantifiers: an unanchored one also matches routes that merely contain the word, and `/^\/(a+)+$/` took about 2.5 s on a 28-character path, doubling with each character.
+`ignorePaths` copies each pattern without its `g` and `y` flags, which would keep state between calls. Anchor the patterns at both ends, with no nested quantifiers: an unanchored one also matches routes that merely contain the word, and `/^\/(a+)+$/` took about 2.5 s on a 28-character path, growing about 1.5 times with each added character.
 
 ### Register: `@bymax-one/nest-telemetry/register`
 

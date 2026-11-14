@@ -17,7 +17,7 @@ const MAX_PATH_LENGTH = 2048
  * and the patterns are not run against it, which bounds the work a long path can cause. Anchor
  * the patterns at both ends and give them no nested quantifiers such as `(a+)+`: an unanchored
  * pattern also matches routes that merely contain the word, and the cap does not bound a nested
- * quantifier on a short path: `/^\/(a+)+$/` took about 2.5 s on 28 characters, doubling with each one.
+ * quantifier on a short path: `/^\/(a+)+$/` took about 2.5 s on 28 characters, growing about 1.5 times with each added one.
  *
  * @param patterns - Patterns tested against the path alone.
  * @returns A predicate for `TelemetryOptions.ignoreIncomingRequest`.
