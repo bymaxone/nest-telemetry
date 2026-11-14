@@ -367,19 +367,19 @@ pnpm check:runtime     # packed-tarball consumer proofs
 
 ### SDK: `@bymax-one/nest-telemetry`
 
-| Export                          | Signature                                                  | Purpose                                                                                                                                              |
-| ------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `startTelemetry`                | `(options?: TelemetryOptions) => Promise<TelemetryHandle>` | Assembles and starts the SDK; returns the running handle when one exists; rejects when the SDK cannot start or was already shut down in this process |
-| `shutdownTelemetry`             | `() => Promise<void>`                                      | Waits for a start in progress, then flushes and stops the SDK; resolves at once when none was started                                                |
-| `ignorePaths`                   | `(patterns: readonly RegExp[]) => (request) => boolean`    | Predicate for `ignoreIncomingRequest`: matches the request path with its query cut; a request with no target is not matched                          |
-| `DEFAULT_REDACTED_QUERY_PARAMS` | `readonly string[]`                                        | The credential-parameter list redacted from outgoing request URLs                                                                                    |
-| `TelemetryOptions`              | type                                                       | The options of `startTelemetry` ([Configuration](#-configuration))                                                                                   |
-| `TelemetryHandle`               | type                                                       | `{ enabled: boolean, shutdown(): Promise<void> }`                                                                                                    |
-| `UnsafeOptions`                 | type                                                       | The literal-`true` redaction opt-outs                                                                                                                |
-| `InstrumentationOptions`        | type                                                       | `fs`, `sendLogs` and `overrides`                                                                                                                     |
-| `IncomingRequestTarget`         | type                                                       | What an incoming-request predicate sees: the request `url`                                                                                           |
+| Export                          | Signature                                                  | Purpose                                                                                                                                                       |
+| ------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `startTelemetry`                | `(options?: TelemetryOptions) => Promise<TelemetryHandle>` | Assembles and starts the SDK; returns the running handle when one exists; rejects when the SDK cannot start or was already shut down in this process          |
+| `shutdownTelemetry`             | `() => Promise<void>`                                      | Waits for a start in progress, then flushes and stops the SDK; resolves at once when none was started                                                         |
+| `ignorePaths`                   | `(patterns: readonly RegExp[]) => (request) => boolean`    | Predicate for `ignoreIncomingRequest`: matches the request path with its query cut; a request with no target, or a path over 2,048 characters, is not matched |
+| `DEFAULT_REDACTED_QUERY_PARAMS` | `readonly string[]`                                        | The credential-parameter list redacted from outgoing request URLs                                                                                             |
+| `TelemetryOptions`              | type                                                       | The options of `startTelemetry` ([Configuration](#-configuration))                                                                                            |
+| `TelemetryHandle`               | type                                                       | `{ enabled: boolean, shutdown(): Promise<void> }`                                                                                                             |
+| `UnsafeOptions`                 | type                                                       | The literal-`true` redaction opt-outs                                                                                                                         |
+| `InstrumentationOptions`        | type                                                       | `fs`, `sendLogs` and `overrides`                                                                                                                              |
+| `IncomingRequestTarget`         | type                                                       | What an incoming-request predicate sees: the request `url`                                                                                                    |
 
-`ignorePaths` copies each pattern without its `g` and `y` flags, which would keep state between calls. Anchor the patterns at both ends; an unanchored one also matches routes that merely contain the word.
+`ignorePaths` copies each pattern without its `g` and `y` flags, which would keep state between calls. Anchor the patterns at both ends, with no nested quantifiers: an unanchored one also matches routes that merely contain the word, and `/^\/(a+)+$/` took 2.5 s and 5.5 s in two runs on a 28-character path, and the time grows exponentially with the length.
 
 ### Register: `@bymax-one/nest-telemetry/register`
 

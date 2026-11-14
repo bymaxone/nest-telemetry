@@ -156,4 +156,16 @@ describe('warnOnExportFailure', () => {
     expect(seen).toHaveLength(1)
     expect(seen[0]).toBe(failure)
   })
+
+  it('keeps its window on a monotonic clock by default, not the wall clock', () => {
+    // Scenario: a wall clock stepped backwards would suppress the warning for as long as the step
+    // during a real outage, so the default time source must not be Date.now.
+    const wall = jest.spyOn(Date, 'now')
+    const double = fakeExporter()
+    double.next = { code: FAILED, error: new Error('x') }
+    warnOnExportFailure(double.exporter, 'otlp-http traces')
+    exportOnce(double.exporter)
+    expect(emitWarning).toHaveBeenCalledTimes(1)
+    expect(wall).not.toHaveBeenCalled()
+  })
 })
