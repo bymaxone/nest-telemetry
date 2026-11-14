@@ -12,9 +12,7 @@ heading here.
 
 ### Security
 
-- **`host.id` is no longer exported by default.** The host detector reported the machine identifier,
-  the platform UUID or `/etc/machine-id`, a stable hardware id that systemd calls confidential, to every
-  collector and backend. It is dropped from the resource, and `host.name` stays. `unsafe.exportHostId: true`
+- **`host.id` is no longer exported by default.** It is dropped from the resource, and `host.name` stays. `unsafe.exportHostId: true`
   keeps it and emits a `SecurityWarning`.
 - **`process.command` is dropped with the command-line attributes.** It is `argv[1]`, which for
   `node -e code ARG` is the first argument. `unsafe.exportProcessCommandArgs: true` keeps it, with
