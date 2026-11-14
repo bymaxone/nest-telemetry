@@ -72,7 +72,7 @@ Install it with the OpenTelemetry peers you use: the command is in [Quick Start]
 - ✅ **Span-end query redaction** — `url.query` is replaced and the query is cut from `url.full`, `http.url` and `http.target`, on spans from any instrumentation
 - ✅ **Outgoing-URL credential list** — A list of credential-bearing parameters, checked in a test against the SDK's own default list; a host can add names and never drop them
 - ✅ **Redis commands reduced to their name** — for `ioredis` and node-redis (`redis`), arguments and keys never leave the process, `EVAL` and `EVALSHA` payloads included
-- ✅ **Command line kept out of the resource** — `process.command_args` and `process.command_line` are dropped
+- ✅ **Command line kept out of the resource** — `process.command_args`, `process.command_line` and `process.command` are dropped
 - ✅ **Explicit, loud opt-outs** — Each off switch is a literal `unsafe.*: true` and emits a `SecurityWarning`
 
 ---
@@ -172,12 +172,13 @@ Every field is the host's policy, and none is required.
 | `serviceVersion`                       | none                         | The service version.                                                                                                                                                           |
 | `ignoreIncomingRequest`                | none                         | Returns `true` for an incoming request that must produce no server span. `ignorePaths(patterns)` builds one from anchored patterns.                                            |
 | `instrumentations.fs`                  | `false`                      | File-system instrumentation.                                                                                                                                                   |
-| `instrumentations.sendLogs`            | follows `OTEL_LOGS_EXPORTER` | Whether pino's records are forwarded to the OpenTelemetry logs pipeline.                                                                                                       |
+| `instrumentations.sendLogs`            | follows `OTEL_LOGS_EXPORTER` | Whether the records of pino, winston and bunyan are forwarded to the OpenTelemetry logs pipeline.                                                                              |
 | `instrumentations.overrides`           | none                         | Per-instrumentation configuration, merged over the library's. Redaction settings cannot be replaced here.                                                                      |
 | `extraRedactedQueryParams`             | none                         | Names added to the list redacted from outgoing request URLs. They add to the defaults and never replace them.                                                                  |
 | `unsafe.disableUrlRedaction`           | off                          | Keeps `url.query`, `url.full`, `http.url` and `http.target` as recorded. Literal `true`. Warns.                                                                                |
 | `unsafe.disableRedisArgumentRedaction` | off                          | Keeps Redis command arguments in `db.query.text`. Literal `true`. Warns.                                                                                                       |
-| `unsafe.exportProcessCommandArgs`      | off                          | Keeps `process.command_args` and `process.command_line` in the resource. Literal `true`. Warns.                                                                                |
+| `unsafe.exportProcessCommandArgs`      | off                          | Keeps `process.command_args`, `process.command_line` and `process.command` in the resource. Literal `true`. Warns.                                                             |
+| `unsafe.exportHostId`                  | off                          | Keeps `host.id`, the machine identifier, in the resource. Literal `true`. Warns.                                                                                               |
 | `shutdownTimeoutMs`                    | `5000`                       | The longest shutdown waits for the final flush. Past it, shutdown warns and resolves. A value that is not a finite number above zero, or is above `120000`, means the default. |
 | `env`                                  | the process environment      | The environment the library reads. The OpenTelemetry SDK itself always reads the process environment.                                                                          |
 
@@ -185,13 +186,13 @@ Every field is the host's policy, and none is required.
 
 The library reads these in one source file, and a test fails if any other file names `process.env`:
 
-| Variable                                                                                                          | Effect                                                                                                                                    |
-| ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `OTEL_SDK_DISABLED`                                                                                               | `true` disables the SDK, in any letter case and with surrounding whitespace ignored, as the SDK reads it.                                 |
-| `OTEL_SERVICE_NAME`                                                                                               | Service name; overrides the option, because the operator's standard variable wins over what the code chose. Blank values count as absent. |
-| `OTEL_METRICS_EXPORTER`, `OTEL_LOGS_EXPORTER`                                                                     | Metrics and logs are exported only when these name an exporter.                                                                           |
-| `OTEL_BSP_MAX_QUEUE_SIZE`, `OTEL_BSP_SCHEDULE_DELAY`, `OTEL_BSP_EXPORT_TIMEOUT`, `OTEL_BSP_MAX_EXPORT_BATCH_SIZE` | Mapped onto the batch span processor the library passes; the SDK applies them only to one it builds itself.                               |
-| `OTEL_NODE_RESOURCE_DETECTORS`                                                                                    | Selects resource detectors, under the specification's names (`service`, `host`, `process`) and the SDK's older ones.                      |
+| Variable                                                                                                          | Effect                                                                                                                                                                                                                        |
+| ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OTEL_SDK_DISABLED`                                                                                               | `true` disables the SDK, in any letter case and with surrounding whitespace ignored, as the SDK reads it.                                                                                                                     |
+| `OTEL_SERVICE_NAME`                                                                                               | Service name; overrides the option, because the operator's standard variable wins over what the code chose. Blank values count as absent.                                                                                     |
+| `OTEL_METRICS_EXPORTER`, `OTEL_LOGS_EXPORTER`                                                                     | Metrics and logs are exported only when these name an exporter.                                                                                                                                                               |
+| `OTEL_BSP_MAX_QUEUE_SIZE`, `OTEL_BSP_SCHEDULE_DELAY`, `OTEL_BSP_EXPORT_TIMEOUT`, `OTEL_BSP_MAX_EXPORT_BATCH_SIZE` | Mapped onto the batch span processor the library passes; the SDK applies them only to one it builds itself. A schedule delay or export timeout above 2147483647 ms is ignored with a warning, because a timer cannot hold it. |
+| `OTEL_NODE_RESOURCE_DETECTORS`                                                                                    | Selects resource detectors, under the specification's names (`service`, `host`, `process`) and the SDK's older ones.                                                                                                          |
 
 The OpenTelemetry SDK reads these itself, and the library never touches them: `OTEL_EXPORTER_OTLP_*`, `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG`, `OTEL_RESOURCE_ATTRIBUTES`.
 
@@ -215,6 +216,7 @@ The start emits these warnings:
 | `BYMAX_TELEMETRY_RESTART_UNSUPPORTED`       | `startTelemetry` was called after a shutdown in the same process, and is refused.                                                                                                                                                                                                                                              |
 | `BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT`          | The final flush did not finish within `shutdownTimeoutMs`. Shutdown resolved without it, and spans still queued may be lost. With `TelemetryModule` and a bound `TELEMETRY_LOGGER`, it is reported through `errorStructured` under `TRACING_SHUTDOWN_TIMEOUT` instead.                                                         |
 | `BYMAX_TELEMETRY_EXPORT_FAILED`             | A span export failed, so the batch was dropped. The warning names the exporter and a short error code, never the payload or the endpoint, and repeats at most once a minute. With `TelemetryModule` and a bound `TELEMETRY_LOGGER` that has `warnStructured`, it is reported through it under `TRACING_EXPORT_FAILED` instead. |
+| `BYMAX_TELEMETRY_BSP_VALUE_IGNORED`         | An `OTEL_BSP_SCHEDULE_DELAY` or `OTEL_BSP_EXPORT_TIMEOUT` above 2147483647 ms was ignored, because a timer cannot hold it and Node would clamp it to 1 ms. The default applies.                                                                                                                                                |
 
 The programmatic `startTelemetry` keeps its rejection when the SDK cannot start, for callers that want it.
 
@@ -313,7 +315,7 @@ The layers are in the [Security Table](#-security-table) below.
 
 ### Exported on purpose
 
-The resource carries `host.name`, `os.*`, `process.pid`, `process.owner`, the executable path and runtime facts, and `service.instance.id`. They identify the instance during an incident. If you do not want them, set `OTEL_NODE_RESOURCE_DETECTORS`.
+The resource carries `host.name`, `os.*`, `process.pid`, `process.owner`, the executable path and runtime facts, and `service.instance.id`. They identify the instance during an incident. If you do not want them, set `OTEL_NODE_RESOURCE_DETECTORS`. It does not carry `host.id`, the machine identifier: that is a stable hardware id, the platform UUID or `/etc/machine-id`, and it is dropped unless you set `unsafe.exportHostId`.
 
 ### How this is verified
 
@@ -330,7 +332,8 @@ What is **not** redacted is listed flat in [What This Library Does NOT Do](#-wha
 | Query redaction      | `url.query` is replaced by `[redacted]` and the query is cut from `url.full`, `http.url` and `http.target` as each span ends, for any instrumentation                                                                                                   |
 | Outgoing URLs        | The HTTP instrumentation redacts a credential-parameter list (`token`, `code`, `access_token`, `signature`, `X-Amz-*`, and more); hosts add names, never drop them; a test compares the list with the SDK's own, so a name the SDK adds later is caught |
 | Redis                | `db.query.text` holds the command name only, for `ioredis` and node-redis; `EVAL` and `EVALSHA` payloads, which carry `KEYS` and `ARGV`, and every key never leave the process                                                                          |
-| Process command line | `process.command_args` and `process.command_line` are dropped from the resource, because command-line arguments are a common carrier of secrets                                                                                                         |
+| Process command line | `process.command_args`, `process.command_line` and `process.command` are dropped from the resource, because command-line arguments are a common carrier of secrets                                                                                      |
+| Host id              | `host.id`, the machine identifier (the platform UUID, or `/etc/machine-id`), is dropped from the resource; `host.name` stays                                                                                                                            |
 | Opt-outs             | Literal `unsafe.*: true` options only, each emitting a `SecurityWarning`; no environment variable turns redaction off                                                                                                                                   |
 | Overrides            | `instrumentations.overrides` is merged under the library's redaction, which is applied again on top                                                                                                                                                     |
 | Environment          | Read in one module; a test fails if any other file names `process.env`                                                                                                                                                                                  |

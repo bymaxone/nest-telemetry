@@ -1,11 +1,12 @@
 /**
- * @fileoverview Selection of the resource detectors, and removal of the process command line from
- * what they report.
+ * @fileoverview Selection of the resource detectors, and removal of the process command line and the
+ * host id from what they report.
  * @layer sdk
  *
  * The OTel SDK runs the process detector by default, and that detector reports the whole command
- * line of the process. Command-line arguments are a common carrier of secrets, so the library runs
- * its own selection and leaves them out unless the host opts in.
+ * line of the process, and the host detector reports the machine identifier. Command-line arguments
+ * are a common carrier of secrets and the machine identifier is a stable hardware id, so the library
+ * runs its own selection and leaves both out unless the host opts in.
  */
 import type { ResourceDetector } from '@opentelemetry/resources'
 
@@ -18,8 +19,26 @@ export interface DetectorMap {
   readonly serviceinstance: ResourceDetector
 }
 
-/** The attributes that carry the command line of the process. */
-const COMMAND_LINE_ATTRIBUTES = ['process.command_args', 'process.command_line'] as const
+/**
+ * The attributes that carry the command line of the process. `process.command` is `argv[1]`, which
+ * for `node -e code ARG` is the first argument.
+ */
+const COMMAND_LINE_ATTRIBUTES = [
+  'process.command_args',
+  'process.command_line',
+  'process.command'
+] as const
+
+/** The attribute that carries the machine identifier. */
+const HOST_ID_ATTRIBUTES = ['host.id'] as const
+
+/** What the resource keeps of the two sensitive groups of attributes. */
+export interface ResourceKeeps {
+  /** Whether the process command line stays in the resource. */
+  readonly keepCommandLine: boolean
+  /** Whether `host.id`, the machine identifier, stays in the resource. */
+  readonly keepHostId: boolean
+}
 
 /** The name of one of the detectors. */
 type DetectorName = keyof DetectorMap
@@ -83,17 +102,21 @@ export function withoutAttributes(
  *
  * @param selection - The names in `OTEL_NODE_RESOURCE_DETECTORS`, or `undefined` when it is unset.
  * @param detectors - The detectors by name.
- * @param keepCommandLine - Whether the process command line stays in the resource.
+ * @param keeps - Which of the command line and the host id stay in the resource.
  * @returns The detectors to run, in order, each once. Unknown names are skipped, as the SDK skips them.
  */
 export function selectResourceDetectors(
   selection: readonly string[] | undefined,
   detectors: DetectorMap,
-  keepCommandLine: boolean
+  keeps: ResourceKeeps
 ): ResourceDetector[] {
-  const available: DetectorMap = keepCommandLine
-    ? detectors
-    : { ...detectors, process: withoutAttributes(detectors.process, COMMAND_LINE_ATTRIBUTES) }
+  const available: DetectorMap = {
+    ...detectors,
+    process: keeps.keepCommandLine
+      ? detectors.process
+      : withoutAttributes(detectors.process, COMMAND_LINE_ATTRIBUTES),
+    host: keeps.keepHostId ? detectors.host : withoutAttributes(detectors.host, HOST_ID_ATTRIBUTES)
+  }
   if (selection?.includes('none') === true && !selection.includes('all')) {
     return []
   }

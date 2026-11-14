@@ -8,6 +8,47 @@ The `release.yml` workflow extracts the section matching the pushed `vX.Y.Z` tag
 as the GitHub Release body, so each released version needs a matching `## [X.Y.Z]`
 heading here.
 
+## [1.0.4] - 2026-11-14
+
+### Security
+
+- **`host.id` is no longer exported by default.** It is dropped from the resource, and `host.name` stays. `unsafe.exportHostId: true`
+  keeps it and emits a `SecurityWarning`.
+- **`process.command` is dropped with the command-line attributes.** It is `argv[1]`, which for
+  `node -e code ARG` is the first argument. `unsafe.exportProcessCommandArgs: true` keeps it, with
+  `process.command_args` and `process.command_line`.
+
+### Fixed
+
+- **A batch-processor timer value a timer cannot hold is ignored.** An `OTEL_BSP_SCHEDULE_DELAY` above
+  2147483647 ms reached `setTimeout`, which Node clamps to 1 ms, and the SDK exported once per span: 40
+  exports in 2 seconds in a measurement, against none at the default. An `OTEL_BSP_EXPORT_TIMEOUT` above it
+  became a 1 ms timeout on the processor side. Both are now ignored, the default applies, and
+  `BYMAX_TELEMETRY_BSP_VALUE_IGNORED` names the variable. The two sizes are not timers and are not limited.
+- **`instrumentations.sendLogs: false` now keeps winston and bunyan records off the logs pipeline too.** It
+  set the log-sending key of pino only, so with `OTEL_LOGS_EXPORTER=otlp` the records of the other two were
+  forwarded whatever the option said. One option now sets the key of all three.
+
+### Added
+
+- `unsafe.exportHostId` on `UnsafeOptions`.
+- `BYMAX_TELEMETRY_BSP_VALUE_IGNORED`: a timer variable was ignored for being longer than a timer holds.
+
+### Apply to a derived backend
+
+The declarations gained `unsafe.exportHostId`; a derived backend acts on these behaviours:
+
+1. A dashboard, an alert or a join keyed on `host.id` stops matching. Key it on `host.name` or
+   `service.instance.id`, or set `unsafe.exportHostId: true` and accept that the machine identifier goes to
+   every collector and backend.
+2. A query that reads `process.command` stops matching. `service.name` and `process.executable.path` identify
+   the process, or set `unsafe.exportProcessCommandArgs: true`.
+3. An application that set `instrumentations.sendLogs: false` and uses winston or bunyan with
+   `OTEL_LOGS_EXPORTER=otlp` stops sending those records to the logs pipeline. Set `sendLogs: true`, or an
+   override for the one library, to keep them.
+4. An `OTEL_BSP_SCHEDULE_DELAY` or `OTEL_BSP_EXPORT_TIMEOUT` above 2147483647 now falls back to the default
+   with a warning. Set a value up to 2147483647.
+
 ## [1.0.3] - 2026-11-14
 
 ### Added
@@ -166,6 +207,7 @@ First release.
 - Verification from the packed tarball: real `node --import` processes in a CommonJS and a native-ESM
   application, with planted secrets absent from the exported body and negative controls.
 
+[1.0.4]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.3
 [1.0.2]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.2
 [1.0.1]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.1

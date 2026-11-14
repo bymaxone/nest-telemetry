@@ -6,14 +6,15 @@ import type { ResourceDetector } from '@opentelemetry/resources'
 import { selectResourceDetectors, withoutAttributes } from './resource-detectors'
 import type { DetectorMap } from './resource-detectors'
 
-/** A detector that reports one attribute of its own plus the two command-line attributes. */
+/** A detector that reports one attribute of its own plus the command-line attributes. */
 function fakeDetector(name: string): ResourceDetector {
   return {
     detect: () => ({
       attributes: {
         [`${name}.id`]: name,
         'process.command_args': ['node', '--api-key=secret'],
-        'process.command_line': 'node --api-key=secret'
+        'process.command_line': 'node --api-key=secret',
+        'process.command': 'SECRET-FIRST-ARG'
       }
     })
   }
@@ -77,10 +78,16 @@ describe('withoutAttributes', () => {
   })
 })
 
+/** Neither the command line nor the host id is removed. */
+const KEEP_ALL = { keepCommandLine: true, keepHostId: true }
+
+/** The default: both are removed. */
+const KEEP_NONE = { keepCommandLine: false, keepHostId: false }
+
 describe('selectResourceDetectors', () => {
   /** The names of the detectors a selection runs, read from what each one reports first. */
-  function selected(selection: readonly string[] | undefined, keepCommandLine = true): string[] {
-    return selectResourceDetectors(selection, detectors, keepCommandLine).map(
+  function selected(selection: readonly string[] | undefined): string[] {
+    return selectResourceDetectors(selection, detectors, KEEP_ALL).map(
       (detector) => reported(detector)[0]?.replace('.id', '') ?? ''
     )
   }
@@ -123,31 +130,59 @@ describe('selectResourceDetectors', () => {
 
   it('removes the process command line from the process detector only', () => {
     // Scenario: the command line goes by default, and the other detectors, whose attributes the
-    // operator chose, are not touched.
-    const run = selectResourceDetectors(undefined, detectors, false)
+    // operator chose, are not touched. process.command is part of it: with `node -e code ARG` it
+    // is the first argument.
+    const run = selectResourceDetectors(undefined, detectors, KEEP_NONE)
     expect(reported(run[1])).toEqual(['process.id'])
     expect(reported(run[0])).toEqual([
       'serviceinstance.id',
       'process.command_args',
-      'process.command_line'
+      'process.command_line',
+      'process.command'
     ])
   })
 
   it('keeps the process command line when the host exports it explicitly', () => {
     // Scenario: with exportProcessCommandArgs the process detector is the SDK's own.
-    expect(selectResourceDetectors(undefined, detectors, true)[1]).toBe(detectors.process)
+    const run = selectResourceDetectors(undefined, detectors, {
+      keepCommandLine: true,
+      keepHostId: false
+    })
+    expect(run[1]).toBe(detectors.process)
   })
 
   it('still removes the command line from a process detector selected by name', () => {
     // Scenario: choosing the detector explicitly does not bring the command line back.
-    const [only] = selectResourceDetectors(['process'], detectors, false)
+    const [only] = selectResourceDetectors(['process'], detectors, KEEP_NONE)
     expect(reported(only)).toEqual(['process.id'])
+  })
+
+  it('removes host.id from the host detector by default, and only that attribute', () => {
+    // Scenario: host.id is the machine identifier, a stable hardware id, so it does not go to every
+    // collector. The detector's other attributes, host.name among them, stay.
+    const hostWithName: DetectorMap = {
+      ...detectors,
+      host: {
+        detect: () => ({ attributes: { 'host.id': 'MACHINE-ID', 'host.name': 'web-1' } })
+      }
+    }
+    const [only] = selectResourceDetectors(['host'], hostWithName, KEEP_NONE)
+    expect(only?.detect().attributes).toEqual({ 'host.name': 'web-1' })
+  })
+
+  it('keeps host.id, and the host detector itself, when the host exports it explicitly', () => {
+    // Scenario: with exportHostId the host detector is the SDK's own.
+    const run = selectResourceDetectors(['host'], detectors, {
+      keepCommandLine: false,
+      keepHostId: true
+    })
+    expect(run[0]).toBe(detectors.host)
   })
 
   it('does not return a detector that was not selected', () => {
     // Scenario: the list holds the detector objects themselves, not copies, so a selection of one
     // name never carries another.
-    expect(selectResourceDetectors(['os'], detectors, true)).toEqual([detectors.os])
+    expect(selectResourceDetectors(['os'], detectors, KEEP_ALL)).toEqual([detectors.os])
   })
 })
 
@@ -173,7 +208,7 @@ describe('the names the installed SDK accepts', () => {
     for (const name of names) {
       expect({
         name,
-        selected: selectResourceDetectors([name], detectors, true).length > 0
+        selected: selectResourceDetectors([name], detectors, KEEP_ALL).length > 0
       }).toEqual({
         name,
         selected: true

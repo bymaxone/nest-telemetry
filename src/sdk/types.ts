@@ -24,10 +24,17 @@ export interface UnsafeOptions {
   /** Keeps Redis command arguments in `db.query.text`, including `EVAL` and `EVALSHA` payloads. */
   readonly disableRedisArgumentRedaction?: true
   /**
-   * Keeps `process.command_args` and `process.command_line` in the exported resource. They are
-   * removed by default, because command-line arguments are a common carrier of secrets.
+   * Keeps `process.command_args`, `process.command_line` and `process.command` in the exported
+   * resource. They are removed by default, because command-line arguments are a common carrier of
+   * secrets, and `process.command` is the first argument for `node -e code ARG`.
    */
   readonly exportProcessCommandArgs?: true
+  /**
+   * Keeps `host.id` in the exported resource. It is removed by default: it is the machine
+   * identifier (the platform UUID, or `/etc/machine-id`), a stable hardware id that every collector
+   * and backend would see. `host.name` stays.
+   */
+  readonly exportHostId?: true
 }
 
 /** Instrumentation choices that are the host's policy, with their safe defaults. */
@@ -35,8 +42,8 @@ export interface InstrumentationOptions {
   /** File-system instrumentation. Off by default: it floods traces with context-free disk activity. */
   readonly fs?: boolean
   /**
-   * Whether pino's records are forwarded to the OpenTelemetry logs pipeline. Defaults to whether
-   * `OTEL_LOGS_EXPORTER` names an exporter that exports logs.
+   * Whether the records of pino, winston and bunyan are forwarded to the OpenTelemetry logs
+   * pipeline. Defaults to whether `OTEL_LOGS_EXPORTER` names an exporter that exports logs.
    */
   readonly sendLogs?: boolean
   /**

@@ -19,6 +19,9 @@ export interface BatchSpanProcessorTuning {
   maxExportBatchSize?: number
 }
 
+/** The longest delay a timer holds, in milliseconds. Node clamps a longer one to 1 ms. */
+const MAX_TIMER_MS = 2_147_483_647
+
 /** The environment values the library acts on. */
 export interface TelemetryEnvironment {
   /** Whether `OTEL_SDK_DISABLED` is the word `true`, in any letter case and ignoring surrounding whitespace. */
@@ -31,6 +34,8 @@ export interface TelemetryEnvironment {
   readonly logsExporters: readonly string[]
   /** The `OTEL_BSP_*` values mapped onto the batch span processor. */
   readonly batchSpanProcessor: BatchSpanProcessorTuning
+  /** The timer variables ignored because their value is longer than a timer holds. */
+  readonly oversizedTimers: readonly string[]
   /** Names in `OTEL_NODE_RESOURCE_DETECTORS`, or `undefined` when it is unset or blank. */
   readonly resourceDetectors: readonly string[] | undefined
 }
@@ -62,6 +67,28 @@ function readPositiveNumber(raw: string | undefined): number | undefined {
 }
 
 /**
+ * Reads one `OTEL_BSP_*` value that feeds a timer. A value longer than a timer holds is ignored like
+ * an unusable one, and its variable is added to `oversized`.
+ *
+ * @param name - The variable name.
+ * @param raw - The unparsed variable.
+ * @param oversized - Collects the names of the variables ignored for being too long.
+ * @returns The usable number, or `undefined`.
+ */
+function readTimerMillis(
+  name: string,
+  raw: string | undefined,
+  oversized: string[]
+): number | undefined {
+  const value = readPositiveNumber(raw)
+  if (value !== undefined && value > MAX_TIMER_MS) {
+    oversized.push(name)
+    return undefined
+  }
+  return value
+}
+
+/**
  * Reads the environment values the library acts on.
  *
  * @param source - The environment to read. Defaults to the process environment.
@@ -73,9 +100,18 @@ export function readTelemetryEnvironment(
   const tuning: BatchSpanProcessorTuning = {}
   const maxQueueSize = readPositiveNumber(source['OTEL_BSP_MAX_QUEUE_SIZE'])
   if (maxQueueSize !== undefined) tuning.maxQueueSize = maxQueueSize
-  const scheduledDelayMillis = readPositiveNumber(source['OTEL_BSP_SCHEDULE_DELAY'])
+  const oversizedTimers: string[] = []
+  const scheduledDelayMillis = readTimerMillis(
+    'OTEL_BSP_SCHEDULE_DELAY',
+    source['OTEL_BSP_SCHEDULE_DELAY'],
+    oversizedTimers
+  )
   if (scheduledDelayMillis !== undefined) tuning.scheduledDelayMillis = scheduledDelayMillis
-  const exportTimeoutMillis = readPositiveNumber(source['OTEL_BSP_EXPORT_TIMEOUT'])
+  const exportTimeoutMillis = readTimerMillis(
+    'OTEL_BSP_EXPORT_TIMEOUT',
+    source['OTEL_BSP_EXPORT_TIMEOUT'],
+    oversizedTimers
+  )
   if (exportTimeoutMillis !== undefined) tuning.exportTimeoutMillis = exportTimeoutMillis
   const maxExportBatchSize = readPositiveNumber(source['OTEL_BSP_MAX_EXPORT_BATCH_SIZE'])
   if (maxExportBatchSize !== undefined) tuning.maxExportBatchSize = maxExportBatchSize
@@ -87,6 +123,7 @@ export function readTelemetryEnvironment(
     metricsExporters: readExporterList(source['OTEL_METRICS_EXPORTER']),
     logsExporters: readExporterList(source['OTEL_LOGS_EXPORTER']),
     batchSpanProcessor: tuning,
+    oversizedTimers,
     resourceDetectors:
       detectors === undefined || detectors.trim() === '' ? undefined : readExporterList(detectors)
   }

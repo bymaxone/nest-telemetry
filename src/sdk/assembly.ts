@@ -13,6 +13,8 @@ const HTTP_INSTRUMENTATION = '@opentelemetry/instrumentation-http'
 const IOREDIS_INSTRUMENTATION = '@opentelemetry/instrumentation-ioredis'
 const REDIS_INSTRUMENTATION = '@opentelemetry/instrumentation-redis'
 const PINO_INSTRUMENTATION = '@opentelemetry/instrumentation-pino'
+const WINSTON_INSTRUMENTATION = '@opentelemetry/instrumentation-winston'
+const BUNYAN_INSTRUMENTATION = '@opentelemetry/instrumentation-bunyan'
 
 /** The exporter names under which the SDK exports logs; any other value sets up no log export. */
 const LOG_EXPORTERS = new Set(['otlp', 'console'])
@@ -106,10 +108,13 @@ export function buildInstrumentationConfig(
     if (config !== undefined) overrides[name] = { ...config }
   }
   const redactRedis = options.unsafe?.disableRedisArgumentRedaction !== true
+  const disableLogSending = !(instrumentations.sendLogs ?? signals.sendLogs)
   const library: Record<string, Record<string, unknown>> = {
     [FS_INSTRUMENTATION]: { enabled: instrumentations.fs === true },
     [HTTP_INSTRUMENTATION]: {},
-    [PINO_INSTRUMENTATION]: { disableLogSending: !(instrumentations.sendLogs ?? signals.sendLogs) }
+    [PINO_INSTRUMENTATION]: { disableLogSending },
+    [WINSTON_INSTRUMENTATION]: { disableLogSending },
+    [BUNYAN_INSTRUMENTATION]: { disableLogSending }
   }
   const merged: Record<string, Record<string, unknown>> = {}
   for (const name of new Set([...Object.keys(library), ...Object.keys(overrides)])) {
@@ -166,7 +171,13 @@ export function warnAboutUnsafeOptions(options: TelemetryOptions): void {
   }
   if (options.unsafe?.exportProcessCommandArgs === true) {
     process.emitWarning(
-      'Process command-line redaction is disabled: process.command_args and process.command_line are exported in the resource, and command-line arguments can carry secrets.',
+      'Process command-line redaction is disabled: process.command_args, process.command_line and process.command are exported in the resource, and command-line arguments can carry secrets.',
+      WARNING_OPTIONS
+    )
+  }
+  if (options.unsafe?.exportHostId === true) {
+    process.emitWarning(
+      'Host id redaction is disabled: host.id, the machine identifier, is exported in the resource, and it identifies the machine to every collector and backend.',
       WARNING_OPTIONS
     )
   }
@@ -174,6 +185,20 @@ export function warnAboutUnsafeOptions(options: TelemetryOptions): void {
     process.emitWarning(
       'Redis argument redaction is disabled: command arguments, EVAL and EVALSHA payloads included, are exported in db.query.text.',
       WARNING_OPTIONS
+    )
+  }
+}
+
+/**
+ * Emits one process warning per timer variable that was ignored for being longer than a timer holds.
+ *
+ * @param env - The parsed environment.
+ */
+export function warnAboutOversizedTimers(env: TelemetryEnvironment): void {
+  for (const name of env.oversizedTimers) {
+    process.emitWarning(
+      `${name} is above 2147483647 ms, which a timer cannot hold, so the default applies. Set a value up to 2147483647.`,
+      { type: 'Warning', code: 'BYMAX_TELEMETRY_BSP_VALUE_IGNORED' }
     )
   }
 }

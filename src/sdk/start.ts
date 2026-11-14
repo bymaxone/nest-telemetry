@@ -17,6 +17,7 @@ import {
   planSignals,
   warnAboutIgnoredOptions,
   warnAboutMissingServiceName,
+  warnAboutOversizedTimers,
   warnAboutUnsafeOptions
 } from './assembly'
 import { readTelemetryEnvironment } from './environment'
@@ -145,7 +146,10 @@ function buildSdk(
         process: resources.processDetector,
         serviceinstance: resources.serviceInstanceIdDetector
       },
-      options.unsafe?.exportProcessCommandArgs === true
+      {
+        keepCommandLine: options.unsafe?.exportProcessCommandArgs === true,
+        keepHostId: options.unsafe?.exportHostId === true
+      }
     ),
     spanProcessors: [
       // Ordered before the batch processor, so each span is redacted in place before it is exported.
@@ -171,6 +175,7 @@ function buildSdk(
 async function boot(options: TelemetryOptions, env: TelemetryEnvironment): Promise<RunningHandle> {
   warnAboutUnsafeOptions(options)
   warnAboutMissingServiceName(options, env)
+  warnAboutOversizedTimers(env)
   const sdk = buildSdk(await loadPackages(), options, env)
   sdk.start()
   const handle = createHandle(() => sdk.shutdown(), options.shutdownTimeoutMs)
