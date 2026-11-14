@@ -89,8 +89,8 @@ describe('a bound TELEMETRY_LOGGER and a collector that is down', () => {
   })
 
   it('falls back to the process warning when the bound logger has no warnStructured', async () => {
-    // Scenario: a logger that only has errorStructured, which is all the token required before. The
-    // warning is the process warning it always was.
+    // Scenario: warnStructured is optional, so a bound logger that only has errorStructured leaves the
+    // export failure on the process-warning fallback.
     const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
     const port = await closedPort()
     process.env['OTEL_EXPORTER_OTLP_ENDPOINT'] = `http://127.0.0.1:${port}`

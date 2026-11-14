@@ -525,11 +525,10 @@ describe('startTelemetry', () => {
   })
 
   describe('the warning route and the logs pipeline', () => {
-    it('wraps only the trace exporter, so a failed logs export reports nothing', async () => {
-      // Scenario: a bound logger can forward its records to OTLP logs. A logs exporter that reported
-      // its own failures through the warning sink would write a record that exports and fails in
-      // turn, so the library builds one exporter, the trace one, and leaves the logs pipeline to
-      // the SDK. This guards the next person who thinks of wrapping the logs exporter too.
+    it('builds only the trace exporter and leaves the logs pipeline to the SDK', async () => {
+      // Scenario: a bound logger can forward its records to OTLP logs, so a wrapper on a logs
+      // exporter would report a failed logs export by writing a record that exports and can fail in
+      // turn. The library builds one exporter, the trace one, and sets no log processor or exporter.
       jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
       await startTelemetry({
         serviceName: 'api',

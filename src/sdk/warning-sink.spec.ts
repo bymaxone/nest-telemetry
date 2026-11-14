@@ -19,7 +19,7 @@ describe('reportWarning', () => {
   })
 
   it('emits a process warning with the text and the code when no sink is registered', () => {
-    // Scenario: a host that bound no logger gets exactly the warning it always got.
+    // Scenario: a host that bound no logger gets the process warning, with the text and the code.
     reportWarning(warning)
     expect(emitWarning).toHaveBeenCalledTimes(1)
     expect(emitWarning).toHaveBeenCalledWith(warning.text, {
