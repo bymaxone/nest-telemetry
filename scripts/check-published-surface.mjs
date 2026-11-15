@@ -313,21 +313,18 @@ async function checkLinks() {
   const anchors = new Set(
     [...README_PROSE.matchAll(/^#{1,6}\s+(.+)$/gm)].map((m) => `#${slug(m[1])}`)
   )
-  // Only follow links a reader clicks. A badge is `[![alt](image)](target)`, and
-  // a naive link regex captures the IMAGE — probing shields.io on every run and
-  // failing the build when it rate-limits, for a reason that is not ours. The
-  // image is stripped first so only the target remains.
+  // Only follow links a reader clicks. A badge is `[![alt](image)](target)`, and a naive link regex
+  // captures the IMAGE, probing shields.io on every run and failing the build when it rate-limits.
+  // The image is stripped first so only the target remains.
   //
-  // Collection starts from the prose for the same reason the anchor set does: an
-  // `<a href="${url}">` inside a fence is a string an example builds at runtime,
-  // not a link a reader can click, and the checker cannot resolve a placeholder.
+  // Collection starts from the prose, like the anchor set: an `<a href="${url}">` inside a fence
+  // is a string an example builds at runtime, not a link a reader can click.
   const clickable = README_PROSE.replace(/!\[[^\]]*\]\([^)]*\)/g, '')
   const links = new Set([
     ...[...clickable.matchAll(/\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/g)].map((m) => m[1]),
     ...[...clickable.matchAll(/<a\s+href="(https?:\/\/[^"]+)"/g)].map((m) => m[1])
   ])
-  // Both spellings: the section links are Markdown, but the header navigation is
-  // raw HTML. Collecting only the first left this README's nav bar unchecked.
+  // Both spellings: the section links are Markdown, the header navigation is raw HTML.
   const internal = new Set([
     ...[...README_PROSE.matchAll(/\[[^\]]*\]\((#[^)\s]+)\)/g)].map((m) => m[1].toLowerCase()),
     ...[...README_PROSE.matchAll(/<a\s+href="(#[^"]+)"/g)].map((m) => m[1].toLowerCase())
@@ -366,19 +363,17 @@ async function checkLinks() {
       const unroutable = await unroutableReason(url)
       if (unroutable) return `${url} → ${unroutable}`
 
-      // npmjs.com serves 403 to any datacenter IP, browser User-Agent included,
-      // so asking it whether a package page exists measures Cloudflare rather
-      // than the package. The registry is the authoritative source for the same
-      // question and answers honestly — this redirects the check, it does not
-      // suppress it: a package that truly does not exist still fails here.
+      // npmjs.com serves 403 to any datacenter IP, browser User-Agent included, so asking it whether
+      // a package page exists measures Cloudflare rather than the package. The registry answers the
+      // same question honestly: this redirects the check, it does not suppress it, and a package that
+      // truly does not exist still fails here.
       const probe = url.replace(
         /^https:\/\/www\.npmjs\.com\/package\/(.+)$/,
         (_, name) => `https://registry.npmjs.org/${encodeURIComponent(name)}`
       )
-      // The rewrite above changes what is actually requested, so the invariant —
-      // nothing is requested before it is validated — has to be re-established
-      // for the rewritten target too. Today it is a fixed registry host, but the
-      // guard must not depend on that staying true.
+      // The rewrite changes what is requested, so the invariant (nothing is requested before it
+      // is validated) must hold for the rewritten target too. Today it is a fixed registry host,
+      // but the guard must not depend on that.
       if (probe !== url) {
         const rewritten = await unroutableReason(probe)
         if (rewritten) return `${url} → rewritten to ${probe}, which ${rewritten}`
@@ -386,15 +381,12 @@ async function checkLinks() {
       const headers = { 'user-agent': 'Mozilla/5.0 (compatible; bymax-docs-gate)' }
       try {
         // HEAD first; some hosts answer it with 405, so fall back to GET.
-        // Bounded per LINK, not per request: one signal covers the HEAD, the GET
-        // fallback and every redirect hop together. That is the useful bound —
-        // what must not stall a publish is the check of one link, however many
-        // requests it takes.
+        // One signal bounds each LINK, not each request: it covers the HEAD, the GET fallback and
+        // every redirect hop together, because what must not stall a publish is the check of one link.
         //
-        // It covers the REQUESTS only. Each hop's `unroutableReason` runs a DNS
-        // lookup with its own 5s bound, outside this signal, so a chain's worst
-        // case is this timeout plus one lookup per hop. Both are bounded, which
-        // is what matters here; they are not one budget.
+        // It covers the requests only. Each hop's `unroutableReason` runs a DNS lookup with its own 5s
+        // bound, outside this signal, so a chain's worst case is this timeout plus one lookup per hop.
+        // Both are bounded; they are not one budget.
         const opts = { headers, signal: AbortSignal.timeout(10_000) }
         let res = await fetchChecked(probe, { method: 'HEAD', ...opts })
         if (res.status === 405 || res.status === 403 || res.status === 429) {
@@ -411,10 +403,8 @@ async function checkLinks() {
           console.log(`  note: ${url} is not live yet — expected until the first publish`)
           return null
         }
-        // A host that answers 5xx, or 429 again after the GET above, is in trouble of its own, and a link
-        // check cannot tell that from a dead link. Reported like a transport error, never fatal: this gate
-        // also guards `prepublishOnly`, and someone else's outage must not block a release. 404, 410 and the
-        // other client errors still fail.
+        // A host answering 5xx, or 429 again after the GET above, is in trouble of its own: a note, like a
+        // transport error below, never a failure. 404, 410 and the other client errors still fail.
         if (res.status >= 500 || res.status === 429) {
           console.log(
             `  note: ${url} answered HTTP ${res.status}, the host's trouble and not proof that the link is dead`
