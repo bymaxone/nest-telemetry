@@ -314,8 +314,7 @@ async function checkLinks() {
     [...README_PROSE.matchAll(/^#{1,6}\s+(.+)$/gm)].map((m) => `#${slug(m[1])}`)
   )
   // Only follow links a reader clicks. A badge is `[![alt](image)](target)`, and a naive link regex
-  // captures the IMAGE, probing shields.io on every run and failing the build when it rate-limits.
-  // The image is stripped first so only the target remains.
+  // captures the IMAGE, probing shields.io on every run. The image is stripped so only the target remains.
   //
   // Collection starts from the prose, like the anchor set: an `<a href="${url}">` inside a fence
   // is a string an example builds at runtime, not a link a reader can click.
@@ -365,15 +364,14 @@ async function checkLinks() {
 
       // npmjs.com serves 403 to any datacenter IP, browser User-Agent included, so asking it whether
       // a package page exists measures Cloudflare rather than the package. The registry answers the
-      // same question honestly: this redirects the check, it does not suppress it, and a package that
-      // truly does not exist still fails here.
+      // same question honestly: this redirects the check, it does not suppress it, and a package the
+      // registry does not know is a note, expected until its first publish.
       const probe = url.replace(
         /^https:\/\/www\.npmjs\.com\/package\/(.+)$/,
         (_, name) => `https://registry.npmjs.org/${encodeURIComponent(name)}`
       )
-      // The rewrite changes what is requested, so the invariant (nothing is requested before it
-      // is validated) must hold for the rewritten target too. Today it is a fixed registry host,
-      // but the guard must not depend on that.
+      // The rewrite changes what is requested, so nothing may be requested before it is validated:
+      // the guard must hold for the rewritten target too, not only while it is a fixed registry host.
       if (probe !== url) {
         const rewritten = await unroutableReason(probe)
         if (rewritten) return `${url} → rewritten to ${probe}, which ${rewritten}`
@@ -403,8 +401,10 @@ async function checkLinks() {
           console.log(`  note: ${url} is not live yet — expected until the first publish`)
           return null
         }
-        // A host answering 5xx, or 429 again after the GET above, is in trouble of its own: a note, like a
-        // transport error below, never a failure. 404, 410 and the other client errors still fail.
+        // A host that answers 5xx, or 429 again after the GET above, is in trouble of its own, and a link
+        // check cannot tell that from a dead link. Reported like a transport error, never fatal: this gate
+        // also guards `prepublishOnly`, and someone else's outage must not block a release. 404, 410 and the
+        // other client errors still fail.
         if (res.status >= 500 || res.status === 429) {
           console.log(
             `  note: ${url} answered HTTP ${res.status}, the host's trouble and not proof that the link is dead`
