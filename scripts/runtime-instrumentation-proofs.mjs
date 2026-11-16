@@ -51,9 +51,12 @@ async function startReceiver() {
 
 /**
  * A minimal Redis that answers every command with `+OK`, so a real client can run commands
- * against it. It parses just enough RESP to find where one command ends.
+ * against it. It parses just enough RESP to find where one command ends. `HELLO 3` gets the
+ * smallest RESP3 map, which is what a client asked to speak RESP3 waits for, and the protocol
+ * versions clients asked for are kept in `hellos` so a proof can show a handshake happened.
  */
 async function startFakeRedis() {
+  const hellos = []
   const server = createTcpServer((socket) => {
     let buffer = ''
     socket.on('data', (chunk) => {
@@ -73,7 +76,12 @@ async function startFakeRedis() {
           offset = end + 2
         }
         buffer = buffer.slice(offset)
-        socket.write('+OK\r\n')
+        if (parts[0]?.toUpperCase() === 'HELLO') hellos.push(parts[1])
+        socket.write(
+          parts[0]?.toUpperCase() === 'HELLO' && parts[1] === '3'
+            ? '%1\r\n+proto\r\n:3\r\n'
+            : '+OK\r\n'
+        )
       }
     })
     socket.on('error', () => undefined)
@@ -81,6 +89,7 @@ async function startFakeRedis() {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   return {
     port: server.address().port,
+    hellos,
     close: () => new Promise((resolve) => server.close(resolve))
   }
 }
@@ -248,7 +257,7 @@ export async function runInstrumentationProofs({ consumerDir, packageName }) {
       }
     }
 
-    await runDatabaseProofs({ consumerDir, packageName, run, failures })
+    await runDatabaseProofs({ consumerDir, packageName, run, failures, redisHellos: redis.hellos })
     await runLoggerProofs({ consumerDir, packageName, run, failures })
 
     // Each control names the span that must be missing, which is what the check can lose without

@@ -6,8 +6,10 @@
  *
  * Each proof has a negative control that proves its check can fail:
  *
- * - node-redis: the command name is exported and the planted argument and key are not. The control
- *   starts the SDK with the explicit opt-out, and the planted values then appear.
+ * - node-redis, under RESP2 and under RESP3: the command name is exported and the planted argument
+ *   and key are not. The control starts the SDK with the explicit opt-out, and the planted values
+ *   then appear. The fake Redis records the protocol each client asked for, so a run shows it used
+ *   the protocol it claims.
  * - mysql2: a value bound to a `?` placeholder must not reach `db.query.text`. This is a canary
  *   rather than a fix. `instrumentation-mysql2` formats bound values into the statement only when
  *   it holds mysql2's `format` function, and in the versions measured it is captured before the
@@ -37,7 +39,7 @@ const MEASURED = { instrumentation: [0, 71], mysql2: { from: [2, 3, 3], to: [3, 
 const NODE_REDIS_APP = `
 const { createClient } = require('redis')
 ;(async () => {
-  const client = createClient({ url: 'redis://127.0.0.1:' + process.env.PROBE_REDIS_PORT, RESP: 2 })
+  const client = createClient({ url: 'redis://127.0.0.1:' + process.env.PROBE_REDIS_PORT, RESP: Number(process.env.PROBE_RESP) })
   client.on('error', () => undefined)
   await client.connect()
   await client.eval('return ARGV[1]', { keys: ['${NODE_REDIS_KEY}'], arguments: ['${NODE_REDIS_SECRET}'] })
@@ -111,9 +113,10 @@ function installed(require, name) {
  * @param {string} options.packageName - The package under test.
  * @param {(args: string[], env?: Record<string, string>) => Promise<{ code: number, output: string, body: string }>} options.run - Runs one child process against the receiver.
  * @param {string[]} options.failures - Collects the failed assertions.
+ * @param {string[]} options.redisHellos - The protocol versions clients asked the fake Redis for, in order.
  * @returns {Promise<void>} Resolves when every proof ran.
  */
-export async function runDatabaseProofs({ consumerDir, packageName, run, failures }) {
+export async function runDatabaseProofs({ consumerDir, packageName, run, failures, redisHellos }) {
   const require = createRequire(join(consumerDir, 'noop.cjs'))
   writeFileSync(join(consumerDir, 'node-redis-app.cjs'), NODE_REDIS_APP)
   writeFileSync(join(consumerDir, 'mysql2-app.cjs'), MYSQL2_APP)
@@ -128,10 +131,41 @@ export async function runDatabaseProofs({ consumerDir, packageName, run, failure
   )
   const register = `${packageName}/register`
 
-  const redis = await run(['--import', register, 'node-redis-app.cjs'])
+  await runNodeRedisProof({ run, failures, register, resp: 2, redisHellos })
+  // redis 6 makes RESP3 the default protocol. The instrumentation and the span-end redaction sit above
+  // the wire, so the same checks are run again with a client that negotiated RESP3.
+  await runNodeRedisProof({ run, failures, register, resp: 3, redisHellos })
+
+  await runMysql2Proof({ require, run, failures, register })
+}
+
+/**
+ * The node-redis proof and its negative control, with a client that speaks `resp`. The fake Redis
+ * records the protocol a client asked for, so the proof shows the protocol it claims to have run.
+ */
+async function runNodeRedisProof({ run, failures, register, resp, redisHellos }) {
+  const label = `RESP${resp}`
+  const env = { PROBE_RESP: String(resp) }
+  /** Runs the app and reports whether the fake Redis was asked for RESP3 during it. */
+  const runAndCheckProtocol = async (args, what) => {
+    const seen = redisHellos.length
+    const result = await run(args, env)
+    const asked = redisHellos.slice(seen).includes('3')
+    if (asked !== (resp === 3)) {
+      failures.push(
+        `node-redis app ${what} (${label}): the client ${asked ? 'asked' : 'did not ask'} for RESP3, so this run did not use ${label}`
+      )
+    }
+    return result
+  }
+
+  const redis = await runAndCheckProtocol(
+    ['--import', register, 'node-redis-app.cjs'],
+    'with the preload'
+  )
   const before = failures.length
   const redisCheck = (ok, message) => {
-    if (!ok) failures.push(`node-redis app with the preload: ${message}`)
+    if (!ok) failures.push(`node-redis app with the preload (${label}): ${message}`)
   }
   redisCheck(
     redis.code === 0,
@@ -149,24 +183,25 @@ export async function runDatabaseProofs({ consumerDir, packageName, run, failure
   redisCheck(redis.body.includes('"EVAL"'), 'the command name was not kept')
   if (failures.length === before) {
     console.log(
-      '  ✓ node-redis app: spans exported with no active request, no argument or key, command name kept'
+      `  ✓ node-redis app (${label}): spans exported with no active request, no argument or key, command name kept`
     )
   }
 
-  const open = await run(['--import', './unsafe-redis-preload.mjs', 'node-redis-app.cjs'])
+  const open = await runAndCheckProtocol(
+    ['--import', './unsafe-redis-preload.mjs', 'node-redis-app.cjs'],
+    'with the explicit opt-out'
+  )
   const openBefore = failures.length
   if (!open.body.includes(NODE_REDIS_SECRET) || !open.body.includes(NODE_REDIS_KEY)) {
     failures.push(
-      'node-redis app with the explicit opt-out: the planted values are not exported, so the control proves nothing'
+      `node-redis app with the explicit opt-out (${label}): the planted values are not exported, so the control proves nothing`
     )
   }
   if (failures.length === openBefore) {
     console.log(
-      '  ✓ negative control, node-redis with disableRedisArgumentRedaction: the planted values are exported'
+      `  ✓ negative control, node-redis (${label}) with disableRedisArgumentRedaction: the planted values are exported`
     )
   }
-
-  await runMysql2Proof({ require, run, failures, register })
 }
 
 /** The mysql2 canary, its negative control and the range check. */
