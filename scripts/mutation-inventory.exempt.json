@@ -2,5 +2,17 @@
   {
     "file": "src/sdk/process-env-boundary.spec.ts",
     "reason": "Reads the text of the source files to check which one names process.env and imports nothing from src/, so it executes no mutated code and judges no mutant."
+  },
+  {
+    "file": "src/check-function-length.spec.ts",
+    "reason": "Runs scripts/check-function-length.mjs as a child process and imports nothing from src/, so it judges no mutant."
+  },
+  {
+    "file": "src/check-function-length.baseline.spec.ts",
+    "reason": "Runs scripts/check-function-length.mjs as a child process and imports nothing from src/, so it judges no mutant."
+  },
+  {
+    "file": "src/check-function-length.key.spec.ts",
+    "reason": "Runs scripts/check-function-length.mjs as a child process and imports nothing from src/, so it judges no mutant."
   }
 ]

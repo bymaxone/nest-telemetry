@@ -29,10 +29,11 @@ const MIN_PURPOSE_LENGTH = 20
 const LAYER_MARKER = /(?:\bLayer:|@layer)\s+([A-Za-z0-9-]+)/i
 
 /**
- * The layers a spec may declare: the three subpaths of the package, the end-to-end suite, and the
- * repository-level specs that read the source tree instead of running it.
+ * The layers a spec may declare: the three subpaths of the package, the end-to-end suite, the
+ * repository-level specs that read the source tree instead of running it, and the specs that run a
+ * script of the repository as a child process (`tests`, the layer the shared script templates use).
  */
-export const LAYERS = ['sdk', 'register', 'nest', 'e2e', 'repository']
+export const LAYERS = ['sdk', 'register', 'nest', 'e2e', 'repository', 'tests']
 
 /**
  * Why `source` has no valid header, or `null` when it has one.
