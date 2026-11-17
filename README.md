@@ -182,6 +182,8 @@ Every field is the host's policy, and none is required.
 | `shutdownTimeoutMs`                    | `5000`                       | The longest shutdown waits for the final flush. Past it, shutdown warns and resolves. A value that is not a finite number above zero, or is above `120000`, means the default.                                                                |
 | `env`                                  | the process environment      | The environment the library reads. The OpenTelemetry SDK itself always reads the process environment.                                                                                                                                         |
 
+A key set to `undefined` or `null` in any option is the same as no key. An override is copied by its own enumerable keys, so pass a plain object: getters on a class prototype are not read.
+
 ### Environment variables
 
 The library reads these in one source file, and a test fails if any other file names `process.env`:
