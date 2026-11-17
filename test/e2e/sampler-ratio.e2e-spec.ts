@@ -78,6 +78,57 @@ describe('a ratio sampler without a usable ratio', () => {
   })
 })
 
+describe('a ratio sampler whose argument is only whitespace', () => {
+  it.each(['   ', '\t'])(
+    'is reported as blank for %p, and the SDK samples every trace',
+    async (arg) => {
+      // Scenario: a template that leaves a space or a tab in the variable. The SDK reads it as no ratio
+      // and samples every trace; the start says the variable is blank, not that it is unset.
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      await startWith('traceidratio', arg)
+      expect(samplerWarnings(emitWarning)).toHaveLength(1)
+      expect(String(samplerWarnings(emitWarning)[0]?.[0])).toContain(
+        'OTEL_TRACES_SAMPLER_ARG is blank'
+      )
+      expect(sampledRoots()).toBe(SPANS)
+    }
+  )
+})
+
+describe('a sampler name that differs from a known one only by case or whitespace', () => {
+  const NAME_CODE = 'BYMAX_TELEMETRY_SAMPLER_NAME_UNKNOWN'
+
+  const nameWarnings = (emitWarning: jest.SpyInstance): unknown[][] =>
+    emitWarning.mock.calls.filter(
+      ([, options]) => (options as { code?: string }).code === NAME_CODE
+    )
+
+  it.each(['TraceIdRatio', ' traceidratio', 'ALWAYS_OFF'])(
+    'is reported once for %p, and the SDK samples every trace',
+    async (name) => {
+      // Scenario: the SDK compares the name exactly, uses its default sampler for anything else and
+      // keeps every trace, although the ratio or ALWAYS_OFF asked for fewer; it logs only to its
+      // diagnostic channel.
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      await startWith(name, '0')
+      expect(nameWarnings(emitWarning)).toHaveLength(1)
+      expect(sampledRoots()).toBe(SPANS)
+    }
+  )
+
+  it.each(['traceidratio', 'always_off'])(
+    'is not reported for the exact name %p, which the SDK applies',
+    async (name) => {
+      // Scenario: the control for the case above. With the exact name and the same ratio of 0 the SDK
+      // keeps none of the traces and the start says nothing about the name.
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      await startWith(name, '0')
+      expect(nameWarnings(emitWarning)).toHaveLength(0)
+      expect(sampledRoots()).toBe(0)
+    }
+  )
+})
+
 describe('a ratio sampler with a usable ratio', () => {
   it('is not reported, and the SDK keeps none of the traces for a ratio of 0', async () => {
     // Scenario: the control for the cases above. A ratio the library accepts is a ratio the SDK

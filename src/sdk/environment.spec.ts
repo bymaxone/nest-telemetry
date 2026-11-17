@@ -6,7 +6,7 @@
  */
 import { getBooleanFromEnv } from '@opentelemetry/core'
 
-import { readRatioSampler, readTelemetryEnvironment } from './environment'
+import { readRatioSampler, readSamplerNearMiss, readTelemetryEnvironment } from './environment'
 
 describe('readRatioSampler', () => {
   it.each(['traceidratio', 'parentbased_traceidratio'])(
@@ -20,11 +20,20 @@ describe('readRatioSampler', () => {
     }
   )
 
-  it.each([undefined, '', '   '])('has no argument when OTEL_TRACES_SAMPLER_ARG is %p', (arg) => {
-    // Scenario: the SDK reads an unset, empty or whitespace-only value as not given.
+  it('has no argument when OTEL_TRACES_SAMPLER_ARG is unset', () => {
+    // Scenario: an absent variable is the one case with nothing to quote.
+    expect(readRatioSampler({ OTEL_TRACES_SAMPLER: 'traceidratio' })).toEqual({
+      name: 'traceidratio',
+      arg: undefined
+    })
+  })
+
+  it.each(['', '   ', '\t'])('keeps a blank OTEL_TRACES_SAMPLER_ARG %p as written', (arg) => {
+    // Scenario: an empty or whitespace-only variable is present, so the caller can say it is blank
+    // and not that it is unset; the SDK still reads either as no ratio.
     expect(
       readRatioSampler({ OTEL_TRACES_SAMPLER: 'traceidratio', OTEL_TRACES_SAMPLER_ARG: arg })
-    ).toEqual({ name: 'traceidratio', arg: undefined })
+    ).toEqual({ name: 'traceidratio', arg })
   })
 
   it.each([
@@ -59,6 +68,53 @@ describe('readRatioSampler', () => {
         if (original === undefined) delete process.env[name]
         else process.env[name] = original
       }
+    }
+  })
+})
+
+describe('readSamplerNearMiss', () => {
+  it.each([
+    ['TraceIdRatio', 'traceidratio'],
+    [' ParentBased_TraceIdRatio ', 'parentbased_traceidratio'],
+    ['ALWAYS_ON', 'always_on'],
+    ['Always_Off', 'always_off'],
+    ['PARENTBASED_ALWAYS_ON', 'parentbased_always_on'],
+    ['\tparentbased_always_off\n', 'parentbased_always_off']
+  ])('names the sampler %p was meant to select', (value, meant) => {
+    // Scenario: the SDK compares the name exactly, so a different letter case or surrounding
+    // whitespace selects no sampler; the six names are the ones its switch knows.
+    expect(readSamplerNearMiss({ OTEL_TRACES_SAMPLER: value })).toBe(meant)
+  })
+
+  it.each([
+    undefined,
+    '',
+    '   ',
+    'always_on',
+    'always_off',
+    'parentbased_always_on',
+    'parentbased_always_off',
+    'traceidratio',
+    'parentbased_traceidratio',
+    'always-on',
+    'trace_id_ratio',
+    'jaeger_remote',
+    'unknown'
+  ])('is undefined for %p', (value) => {
+    // Scenario: an exact name, an absent or empty value and a name that is not one of the six with a
+    // case or whitespace slip are not the mistake this finds.
+    expect(readSamplerNearMiss({ OTEL_TRACES_SAMPLER: value })).toBeUndefined()
+  })
+
+  it('reads the process environment when it is given no source', () => {
+    // Scenario: the SDK reads the sampler name from the process environment, so this does too.
+    const original = process.env['OTEL_TRACES_SAMPLER']
+    process.env['OTEL_TRACES_SAMPLER'] = 'TraceIdRatio'
+    try {
+      expect(readSamplerNearMiss()).toBe('traceidratio')
+    } finally {
+      if (original === undefined) delete process.env['OTEL_TRACES_SAMPLER']
+      else process.env['OTEL_TRACES_SAMPLER'] = original
     }
   })
 })

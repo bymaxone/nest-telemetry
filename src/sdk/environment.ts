@@ -27,11 +27,20 @@ const MAX_TIMER_MS = 2_147_483_647
 /** The names under which the SDK selects a sampler that needs a ratio. */
 const RATIO_SAMPLERS = ['traceidratio', 'parentbased_traceidratio']
 
+/** Every name the SDK selects a sampler by; it compares them exactly and falls back to its default otherwise. */
+const SAMPLER_NAMES = [
+  'always_on',
+  'always_off',
+  'parentbased_always_on',
+  'parentbased_always_off',
+  ...RATIO_SAMPLERS
+]
+
 /** A ratio sampler the environment selects, and the argument it gave for the ratio. */
 export interface RatioSampler {
   /** `OTEL_TRACES_SAMPLER`, one of the two ratio samplers. */
   readonly name: string
-  /** `OTEL_TRACES_SAMPLER_ARG` as written, or `undefined` when it is unset, empty or only whitespace. */
+  /** `OTEL_TRACES_SAMPLER_ARG` as written, or `undefined` when it is unset. Empty and blank values are kept. */
   readonly arg: string | undefined
 }
 
@@ -155,7 +164,20 @@ export function readRatioSampler(
   const name = source['OTEL_TRACES_SAMPLER']
   const arg = source['OTEL_TRACES_SAMPLER_ARG']
   // The SDK compares the name exactly, so a different spelling selects no ratio sampler.
-  return name !== undefined && RATIO_SAMPLERS.includes(name)
-    ? { name, arg: arg?.trim() === '' ? undefined : arg }
-    : undefined
+  return name !== undefined && RATIO_SAMPLERS.includes(name) ? { name, arg } : undefined
+}
+
+/**
+ * Reads the sampler name the SDK will not recognise only because of its letter case or surrounding
+ * whitespace.
+ *
+ * @param source - The environment to read. Defaults to the process environment, where the SDK reads it.
+ * @returns The sampler name that was meant, or `undefined` when the name is unset, exact, or not close
+ * to any sampler name.
+ */
+export function readSamplerNearMiss(source: NodeJS.ProcessEnv = process.env): string | undefined {
+  const name = source['OTEL_TRACES_SAMPLER']
+  if (name === undefined || SAMPLER_NAMES.includes(name)) return undefined
+  const folded = name.trim().toLowerCase()
+  return SAMPLER_NAMES.find((known) => known === folded)
 }

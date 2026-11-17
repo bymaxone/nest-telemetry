@@ -253,7 +253,7 @@ describe('createHandle shutdown deadline', () => {
     expect(settled).toHaveBeenCalledTimes(1)
   })
 
-  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY, 120001, 3_600_000])(
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY, 120001, 3_600_000, null as never])(
     'falls back to the default deadline for an unusable value (%p)',
     async (value) => {
       // Scenario: a typo must neither disable the deadline nor recreate the hang it guards against,
