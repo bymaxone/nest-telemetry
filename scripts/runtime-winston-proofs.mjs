@@ -80,7 +80,8 @@ export async function runWinstonProofs({ consumerDir, packageName, run, failures
     {
       label: 'winston app, log sending off',
       args: ['--require', './hide-transport.cjs', '--import', register, 'winston-app.mjs'],
-      env: { OTEL_METRICS_EXPORTER: 'none' },
+      // Named explicitly: the runner merges this over the caller's environment, which may name an exporter.
+      env: { OTEL_LOGS_EXPORTER: 'none', OTEL_METRICS_EXPORTER: 'none' },
       forwarded: false,
       warned: false
     }
