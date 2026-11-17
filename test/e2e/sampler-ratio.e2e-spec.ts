@@ -55,7 +55,7 @@ afterEach(async () => {
 })
 
 describe('a ratio sampler without a usable ratio', () => {
-  it.each(['1.5', '-1', '10%', 'NaN', 'Infinity'])(
+  it.each(['1.5', '-1', '10%', 'NaN', 'Infinity', ''])(
     'is reported once for %p, and the SDK samples every trace',
     async (arg) => {
       // Scenario: the SDK falls back to a ratio of 1 for each of these and says so only to its
