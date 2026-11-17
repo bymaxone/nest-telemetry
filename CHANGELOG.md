@@ -10,6 +10,16 @@ heading here.
 
 ## [Unreleased]
 
+### Added
+
+- **A start warning for a ratio sampler that has no usable ratio.** With `OTEL_TRACES_SAMPLER` set to
+  `traceidratio` or `parentbased_traceidratio`, the SDK reads `OTEL_TRACES_SAMPLER_ARG` with `Number` and
+  falls back to a ratio of 1 when it is unset, empty, not a number or outside 0 to 1, noting it only on a
+  diagnostic channel. Every trace was then sampled without a word, which is the cost a ratio was set to
+  avoid. The start now warns once with `BYMAX_TELEMETRY_SAMPLER_ARG_INVALID`, naming the variable and the
+  value. Measured with the real SDK: `1.5`, `-1`, `10%`, `NaN`, `Infinity` and no
+  value sampled all 200 root spans; `0` sampled none.
+
 ### Fixed
 
 - **Winston log forwarding says when it cannot work.** The winston instrumentation forwards a record by

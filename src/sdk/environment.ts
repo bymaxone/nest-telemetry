@@ -4,7 +4,9 @@
  *
  * Every other module receives its environment as a parameter. The OTel SDK reads
  * `OTEL_EXPORTER_OTLP_*`, `OTEL_TRACES_SAMPLER*` and `OTEL_RESOURCE_ATTRIBUTES` itself, and the
- * library never touches them.
+ * library acts on none of them. It reads the two sampler variables only to say when the SDK will
+ * ignore the ratio, and reads them from the process environment because that is where the SDK does,
+ * whatever environment the host hands to `startTelemetry`.
  */
 
 /** Batch-span-processor tuning, present only for the variables that hold a usable value. */
@@ -21,6 +23,17 @@ export interface BatchSpanProcessorTuning {
 
 /** The longest delay a timer holds, in milliseconds. Node clamps a longer one to 1 ms. */
 const MAX_TIMER_MS = 2_147_483_647
+
+/** The names under which the SDK selects a sampler that needs a ratio. */
+const RATIO_SAMPLERS = ['traceidratio', 'parentbased_traceidratio']
+
+/** A ratio sampler the environment selects, and the argument it gave for the ratio. */
+export interface RatioSampler {
+  /** `OTEL_TRACES_SAMPLER`, one of the two ratio samplers. */
+  readonly name: string
+  /** `OTEL_TRACES_SAMPLER_ARG` as written, or `undefined` when it is unset, empty or only whitespace. */
+  readonly arg: string | undefined
+}
 
 /** The environment values the library acts on. */
 export interface TelemetryEnvironment {
@@ -127,4 +140,22 @@ export function readTelemetryEnvironment(
     resourceDetectors:
       detectors === undefined || detectors.trim() === '' ? undefined : readExporterList(detectors)
   }
+}
+
+/**
+ * Reads the ratio sampler the SDK will build, from the same environment the SDK reads.
+ *
+ * @param source - The environment to read. Defaults to the process environment, which is where the SDK
+ * reads `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG` whatever the host passed to the start.
+ * @returns The ratio sampler and the argument it was given, or `undefined` when the sampler is not one.
+ */
+export function readRatioSampler(
+  source: NodeJS.ProcessEnv = process.env
+): RatioSampler | undefined {
+  const name = source['OTEL_TRACES_SAMPLER']
+  const arg = source['OTEL_TRACES_SAMPLER_ARG']
+  // The SDK compares the name exactly, so a different spelling selects no ratio sampler.
+  return name !== undefined && RATIO_SAMPLERS.includes(name)
+    ? { name, arg: arg?.trim() === '' ? undefined : arg }
+    : undefined
 }

@@ -4,9 +4,10 @@
  */
 import type { InstrumentationConfigMap } from '@opentelemetry/auto-instrumentations-node'
 
-import type { TelemetryEnvironment } from './environment'
+import type { RatioSampler, TelemetryEnvironment } from './environment'
 import { buildRedactedQueryParams, serializeRedisCommandName } from './redaction'
 import type { TelemetryOptions } from './types'
+import { reportWarning } from './warning-sink'
 
 const FS_INSTRUMENTATION = '@opentelemetry/instrumentation-fs'
 const HTTP_INSTRUMENTATION = '@opentelemetry/instrumentation-http'
@@ -187,6 +188,33 @@ export function warnAboutUnsafeOptions(options: TelemetryOptions): void {
       WARNING_OPTIONS
     )
   }
+}
+
+/** The longest part of an operator's ratio value that a warning repeats. */
+const SHOWN_VALUE_LENGTH = 40
+
+/**
+ * Reports a ratio sampler whose ratio the SDK will not use.
+ *
+ * Given a ratio sampler, the SDK reads the ratio with `Number` and falls back to 1 when the argument
+ * is unset, blank, not a number or outside 0 to 1, noting it only on the diagnostic channel. Every
+ * trace is then sampled, which is what a ratio was set to avoid. The value is operator configuration,
+ * so it is repeated, cut short and quoted so that control characters are escaped.
+ *
+ * @param sampler - The ratio sampler the environment selects, if any.
+ */
+export function warnAboutSamplerRatio(sampler: RatioSampler | undefined): void {
+  if (sampler === undefined) return
+  const ratio = Number(sampler.arg)
+  if (ratio >= 0 && ratio <= 1) return
+  const given =
+    sampler.arg === undefined
+      ? 'not set'
+      : `${JSON.stringify(sampler.arg.slice(0, SHOWN_VALUE_LENGTH))}, which is not a number from 0 to 1`
+  reportWarning({
+    code: 'BYMAX_TELEMETRY_SAMPLER_ARG_INVALID',
+    text: `OTEL_TRACES_SAMPLER is ${sampler.name}, but OTEL_TRACES_SAMPLER_ARG is ${given}, so the SDK samples every trace. Set it to the share of traces to keep, from 0 to 1, such as 0.1.`
+  })
 }
 
 /**

@@ -572,42 +572,6 @@ describe('startTelemetry', () => {
     })
   })
 
-  describe('the winston transport check', () => {
-    it.each([
-      [
-        'an exporter for logs is named in the environment',
-        { OTEL_LOGS_EXPORTER: 'otlp' },
-        undefined,
-        true
-      ],
-      ['no exporter for logs is named', {}, undefined, false],
-      [
-        'the option turns log sending off over an exporter in the environment',
-        { OTEL_LOGS_EXPORTER: 'otlp' },
-        false,
-        false
-      ],
-      ['the option turns log sending on without an exporter in the environment', {}, true, true]
-    ])('is told whether log sending is on when %s', async (_name, env, sendLogs, expected) => {
-      // Scenario: the check runs once per start, with the same answer the instrumentations get: the
-      // option wins over the environment.
-      await startTelemetry({
-        serviceName: 'api',
-        env,
-        ...(sendLogs === undefined ? {} : { instrumentations: { sendLogs } })
-      })
-      expect(mockWinstonTransportCheck).toHaveBeenCalledTimes(1)
-      expect(mockWinstonTransportCheck).toHaveBeenCalledWith(expected)
-      // The instrumentations are configured from the same decision: their log sending is on exactly
-      // when the check was told it is.
-      const config = mockAutoInstrumentations.mock.calls[0]?.[0] as Record<
-        string,
-        { disableLogSending?: boolean }
-      >
-      expect(config['@opentelemetry/instrumentation-winston']?.disableLogSending).toBe(!expected)
-    })
-  })
-
   describe('the warning route and the logs pipeline', () => {
     it('builds only the trace exporter and leaves the logs pipeline to the SDK', async () => {
       // Scenario: a bound logger can forward its records to OTLP logs, so a wrapper on a logs

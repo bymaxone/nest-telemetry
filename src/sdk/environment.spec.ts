@@ -6,7 +6,62 @@
  */
 import { getBooleanFromEnv } from '@opentelemetry/core'
 
-import { readTelemetryEnvironment } from './environment'
+import { readRatioSampler, readTelemetryEnvironment } from './environment'
+
+describe('readRatioSampler', () => {
+  it.each(['traceidratio', 'parentbased_traceidratio'])(
+    'names %s and carries its ratio argument as written',
+    (name) => {
+      // Scenario: only the two ratio samplers need an argument; the argument is kept raw, because
+      // judging it is the caller's business and its text is what an operator is told about.
+      expect(
+        readRatioSampler({ OTEL_TRACES_SAMPLER: name, OTEL_TRACES_SAMPLER_ARG: ' 0.1 ' })
+      ).toEqual({ name, arg: ' 0.1 ' })
+    }
+  )
+
+  it.each([undefined, '', '   '])('has no argument when OTEL_TRACES_SAMPLER_ARG is %p', (arg) => {
+    // Scenario: the SDK reads an unset, empty or whitespace-only value as not given.
+    expect(
+      readRatioSampler({ OTEL_TRACES_SAMPLER: 'traceidratio', OTEL_TRACES_SAMPLER_ARG: arg })
+    ).toEqual({ name: 'traceidratio', arg: undefined })
+  })
+
+  it.each([
+    undefined,
+    '',
+    'always_on',
+    'always_off',
+    'parentbased_always_on',
+    'parentbased_always_off',
+    'TraceIdRatio',
+    ' traceidratio ',
+    'unknown'
+  ])('is undefined when OTEL_TRACES_SAMPLER is %p', (name) => {
+    // Scenario: the SDK compares the name exactly, so only the two lower-case names select a ratio
+    // sampler; a different spelling selects none, and the argument is then not read.
+    expect(
+      readRatioSampler({ OTEL_TRACES_SAMPLER: name, OTEL_TRACES_SAMPLER_ARG: '1.5' })
+    ).toBeUndefined()
+  })
+
+  it('reads the process environment when it is given no source', () => {
+    // Scenario: the SDK reads the sampler from the process environment, so the check does too,
+    // whatever environment the host handed to the start.
+    const before = { ...process.env }
+    process.env['OTEL_TRACES_SAMPLER'] = 'traceidratio'
+    process.env['OTEL_TRACES_SAMPLER_ARG'] = '1.5'
+    try {
+      expect(readRatioSampler()).toEqual({ name: 'traceidratio', arg: '1.5' })
+    } finally {
+      for (const name of ['OTEL_TRACES_SAMPLER', 'OTEL_TRACES_SAMPLER_ARG']) {
+        const original = before[name]
+        if (original === undefined) delete process.env[name]
+        else process.env[name] = original
+      }
+    }
+  })
+})
 
 describe('readTelemetryEnvironment', () => {
   describe('sdkDisabled', () => {
