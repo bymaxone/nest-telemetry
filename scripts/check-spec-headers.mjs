@@ -3,10 +3,10 @@
  * that states what the file tests and which layer it belongs to.
  * @layer scripts
  *
- * The review bots read a spec cold, without the source open beside it, and keep reporting one that does
- * not say what it covers or where it sits. The header is the one place a reader finds that, so it is a
- * gate and not a habit: the comment must come before the first statement, carry a layer marker
- * (`@layer sdk` or `Layer: sdk.`) from the fixed list below, and say something besides the marker.
+ * A reader opens a spec without the source beside it, and the header is the one place that says what
+ * the file covers and where it sits. The comment must come before the first statement, carry a layer
+ * marker (`@layer sdk` or `Layer: sdk.`) from the fixed list below, and say something besides the
+ * marker.
  *
  * Usage: node scripts/check-spec-headers.mjs [root]
  *   root  repository root to check (default: the package root)
