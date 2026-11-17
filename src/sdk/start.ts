@@ -36,6 +36,7 @@ import type { RunningHandle } from './handle'
 import { createUrlQueryRedactor } from './redaction'
 import { selectResourceDetectors } from './resource-detectors'
 import type { TelemetryHandle, TelemetryOptions } from './types'
+import { warnAboutMissingWinstonTransport } from './winston-transport'
 
 /** Why a start after a shutdown is refused, and what to do instead. */
 const RESTART_MESSAGE =
@@ -176,6 +177,7 @@ async function boot(options: TelemetryOptions, env: TelemetryEnvironment): Promi
   warnAboutUnsafeOptions(options)
   warnAboutMissingServiceName(options, env)
   warnAboutOversizedTimers(env)
+  warnAboutMissingWinstonTransport(options.instrumentations?.sendLogs ?? planSignals(env).sendLogs)
   const sdk = buildSdk(await loadPackages(), options, env)
   sdk.start()
   const handle = createHandle(() => sdk.shutdown(), options.shutdownTimeoutMs)

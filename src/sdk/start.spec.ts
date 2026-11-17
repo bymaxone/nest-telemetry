@@ -27,6 +27,11 @@ const mockOtlpExporter = jest.fn((..._args: unknown[]) => ({
 }))
 const mockAutoInstrumentations = jest.fn((..._args: unknown[]) => ['instrumentation'])
 const mockResourceFromAttributes = jest.fn((..._args: unknown[]) => ({ kind: 'resource' }))
+const mockWinstonTransportCheck = jest.fn((..._args: unknown[]) => undefined)
+
+jest.mock('./winston-transport', () => ({
+  warnAboutMissingWinstonTransport: (...args: unknown[]) => mockWinstonTransportCheck(...args)
+}))
 
 jest.mock('@opentelemetry/sdk-node', () => ({
   NodeSDK: function (...args: unknown[]) {
@@ -564,6 +569,35 @@ describe('startTelemetry', () => {
         expect.stringContaining('OTEL_BSP_SCHEDULE_DELAY is above 2147483647 ms'),
         { type: 'Warning', code: 'BYMAX_TELEMETRY_BSP_VALUE_IGNORED' }
       )
+    })
+  })
+
+  describe('the winston transport check', () => {
+    it.each([
+      [
+        'an exporter for logs is named in the environment',
+        { OTEL_LOGS_EXPORTER: 'otlp' },
+        undefined,
+        true
+      ],
+      ['no exporter for logs is named', {}, undefined, false],
+      [
+        'the option turns log sending off over an exporter in the environment',
+        { OTEL_LOGS_EXPORTER: 'otlp' },
+        false,
+        false
+      ],
+      ['the option turns log sending on without an exporter in the environment', {}, true, true]
+    ])('is told whether log sending is on when %s', async (_name, env, sendLogs, expected) => {
+      // Scenario: the check runs once per start, with the same answer the instrumentations get: the
+      // option wins over the environment.
+      await startTelemetry({
+        serviceName: 'api',
+        env,
+        ...(sendLogs === undefined ? {} : { instrumentations: { sendLogs } })
+      })
+      expect(mockWinstonTransportCheck).toHaveBeenCalledTimes(1)
+      expect(mockWinstonTransportCheck).toHaveBeenCalledWith(expected)
     })
   })
 
