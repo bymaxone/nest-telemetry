@@ -14,6 +14,7 @@ import {
   planSignals,
   warnAboutMissingServiceName,
   warnAboutOversizedTimers,
+  warnAboutSamplerRatio,
   warnAboutUnsafeOptions
 } from './assembly'
 import type { SignalPlan } from './assembly'
@@ -485,6 +486,83 @@ describe('warnAboutMissingServiceName', () => {
       expect(emitWarning).toHaveBeenCalledTimes(1)
     }
   )
+})
+
+describe('warnAboutSamplerRatio', () => {
+  let emitWarning: jest.SpyInstance
+
+  beforeEach(() => {
+    emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+  })
+
+  const ratio = (name: string, arg: string | undefined): TelemetryEnvironment =>
+    environment({ OTEL_TRACES_SAMPLER: name, OTEL_TRACES_SAMPLER_ARG: arg })
+
+  it.each([
+    ['1.5', 'is above 1'],
+    ['3', 'is above 1'],
+    ['-1', 'is below 0'],
+    ['-0.0001', 'is below 0'],
+    ['NaN', 'is not a number'],
+    ['Infinity', 'is infinite'],
+    ['-Infinity', 'is infinite'],
+    ['10%', 'is not a number'],
+    ['abc', 'is not a number'],
+    [undefined, 'is not set']
+  ])('warns for a ratio sampler whose argument is %p (%s)', (arg, _reason) => {
+    // Scenario: the SDK falls back to a ratio of 1 for each of these and logs it only to the
+    // diagnostic channel, so every trace is sampled without a word.
+    warnAboutSamplerRatio(ratio('traceidratio', arg))
+    expect(emitWarning).toHaveBeenCalledTimes(1)
+    const [text, options] = emitWarning.mock.calls[0] as [string, { code: string }]
+    expect(options.code).toBe('BYMAX_TELEMETRY_SAMPLER_ARG_INVALID')
+    expect(text).toContain('OTEL_TRACES_SAMPLER_ARG')
+    expect(text).toContain('traceidratio')
+    expect(text).toContain('every trace')
+  })
+
+  it.each(['', '   '])('warns for a ratio sampler whose argument is blank (%p)', (arg) => {
+    // Scenario: an empty variable, as a template leaves it when its value is unset, is not given.
+    warnAboutSamplerRatio(ratio('parentbased_traceidratio', arg))
+    expect(emitWarning).toHaveBeenCalledTimes(1)
+    expect(String(emitWarning.mock.calls[0]?.[0])).toContain('not set')
+  })
+
+  it.each(['0', '1', '0.5', '0.01', '1e-1', '0x1', ' 0.5 ', '.5', '-0'])(
+    'stays silent for the usable argument %p',
+    (arg) => {
+      // Scenario: a number from 0 to 1 inclusive, in any form `Number` reads, is the SDK's ratio.
+      warnAboutSamplerRatio(ratio('traceidratio', arg))
+      warnAboutSamplerRatio(ratio('parentbased_traceidratio', arg))
+      expect(emitWarning).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([
+    undefined,
+    'always_on',
+    'always_off',
+    'parentbased_always_on',
+    'parentbased_always_off'
+  ])('stays silent whatever the argument when the sampler is %p', (name) => {
+    // Scenario: only a ratio sampler reads the argument, so a bad one beside another sampler is
+    // not this check's business.
+    warnAboutSamplerRatio(ratio(name as string, '1.5'))
+    expect(emitWarning).not.toHaveBeenCalled()
+  })
+
+  it('echoes the value so the operator sees which one was read, and no more than 40 characters of it', () => {
+    // Scenario: the value is operator configuration, so it may be shown; a very long one is cut, and
+    // control characters are escaped by the quoting.
+    warnAboutSamplerRatio(ratio('traceidratio', '10%'))
+    expect(String(emitWarning.mock.calls[0]?.[0])).toContain('"10%"')
+    emitWarning.mockClear()
+    warnAboutSamplerRatio(ratio('traceidratio', 'x'.repeat(100) + '\nINJECTED'))
+    const text = String(emitWarning.mock.calls[0]?.[0])
+    expect(text).toContain('x'.repeat(40))
+    expect(text).not.toContain('x'.repeat(41))
+    expect(text).not.toContain('INJECTED')
+  })
 })
 
 describe('warnAboutOversizedTimers', () => {

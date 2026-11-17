@@ -572,6 +572,34 @@ describe('startTelemetry', () => {
     })
   })
 
+  describe('the sampler ratio check', () => {
+    it('warns once at start when a ratio sampler has no usable ratio', async () => {
+      // Scenario: the SDK would sample every trace and say so only to the diagnostic channel; the
+      // start says it through the warning route, once.
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      await startTelemetry({
+        serviceName: 'api',
+        env: { OTEL_TRACES_SAMPLER: 'parentbased_traceidratio', OTEL_TRACES_SAMPLER_ARG: '10%' }
+      })
+      const warned = emitWarning.mock.calls.filter(
+        ([, options]) =>
+          (options as { code?: string }).code === 'BYMAX_TELEMETRY_SAMPLER_ARG_INVALID'
+      )
+      expect(warned).toHaveLength(1)
+      expect(String(warned[0]?.[0])).toContain('"10%"')
+    })
+
+    it('says nothing for a usable ratio', async () => {
+      // Scenario: the same sampler with a ratio from 0 to 1 is working as configured.
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      await startTelemetry({
+        serviceName: 'api',
+        env: { OTEL_TRACES_SAMPLER: 'parentbased_traceidratio', OTEL_TRACES_SAMPLER_ARG: '0.1' }
+      })
+      expect(emitWarning).not.toHaveBeenCalled()
+    })
+  })
+
   describe('the winston transport check', () => {
     it.each([
       [

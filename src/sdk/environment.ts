@@ -4,7 +4,8 @@
  *
  * Every other module receives its environment as a parameter. The OTel SDK reads
  * `OTEL_EXPORTER_OTLP_*`, `OTEL_TRACES_SAMPLER*` and `OTEL_RESOURCE_ATTRIBUTES` itself, and the
- * library never touches them.
+ * library acts on none of them. It reads the two sampler variables only to say when the SDK will
+ * ignore the ratio.
  */
 
 /** Batch-span-processor tuning, present only for the variables that hold a usable value. */
@@ -22,6 +23,17 @@ export interface BatchSpanProcessorTuning {
 /** The longest delay a timer holds, in milliseconds. Node clamps a longer one to 1 ms. */
 const MAX_TIMER_MS = 2_147_483_647
 
+/** The names under which the SDK selects a sampler that needs a ratio. */
+const RATIO_SAMPLERS = ['traceidratio', 'parentbased_traceidratio']
+
+/** A ratio sampler the environment selects, and the argument it gave for the ratio. */
+export interface RatioSampler {
+  /** `OTEL_TRACES_SAMPLER`, one of the two ratio samplers. */
+  readonly name: string
+  /** `OTEL_TRACES_SAMPLER_ARG` as written, or `undefined` when it is unset, empty or only whitespace. */
+  readonly arg: string | undefined
+}
+
 /** The environment values the library acts on. */
 export interface TelemetryEnvironment {
   /** Whether `OTEL_SDK_DISABLED` is the word `true`, in any letter case and ignoring surrounding whitespace. */
@@ -38,6 +50,8 @@ export interface TelemetryEnvironment {
   readonly oversizedTimers: readonly string[]
   /** Names in `OTEL_NODE_RESOURCE_DETECTORS`, or `undefined` when it is unset or blank. */
   readonly resourceDetectors: readonly string[] | undefined
+  /** The ratio sampler `OTEL_TRACES_SAMPLER` selects, or `undefined` for any other value. */
+  readonly ratioSampler: RatioSampler | undefined
 }
 
 /**
@@ -117,6 +131,8 @@ export function readTelemetryEnvironment(
   if (maxExportBatchSize !== undefined) tuning.maxExportBatchSize = maxExportBatchSize
   const serviceName = source['OTEL_SERVICE_NAME']?.trim()
   const detectors = source['OTEL_NODE_RESOURCE_DETECTORS']
+  const sampler = source['OTEL_TRACES_SAMPLER']
+  const samplerArg = source['OTEL_TRACES_SAMPLER_ARG']
   return {
     sdkDisabled: source['OTEL_SDK_DISABLED']?.trim().toLowerCase() === 'true',
     serviceName: serviceName === '' ? undefined : serviceName,
@@ -125,6 +141,11 @@ export function readTelemetryEnvironment(
     batchSpanProcessor: tuning,
     oversizedTimers,
     resourceDetectors:
-      detectors === undefined || detectors.trim() === '' ? undefined : readExporterList(detectors)
+      detectors === undefined || detectors.trim() === '' ? undefined : readExporterList(detectors),
+    // The SDK compares the name exactly, so a different spelling selects no ratio sampler.
+    ratioSampler:
+      sampler !== undefined && RATIO_SAMPLERS.includes(sampler)
+        ? { name: sampler, arg: samplerArg?.trim() === '' ? undefined : samplerArg }
+        : undefined
   }
 }
