@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Pins the runtime exports of the ./nest entry point: the module, the shutdown
+ * hook, the logger token and the three log keys.
+ * @layer nest
+ */
 import * as entry from './index'
 
 describe('nest entry point', () => {

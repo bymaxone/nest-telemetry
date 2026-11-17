@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Pins how TelemetryModule reports a failed flush in a real Nest application,
+ * through a provided logger and through the Nest logger.
+ * @layer e2e
+ */
 import 'reflect-metadata'
 
 import { Logger } from '@nestjs/common'

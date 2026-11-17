@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Tests the preload boot: the loader-hook specifier, the defaults it reads from
+ * the environment, a start that fails, and the flush on exit.
+ * @layer register
+ */
 import { register } from 'node:module'
 
 import { ESM_HOOK_SPECIFIER, bootFromEnvironment } from './boot'

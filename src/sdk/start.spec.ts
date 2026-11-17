@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Tests startTelemetry end to end with the SDK packages replaced by doubles:
+ * disabled, enabled, already running, a restart, export failures, timers, the warning route and
+ * shutdown.
+ * @layer sdk
+ */
 import {
   clearHandle,
   clearPendingStart,

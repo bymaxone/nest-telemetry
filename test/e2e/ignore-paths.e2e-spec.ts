@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Pins ignorePaths on real incoming HTTP requests, including a pattern with the
+ * global flag.
+ * @layer e2e
+ */
 import { createServer, request } from 'node:http'
 import type { AddressInfo } from 'node:net'
 

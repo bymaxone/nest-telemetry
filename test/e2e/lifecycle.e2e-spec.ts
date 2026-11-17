@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Pins the batch processor tuning from the standard variables against a real
+ * exporter, including a timer value a timer cannot hold.
+ * @layer e2e
+ */
 import { context, propagation, trace } from '@opentelemetry/api'
 
 import { shutdownTelemetry, startTelemetry } from '@bymax-one/nest-telemetry'

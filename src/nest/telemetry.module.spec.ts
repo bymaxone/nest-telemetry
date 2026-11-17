@@ -1,3 +1,7 @@
+/**
+ * @fileoverview Tests the module declaration: what it provides and that it is global.
+ * @layer nest
+ */
 import { TelemetryModule } from './telemetry.module'
 import { TelemetryShutdownHook } from './telemetry-shutdown.hook'
 

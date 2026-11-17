@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Pins the configuration handed to the real auto-instrumentations: the safe
+ * defaults and the host policy.
+ * @layer e2e
+ */
 import { context, propagation, trace } from '@opentelemetry/api'
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node'
 

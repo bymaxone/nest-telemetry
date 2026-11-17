@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Reads the text of the source files to pin that exactly one of them, the
+ * environment reader, names process.env.
+ * @layer repository
+ */
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 

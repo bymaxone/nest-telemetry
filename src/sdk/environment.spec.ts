@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Tests the environment reader, the one place the library reads process.env: which
+ * variable decides the disabled flag, the service name, detectors, exporters and the batch
+ * processor.
+ * @layer sdk
+ */
 import { getBooleanFromEnv } from '@opentelemetry/core'
 
 import { readTelemetryEnvironment } from './environment'

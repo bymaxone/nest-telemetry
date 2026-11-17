@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Pins span redaction through the real SDK: no byte of a planted secret reaches
+ * the exporter, and the opt-out exports the attributes as recorded and warns.
+ * @layer e2e
+ */
 import { context, propagation, trace } from '@opentelemetry/api'
 
 import { shutdownTelemetry, startTelemetry } from '@bymax-one/nest-telemetry'

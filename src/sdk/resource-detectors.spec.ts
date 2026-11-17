@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Tests the selection of resource detectors, the attributes a detector may not
+ * report, and the detector names the installed SDK accepts.
+ * @layer sdk
+ */
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
