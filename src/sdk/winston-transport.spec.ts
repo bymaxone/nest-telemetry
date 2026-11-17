@@ -136,6 +136,13 @@ describe('warnAboutMissingWinstonTransport', () => {
     expect(resolve).not.toHaveBeenCalled()
   })
 
+  it('uses the process entry and the real resolver by default', () => {
+    // Scenario: the start passes only whether log sending is on. Here winston, the instrumentation
+    // bundle and the transport are all installed for the test process, so nothing is reported.
+    warnAboutMissingWinstonTransport(true)
+    expect(emitWarning).not.toHaveBeenCalled()
+  })
+
   it('stays silent when the transport resolves', () => {
     // Scenario: the host installed it.
     warnAboutMissingWinstonTransport(true, ENTRY, table(ALL))
@@ -147,6 +154,11 @@ describe('entryFile', () => {
   it('is the script the process was started with', () => {
     // Scenario: `node app.js`, where the application's own node_modules is searched from app.js.
     expect(entryFile(['node', '/srv/app/main.js'], '/elsewhere')).toBe('/srv/app/main.js')
+  })
+
+  it('reads the process by default', () => {
+    // Scenario: called with no arguments, as the start does, it answers from this process.
+    expect(entryFile()).toBe(process.argv[1] ?? join(process.cwd(), 'entry.js'))
   })
 
   it('falls back to a file in the working directory when there is no script', () => {
