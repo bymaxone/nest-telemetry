@@ -136,11 +136,45 @@ describe('warnAboutMissingWinstonTransport', () => {
     expect(resolve).not.toHaveBeenCalled()
   })
 
-  it('uses the process entry and the real resolver by default', () => {
-    // Scenario: the start passes only whether log sending is on. Here winston, the instrumentation
-    // bundle and the transport are all installed for the test process, so nothing is reported.
-    warnAboutMissingWinstonTransport(true)
-    expect(emitWarning).not.toHaveBeenCalled()
+  it('reads the entry from the process and resolves with the real resolver by default', () => {
+    // Scenario: the start passes only whether log sending is on. The process was started from a script
+    // whose directory holds winston, the bundle and the winston instrumentation but not the
+    // transport, so only a default entry that is the process script and a default resolver that
+    // resolves real files can report it.
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'winston-transport-default-')))
+    const argv = process.argv
+    try {
+      const modules = join(root, 'node_modules')
+      for (const dir of [
+        join(modules, 'winston'),
+        join(modules, '@opentelemetry', 'auto-instrumentations-node'),
+        join(
+          modules,
+          '@opentelemetry',
+          'auto-instrumentations-node',
+          'node_modules',
+          '@opentelemetry',
+          'instrumentation-winston'
+        )
+      ]) {
+        mkdirSync(dir, { recursive: true })
+        writeFileSync(join(dir, 'package.json'), '{"name":"x","main":"index.js"}')
+        writeFileSync(join(dir, 'index.js'), 'module.exports = {}')
+      }
+      process.argv = [argv[0] ?? 'node', join(root, 'main.js')]
+      warnAboutMissingWinstonTransport(true)
+    } finally {
+      process.argv = argv
+      rmSync(root, { recursive: true, force: true })
+    }
+    expect(emitWarning).toHaveBeenCalledTimes(1)
+    expect(emitWarning).toHaveBeenCalledWith(
+      expect.stringContaining('@opentelemetry/winston-transport'),
+      {
+        type: 'Warning',
+        code: 'BYMAX_TELEMETRY_WINSTON_TRANSPORT_MISSING'
+      }
+    )
   })
 
   it('stays silent when the transport resolves', () => {
