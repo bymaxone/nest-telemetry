@@ -36,7 +36,9 @@ configs (`pnpm test:cov`, `pnpm test:e2e`, `pnpm test:cov:all`); `passWithNoTest
 (`break: 100`) is the deeper gate against weak tests.
 
 A unit spec opens no socket and starts no server (`pnpm check:socket-gate`); a spec that needs an
-OTLP receiver or a child process lives in `test/e2e`.
+OTLP receiver or a child process lives in `test/e2e`. The one exception: the vendored repository-script
+specs listed in `scripts/mutation-inventory.exempt.json` run their script as a child process and sit
+beside the sources.
 
 An equivalent mutant is documented in the source as
 `// Stryker disable next-line <Mutator>: <reason>` and enforced by `pnpm check:mutants`; a reason
