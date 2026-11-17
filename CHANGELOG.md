@@ -37,7 +37,9 @@ heading here.
   default.** A `null` in an instrumentation override, in `ignoreIncomingRequest` or in a repeated call's
   options was read as a given value: an override key set to `undefined` replaced a library default, and a
   repeated start whose options were all `null` was reported as ignoring them. The keys are now dropped
-  before they are merged with the defaults. A table covers each defaulted option with both values.
+  before they are merged with the defaults, and each known option is read by property access, so options
+  given as a class instance with getters read as a plain object does. A table covers each defaulted option
+  with both values and with a class instance.
 
 ## [1.0.5] - 2026-11-17
 

@@ -24,7 +24,7 @@ const env = readTelemetryEnvironment({})
 const signals = planSignals(readTelemetryEnvironment({ OTEL_LOGS_EXPORTER: 'otlp' }))
 
 /** Options as a JavaScript caller can pass them, where a key may hold `null`. */
-function loose(options: Record<string, unknown>): TelemetryOptions {
+function loose(options: object): TelemetryOptions {
   return options as TelemetryOptions
 }
 
@@ -134,5 +134,82 @@ describe('the warnings, for an absent option', () => {
     // Scenario: the case above would pass for a check that never speaks.
     warnAboutIgnoredOptions(loose({ serviceName: 'api', instrumentations: null }))
     expect(emitWarning).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('options given as a class instance', () => {
+  /** A group whose values sit behind prototype getters, as a config class has them. */
+  class InstrumentationGroup {
+    constructor(private readonly given: Record<string, unknown>) {}
+    get fs(): unknown {
+      return this.given['fs']
+    }
+    get sendLogs(): unknown {
+      return this.given['sendLogs']
+    }
+  }
+
+  class UnsafeGroup {
+    constructor(private readonly given: Record<string, unknown>) {}
+    get disableUrlRedaction(): unknown {
+      return this.given['disableUrlRedaction']
+    }
+  }
+
+  class CallOptions {
+    constructor(private readonly given: Record<string, unknown>) {}
+    get serviceName(): unknown {
+      return this.given['serviceName']
+    }
+    get instrumentations(): unknown {
+      return this.given['instrumentations']
+    }
+  }
+
+  let emitWarning: jest.SpyInstance
+
+  beforeEach(() => {
+    emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+  })
+
+  it('reads the values of an instrumentations group that is a class instance', () => {
+    // Scenario: `Object.entries` and a spread see only own fields, so a group whose values are
+    // getters on its prototype would read as empty; each known key is read by property access.
+    const config = buildInstrumentationConfig(
+      loose({ instrumentations: new InstrumentationGroup({ fs: true, sendLogs: false }) }),
+      signals
+    )
+    expect(config[FS]).toEqual({ enabled: true })
+    expect(config[PINO]).toEqual({ disableLogSending: true })
+  })
+
+  it('treats the absent values of that group as absent', () => {
+    // Scenario: the control for the case above, with the getters returning null and undefined.
+    const config = buildInstrumentationConfig(
+      loose({ instrumentations: new InstrumentationGroup({ fs: null, sendLogs: undefined }) }),
+      signals
+    )
+    expect(config).toEqual(buildInstrumentationConfig({}, signals))
+  })
+
+  it('reads an unsafe group that is a class instance', () => {
+    // Scenario: a redaction turned off through a getter is still turned off, and still said so.
+    warnAboutUnsafeOptions(loose({ unsafe: new UnsafeGroup({ disableUrlRedaction: true }) }))
+    expect(emitWarning).toHaveBeenCalledTimes(1)
+  })
+
+  it('counts the values of an options object that is a class instance as passed', () => {
+    // Scenario: a repeated start whose options are a class instance passed options, which were
+    // ignored; `Object.values` would see no own field and stay silent.
+    warnAboutIgnoredOptions(loose(new CallOptions({ serviceName: 'api' })))
+    expect(emitWarning).toHaveBeenCalledTimes(1)
+  })
+
+  it('counts a class instance whose values are all absent as having passed none', () => {
+    // Scenario: the control for the case above, with the getters returning null.
+    warnAboutIgnoredOptions(
+      loose(new CallOptions({ serviceName: null, instrumentations: undefined }))
+    )
+    expect(emitWarning).not.toHaveBeenCalled()
   })
 })

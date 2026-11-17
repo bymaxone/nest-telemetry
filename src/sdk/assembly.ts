@@ -67,6 +67,28 @@ function isPresent<T>(value: T | null | undefined): value is T {
 }
 
 /**
+ * Reads each known option by property access, so an options object that is a class instance, with
+ * its values behind prototype getters, is read the same as a plain one. The type has a key for every
+ * option, so an option added to `TelemetryOptions` without a line here does not compile.
+ *
+ * @param options - The options of a call.
+ * @returns Each option's value, or `undefined` for one that is absent.
+ */
+function readEachOption(options: TelemetryOptions): Record<keyof TelemetryOptions, unknown> {
+  return {
+    enabled: options.enabled,
+    serviceName: options.serviceName,
+    serviceVersion: options.serviceVersion,
+    ignoreIncomingRequest: options.ignoreIncomingRequest,
+    instrumentations: options.instrumentations,
+    extraRedactedQueryParams: options.extraRedactedQueryParams,
+    unsafe: options.unsafe,
+    shutdownTimeoutMs: options.shutdownTimeoutMs,
+    env: options.env
+  }
+}
+
+/**
  * Copies the keys of an options object that hold a value, so a key set to `undefined` or `null`
  * cannot replace a default it is merged over.
  *
@@ -283,7 +305,7 @@ export function warnAboutOversizedTimers(env: TelemetryEnvironment): void {
  */
 export function warnAboutIgnoredOptions(options: TelemetryOptions): void {
   const stop = options.enabled === false
-  if (stop || Object.values(options).some(isPresent)) {
+  if (stop || Object.values(readEachOption(options)).some(isPresent)) {
     process.emitWarning(
       stop
         ? 'startTelemetry({ enabled: false }) was called while telemetry is already running. It does not stop the running SDK: call shutdownTelemetry() for that.'
