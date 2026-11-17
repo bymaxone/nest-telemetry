@@ -120,11 +120,17 @@ describe('a start with winston log forwarding on', () => {
   })
 
   it('looks from the working directory when the process has no script', async () => {
-    // Scenario: `node -e` has no script. The working directory is this project, which has winston and
-    // its transport installed, so the start is silent.
+    // Scenario: `node -e` has no script. The working directory holds winston, the bundle and the
+    // winston instrumentation but not the transport, so only a lookup that starts there reports it.
     const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    application(COMPLETE)
+    const cwd = jest.spyOn(process, 'cwd').mockReturnValue(join(root, 'app'))
     process.argv = [argv[0] ?? 'node']
-    await startTelemetry({ serviceName: 'api', env: { OTEL_LOGS_EXPORTER: 'otlp' } })
-    expect(transportWarnings(emitWarning)).toHaveLength(0)
+    try {
+      await startTelemetry({ serviceName: 'api', env: { OTEL_LOGS_EXPORTER: 'otlp' } })
+    } finally {
+      cwd.mockRestore()
+    }
+    expect(transportWarnings(emitWarning)).toHaveLength(1)
   })
 })
