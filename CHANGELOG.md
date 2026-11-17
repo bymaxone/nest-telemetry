@@ -10,14 +10,16 @@ heading here.
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-11-17
+
 ### Added
 
 - **A start warning for a ratio sampler that has no usable ratio.** With `OTEL_TRACES_SAMPLER` set to
   `traceidratio` or `parentbased_traceidratio`, the SDK reads `OTEL_TRACES_SAMPLER_ARG` with `Number` and
   falls back to a ratio of 1 when it is unset, empty, not a number or outside 0 to 1, noting it only on a
   diagnostic channel. Every trace was then sampled without a word, which is the cost a ratio was set to
-  avoid. The start now warns once with `BYMAX_TELEMETRY_SAMPLER_ARG_INVALID`, naming the variable and the
-  value. Measured with the real SDK: `1.5`, `-1`, `10%`, `NaN`, `Infinity` and no
+  avoid. The start now warns once with `BYMAX_TELEMETRY_SAMPLER_ARG_INVALID`, naming the variable and,
+  when one was given, the value. Measured with the real SDK: `1.5`, `-1`, `10%`, `NaN`, `Infinity` and no
   value sampled all 200 root spans; `0` sampled none.
 
 ### Fixed
@@ -235,6 +237,7 @@ First release.
 - Verification from the packed tarball: real `node --import` processes in a CommonJS and a native-ESM
   application, with planted secrets absent from the exported body and negative controls.
 
+[1.0.5]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.5
 [1.0.4]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.3
 [1.0.2]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.2
