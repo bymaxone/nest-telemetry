@@ -21,7 +21,7 @@ import {
   warnAboutSamplerRatio,
   warnAboutUnsafeOptions
 } from './assembly'
-import { readTelemetryEnvironment } from './environment'
+import { readRatioSampler, readTelemetryEnvironment } from './environment'
 import type { TelemetryEnvironment } from './environment'
 import { warnOnExportFailure } from './export-failure'
 import {
@@ -178,7 +178,7 @@ async function boot(options: TelemetryOptions, env: TelemetryEnvironment): Promi
   warnAboutUnsafeOptions(options)
   warnAboutMissingServiceName(options, env)
   warnAboutOversizedTimers(env)
-  warnAboutSamplerRatio(env)
+  warnAboutSamplerRatio(readRatioSampler())
   warnAboutMissingWinstonTransport(options.instrumentations?.sendLogs ?? planSignals(env).sendLogs)
   const sdk = buildSdk(await loadPackages(), options, env)
   sdk.start()

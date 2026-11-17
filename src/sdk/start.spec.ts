@@ -573,30 +573,66 @@ describe('startTelemetry', () => {
   })
 
   describe('the sampler ratio check', () => {
-    it('warns once at start when a ratio sampler has no usable ratio', async () => {
-      // Scenario: the SDK would sample every trace and say so only to the diagnostic channel; the
-      // start says it through the warning route, once.
+    const NAMES = ['OTEL_TRACES_SAMPLER', 'OTEL_TRACES_SAMPLER_ARG']
+
+    /** Runs a start with the sampler in the process environment, which is where the SDK reads it. */
+    async function startWithProcessSampler(
+      processEnv: Record<string, string>,
+      options: { env?: Record<string, string> } = {}
+    ): Promise<jest.SpyInstance> {
       const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
-      await startTelemetry({
-        serviceName: 'api',
-        env: { OTEL_TRACES_SAMPLER: 'parentbased_traceidratio', OTEL_TRACES_SAMPLER_ARG: '10%' }
-      })
-      const warned = emitWarning.mock.calls.filter(
+      Object.assign(process.env, processEnv)
+      try {
+        await startTelemetry({ serviceName: 'api', ...options })
+      } finally {
+        for (const name of NAMES) delete process.env[name]
+      }
+      return emitWarning
+    }
+
+    const samplerWarnings = (emitWarning: jest.SpyInstance): unknown[][] =>
+      emitWarning.mock.calls.filter(
         ([, options]) =>
           (options as { code?: string }).code === 'BYMAX_TELEMETRY_SAMPLER_ARG_INVALID'
       )
-      expect(warned).toHaveLength(1)
-      expect(String(warned[0]?.[0])).toContain('"10%"')
+
+    it('warns once at start when the process environment gives a ratio sampler no usable ratio', async () => {
+      // Scenario: the SDK would sample every trace and say so only to the diagnostic channel; the
+      // start says it through the warning route, once.
+      const emitWarning = await startWithProcessSampler({
+        OTEL_TRACES_SAMPLER: 'parentbased_traceidratio',
+        OTEL_TRACES_SAMPLER_ARG: '10%'
+      })
+      expect(samplerWarnings(emitWarning)).toHaveLength(1)
+      expect(String(samplerWarnings(emitWarning)[0]?.[0])).toContain('"10%"')
     })
 
     it('says nothing for a usable ratio', async () => {
       // Scenario: the same sampler with a ratio from 0 to 1 is working as configured.
-      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
-      await startTelemetry({
-        serviceName: 'api',
-        env: { OTEL_TRACES_SAMPLER: 'parentbased_traceidratio', OTEL_TRACES_SAMPLER_ARG: '0.1' }
+      const emitWarning = await startWithProcessSampler({
+        OTEL_TRACES_SAMPLER: 'parentbased_traceidratio',
+        OTEL_TRACES_SAMPLER_ARG: '0.1'
       })
-      expect(emitWarning).not.toHaveBeenCalled()
+      expect(samplerWarnings(emitWarning)).toHaveLength(0)
+    })
+
+    it('judges the process environment, not the environment the host hands to the start', async () => {
+      // Scenario: the SDK reads the sampler from the process environment whatever `env` says. A bad
+      // ratio there is reported although `env` is fine, and a bad ratio in `env` alone is not,
+      // because the SDK never reads it.
+      const reported = await startWithProcessSampler(
+        { OTEL_TRACES_SAMPLER: 'traceidratio', OTEL_TRACES_SAMPLER_ARG: '1.5' },
+        { env: { OTEL_TRACES_SAMPLER: 'traceidratio', OTEL_TRACES_SAMPLER_ARG: '0.1' } }
+      )
+      expect(samplerWarnings(reported)).toHaveLength(1)
+      clearHandle()
+      clearPendingStart()
+      reported.mockClear()
+      const silent = await startWithProcessSampler(
+        { OTEL_TRACES_SAMPLER: 'traceidratio', OTEL_TRACES_SAMPLER_ARG: '0.1' },
+        { env: { OTEL_TRACES_SAMPLER: 'traceidratio', OTEL_TRACES_SAMPLER_ARG: '1.5' } }
+      )
+      expect(samplerWarnings(silent)).toHaveLength(0)
     })
   })
 

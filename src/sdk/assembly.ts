@@ -4,7 +4,7 @@
  */
 import type { InstrumentationConfigMap } from '@opentelemetry/auto-instrumentations-node'
 
-import type { TelemetryEnvironment } from './environment'
+import type { RatioSampler, TelemetryEnvironment } from './environment'
 import { buildRedactedQueryParams, serializeRedisCommandName } from './redaction'
 import type { TelemetryOptions } from './types'
 import { reportWarning } from './warning-sink'
@@ -201,10 +201,9 @@ const SHOWN_VALUE_LENGTH = 40
  * trace is then sampled, which is what a ratio was set to avoid. The value is operator configuration,
  * so it is repeated, cut short and quoted so that control characters are escaped.
  *
- * @param env - The parsed environment.
+ * @param sampler - The ratio sampler the environment selects, if any.
  */
-export function warnAboutSamplerRatio(env: TelemetryEnvironment): void {
-  const sampler = env.ratioSampler
+export function warnAboutSamplerRatio(sampler: RatioSampler | undefined): void {
   if (sampler === undefined) return
   const ratio = sampler.arg === undefined ? Number.NaN : Number(sampler.arg)
   if (ratio >= 0 && ratio <= 1) return

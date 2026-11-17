@@ -5,7 +5,8 @@
  * Every other module receives its environment as a parameter. The OTel SDK reads
  * `OTEL_EXPORTER_OTLP_*`, `OTEL_TRACES_SAMPLER*` and `OTEL_RESOURCE_ATTRIBUTES` itself, and the
  * library acts on none of them. It reads the two sampler variables only to say when the SDK will
- * ignore the ratio.
+ * ignore the ratio, and reads them from the process environment because that is where the SDK does,
+ * whatever environment the host hands to `startTelemetry`.
  */
 
 /** Batch-span-processor tuning, present only for the variables that hold a usable value. */
@@ -50,8 +51,6 @@ export interface TelemetryEnvironment {
   readonly oversizedTimers: readonly string[]
   /** Names in `OTEL_NODE_RESOURCE_DETECTORS`, or `undefined` when it is unset or blank. */
   readonly resourceDetectors: readonly string[] | undefined
-  /** The ratio sampler `OTEL_TRACES_SAMPLER` selects, or `undefined` for any other value. */
-  readonly ratioSampler: RatioSampler | undefined
 }
 
 /**
@@ -131,8 +130,6 @@ export function readTelemetryEnvironment(
   if (maxExportBatchSize !== undefined) tuning.maxExportBatchSize = maxExportBatchSize
   const serviceName = source['OTEL_SERVICE_NAME']?.trim()
   const detectors = source['OTEL_NODE_RESOURCE_DETECTORS']
-  const sampler = source['OTEL_TRACES_SAMPLER']
-  const samplerArg = source['OTEL_TRACES_SAMPLER_ARG']
   return {
     sdkDisabled: source['OTEL_SDK_DISABLED']?.trim().toLowerCase() === 'true',
     serviceName: serviceName === '' ? undefined : serviceName,
@@ -141,11 +138,24 @@ export function readTelemetryEnvironment(
     batchSpanProcessor: tuning,
     oversizedTimers,
     resourceDetectors:
-      detectors === undefined || detectors.trim() === '' ? undefined : readExporterList(detectors),
-    // The SDK compares the name exactly, so a different spelling selects no ratio sampler.
-    ratioSampler:
-      sampler !== undefined && RATIO_SAMPLERS.includes(sampler)
-        ? { name: sampler, arg: samplerArg?.trim() === '' ? undefined : samplerArg }
-        : undefined
+      detectors === undefined || detectors.trim() === '' ? undefined : readExporterList(detectors)
   }
+}
+
+/**
+ * Reads the ratio sampler the SDK will build, from the same environment the SDK reads.
+ *
+ * @param source - The environment to read. Defaults to the process environment, which is where the SDK
+ * reads `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG` whatever the host passed to the start.
+ * @returns The ratio sampler and the argument it was given, or `undefined` when the sampler is not one.
+ */
+export function readRatioSampler(
+  source: NodeJS.ProcessEnv = process.env
+): RatioSampler | undefined {
+  const name = source['OTEL_TRACES_SAMPLER']
+  const arg = source['OTEL_TRACES_SAMPLER_ARG']
+  // The SDK compares the name exactly, so a different spelling selects no ratio sampler.
+  return name !== undefined && RATIO_SAMPLERS.includes(name)
+    ? { name, arg: arg?.trim() === '' ? undefined : arg }
+    : undefined
 }

@@ -18,8 +18,8 @@ import {
   warnAboutUnsafeOptions
 } from './assembly'
 import type { SignalPlan } from './assembly'
-import { readTelemetryEnvironment } from './environment'
-import type { TelemetryEnvironment } from './environment'
+import { readRatioSampler, readTelemetryEnvironment } from './environment'
+import type { RatioSampler, TelemetryEnvironment } from './environment'
 import { DEFAULT_REDACTED_QUERY_PARAMS, serializeRedisCommandName } from './redaction'
 import type { TelemetryOptions, UnsafeOptions } from './types'
 
@@ -495,8 +495,8 @@ describe('warnAboutSamplerRatio', () => {
     emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
   })
 
-  const ratio = (name: string, arg: string | undefined): TelemetryEnvironment =>
-    environment({ OTEL_TRACES_SAMPLER: name, OTEL_TRACES_SAMPLER_ARG: arg })
+  const ratio = (name: string, arg: string | undefined): RatioSampler | undefined =>
+    readRatioSampler({ OTEL_TRACES_SAMPLER: name, OTEL_TRACES_SAMPLER_ARG: arg })
 
   it.each([
     ['1.5', 'is above 1'],
@@ -556,6 +556,11 @@ describe('warnAboutSamplerRatio', () => {
     // control characters are escaped by the quoting.
     warnAboutSamplerRatio(ratio('traceidratio', '10%'))
     expect(String(emitWarning.mock.calls[0]?.[0])).toContain('"10%"')
+    emitWarning.mockClear()
+    warnAboutSamplerRatio(ratio('traceidratio', '1\n5%'))
+    const escaped = String(emitWarning.mock.calls[0]?.[0])
+    expect(escaped).toContain('"1\\n5%"')
+    expect(escaped).not.toContain('\n')
     emitWarning.mockClear()
     warnAboutSamplerRatio(ratio('traceidratio', 'x'.repeat(100) + '\nINJECTED'))
     const text = String(emitWarning.mock.calls[0]?.[0])
