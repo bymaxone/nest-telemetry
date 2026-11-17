@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Tests how the SDK is assembled from the options and the environment: signals,
+ * resource, instrumentation config, the warnings about unsafe options, a missing service name
+ * and oversized timers, and the log-sending keys of the installed instrumentations.
+ * @layer sdk
+ */
 import { readdirSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'

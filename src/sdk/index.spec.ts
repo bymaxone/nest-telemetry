@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Pins the runtime exports of the SDK entry point and that they are the real
+ * implementations.
+ * @layer sdk
+ */
 import * as entry from './index'
 
 describe('sdk entry point', () => {

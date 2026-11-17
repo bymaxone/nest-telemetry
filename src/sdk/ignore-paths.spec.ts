@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Tests the ignorePaths matcher on request paths: exact patterns, the optional
+ * trailing slash, the global flag and the path-length cap.
+ * @layer sdk
+ */
 import { ignorePaths } from './ignore-paths'
 
 describe('ignorePaths', () => {

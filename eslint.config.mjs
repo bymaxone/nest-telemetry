@@ -354,6 +354,24 @@ export default [
     }
   },
 
+  // A function in the library source is at most 50 raw lines: blank lines and comments count, as a
+  // reader sees them, and an IIFE is a function. AGENTS.md states the same limit as prose. Spec files
+  // are exempt, because a `describe` callback holds a whole suite and the unit there is one `it`.
+  //
+  // No function is over the limit today, so there is no baseline to keep. An `eslint-disable` comment
+  // would accept a long function without a trace, so inline configuration is off for these files.
+  {
+    files: ['src/**/*.ts'],
+    ignores: ['**/*.spec.ts'],
+    linterOptions: { noInlineConfig: true },
+    rules: {
+      'max-lines-per-function': [
+        'error',
+        { max: 50, skipBlankLines: false, skipComments: false, IIFEs: true }
+      ]
+    }
+  },
+
   // Formatting is an ERROR, on every path the lint invocation reaches.
   //
   // `'error'` and not `--max-warnings 0`: that flag raises EVERY warning, and

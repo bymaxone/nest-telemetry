@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Pins that the ./register entry point exports nothing, because the subpath is a
+ * preload.
+ * @layer register
+ */
 import * as entry from './index'
 
 describe('register entry point types', () => {

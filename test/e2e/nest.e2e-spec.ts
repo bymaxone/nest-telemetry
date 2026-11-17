@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Pins TelemetryModule in a real Nest application: the queued spans are delivered
+ * when it closes, and it closes without effect when no SDK was started.
+ * @layer e2e
+ */
 import 'reflect-metadata'
 
 import { Test } from '@nestjs/testing'

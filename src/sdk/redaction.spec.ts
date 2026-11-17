@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Tests the redaction of span data: the url.query marker, the default parameter
+ * list against the installed instrumentation, and the Redis command name.
+ * @layer sdk
+ */
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 

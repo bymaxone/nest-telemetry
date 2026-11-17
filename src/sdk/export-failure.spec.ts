@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Tests the export-failure warning: one warning per window with the exporter kind
+ * and the error code, silence on success.
+ * @layer sdk
+ */
 import { warnOnExportFailure } from './export-failure'
 import type { ExportOutcome, ObservableExporter } from './export-failure'
 import { clearWarningSink, registerWarningSink } from './warning-sink'

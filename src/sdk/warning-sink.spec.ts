@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Tests the warning route: a process warning when no sink is registered, and the
+ * hand-off to a registered sink.
+ * @layer sdk
+ */
 import { clearWarningSink, registerWarningSink, reportWarning } from './warning-sink'
 import type { TelemetryWarning } from './warning-sink'
 

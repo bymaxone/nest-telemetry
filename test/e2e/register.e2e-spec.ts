@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Pins the preload boot with the real loader hook and the real SDK: it starts,
+ * flushes when the process runs out of work, and still starts when the hook cannot be resolved.
+ * @layer e2e
+ */
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 

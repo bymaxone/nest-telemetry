@@ -1,3 +1,7 @@
+/**
+ * @fileoverview Pins that each published subpath resolves through its alias.
+ * @layer e2e
+ */
 import * as nest from '@bymax-one/nest-telemetry/nest'
 import * as register from '@bymax-one/nest-telemetry/register'
 import * as sdk from '@bymax-one/nest-telemetry'

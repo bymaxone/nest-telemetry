@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Pins that the preload boot warns and returns a disabled handle, instead of
+ * stopping the host, when an optional peer cannot be loaded.
+ * @layer e2e
+ */
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 

@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Tests the handle of a started SDK: the pending start, the registered handle, the
+ * shutdown deadline and the idempotent shutdown.
+ * @layer sdk
+ */
 import {
   clearHandle,
   clearPendingStart,

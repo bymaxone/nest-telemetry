@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Tests the CommonJS entry of ./register, which refuses to load and says to use
+ * node --import.
+ * @layer register
+ */
 describe('the CommonJS entry of ./register', () => {
   it('refuses to load and says to use node --import', async () => {
     // Scenario: a host writes `node --require @bymax-one/nest-telemetry/register`. The SDK start is

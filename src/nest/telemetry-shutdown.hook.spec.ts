@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Tests the shutdown hook: its log keys and logger token, the flush on close, and
+ * how a failed flush is reported.
+ * @layer nest
+ */
 import 'reflect-metadata'
 
 import { Logger } from '@nestjs/common'
