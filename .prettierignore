@@ -15,3 +15,6 @@ scripts/function-length-key.mjs
 src/check-function-length.spec.ts
 src/check-function-length.baseline.spec.ts
 src/check-function-length.key.spec.ts
+
+# Copied byte for byte from bymaxone/.github (.github/script-templates/commitlint-no-ai-attribution).
+scripts/commitlint-no-ai-attribution.cjs
