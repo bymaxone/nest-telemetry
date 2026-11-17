@@ -190,9 +190,27 @@ describe('entryFile', () => {
     expect(entryFile(['node', '/srv/app/main.js'], '/elsewhere')).toBe('/srv/app/main.js')
   })
 
-  it('reads the process by default', () => {
-    // Scenario: called with no arguments, as the start does, it answers from this process.
-    expect(entryFile()).toBe(process.argv[1] ?? join(process.cwd(), 'entry.js'))
+  it('reads the script of this process when called with no arguments', () => {
+    // Scenario: the start passes nothing, so the entry is the script the process was started with.
+    const argv = process.argv
+    process.argv = [argv[0] ?? 'node', '/srv/app/main.js']
+    try {
+      expect(entryFile()).toBe('/srv/app/main.js')
+    } finally {
+      process.argv = argv
+    }
+  })
+
+  it('reads the working directory of this process when called with no arguments and no script', () => {
+    // Scenario: `node -e` has no script, so the default working directory is the process's own.
+    const argv = process.argv
+    process.argv = [argv[0] ?? 'node']
+    jest.spyOn(process, 'cwd').mockReturnValue('/srv/elsewhere')
+    try {
+      expect(entryFile()).toBe(join('/srv/elsewhere', 'entry.js'))
+    } finally {
+      process.argv = argv
+    }
   })
 
   it('falls back to a file in the working directory when there is no script', () => {

@@ -598,6 +598,13 @@ describe('startTelemetry', () => {
       })
       expect(mockWinstonTransportCheck).toHaveBeenCalledTimes(1)
       expect(mockWinstonTransportCheck).toHaveBeenCalledWith(expected)
+      // The instrumentations are configured from the same decision: their log sending is on exactly
+      // when the check was told it is.
+      const config = mockAutoInstrumentations.mock.calls[0]?.[0] as Record<
+        string,
+        { disableLogSending?: boolean }
+      >
+      expect(config['@opentelemetry/instrumentation-winston']?.disableLogSending).toBe(!expected)
     })
   })
 
