@@ -2,6 +2,10 @@
  * @fileoverview Pins that a real start reports a winston transport that cannot be resolved, once, and
  * stays silent when the transport resolves or log sending is off.
  * @layer e2e
+ *
+ * The layout is a real directory tree and `process.argv[1]` points into it, because Jest replaces
+ * `createRequire` from `node:module` with its own resolver: patching Node's `Module._resolveFilename` to
+ * hide the transport never reaches a lookup made under Jest.
  */
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
