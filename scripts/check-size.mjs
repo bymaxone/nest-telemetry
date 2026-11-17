@@ -34,8 +34,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
-//   - 2026-11-17, sdk: 5,598 B real -> 5.50 KiB budget (5,632 B, 34 B of headroom; 5,256 B real and
-//     5.17 KiB, 38 B of headroom, before the sampler check), the whole subpath: redaction, the
+//   - 2026-11-17, sdk: 5,556 B real -> 5.50 KiB budget (5,632 B, 76 B of headroom), the whole subpath: redaction, the
 //     environment reader, the SDK assembly, the resource-detector selection that keeps the process
 //     command line out of the exported resource, the start cache and the handle lifecycle with its
 //     shutdown deadline (about 0.1 KiB: the timer, its warning and the clamp of the configured
@@ -44,8 +43,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //     changes nothing, with their full explanatory text, and the winston transport check (about
 //     0.38 KiB: the resolver, the three lookups and the warning text) and the sampler ratio check
 //     (about 0.3 KiB: the ratio reader, the check and the warning text).
-//   - 2026-11-17, register: 5,796 B real -> 5.69 KiB budget (5,826 B, 30 B of headroom; 5,430 B real
-//     and 5.34 KiB, 38 B of headroom, before the sampler check). The preload bundles its own copy
+//   - 2026-11-17, register: 5,751 B real -> 5.69 KiB budget (5,826 B, 75 B of headroom). The preload bundles its own copy
 //     of the start logic, shutdown deadline, export-failure warning, warning sink, resource and timer handling and the winston transport and sampler ratio checks included: the copies share their state through
 //     `globalThis`, not through a module.
 //   - nest: 1.67 KiB real -> 1.72 KiB budget (~3% headroom), the global module and the shutdown hook
