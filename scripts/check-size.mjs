@@ -34,17 +34,19 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
-//   - 2026-11-17, sdk: 5,256 B real -> 5.17 KiB budget (5,294 B, about 30 B of headroom), the whole
-//     subpath: redaction, the
+//   - 2026-11-17, sdk: 5,598 B real -> 5.50 KiB budget (5,632 B, 34 B of headroom; 5,256 B real and
+//     5.17 KiB, 38 B of headroom, before the sampler check), the whole subpath: redaction, the
 //     environment reader, the SDK assembly, the resource-detector selection that keeps the process
 //     command line out of the exported resource, the start cache and the handle lifecycle with its
 //     shutdown deadline (about 0.1 KiB: the timer, its warning and the clamp of the configured
 //     value), the export-failure warning (about 0.33 KiB: the exporter wrapper, the code reader and
 //     the warning text), the warning sink (about 0.1 KiB), the resource attributes it removes and the timer values it refuses (about 0.27 KiB: the host-id wrapper, the timer ceiling and three warning texts), the refusal of a start after a shutdown and the warnings for a later call that
 //     changes nothing, with their full explanatory text, and the winston transport check (about
-//     0.38 KiB: the resolver, the three lookups and the warning text).
-//   - 2026-11-17, register: 5,430 B real -> 5.34 KiB budget (5,468 B, about 30 B of headroom). The preload bundles its own copy
-//     of the start logic, shutdown deadline, export-failure warning, warning sink, resource and timer handling and winston transport check included: the copies share their state through
+//     0.38 KiB: the resolver, the three lookups and the warning text) and the sampler ratio check
+//     (about 0.3 KiB: the ratio reader, the check and the warning text).
+//   - 2026-11-17, register: 5,796 B real -> 5.69 KiB budget (5,826 B, 30 B of headroom; 5,430 B real
+//     and 5.34 KiB, 38 B of headroom, before the sampler check). The preload bundles its own copy
+//     of the start logic, shutdown deadline, export-failure warning, warning sink, resource and timer handling and the winston transport and sampler ratio checks included: the copies share their state through
 //     `globalThis`, not through a module.
 //   - nest: 1.67 KiB real -> 1.72 KiB budget (~3% headroom), the global module and the shutdown hook
 //     with every step of failure reporting guarded, and the route that hands the two runtime warnings to
@@ -52,8 +54,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
 //   met by shortening the text of a warning.
 const BUDGETS = [
-  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 5.17 * 1024 },
-  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 5.34 * 1024 },
+  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 5.5 * 1024 },
+  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 5.69 * 1024 },
   { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 1.72 * 1024 }
 ]
 
