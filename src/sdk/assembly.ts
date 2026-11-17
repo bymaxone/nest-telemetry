@@ -205,7 +205,7 @@ const SHOWN_VALUE_LENGTH = 40
  */
 export function warnAboutSamplerRatio(sampler: RatioSampler | undefined): void {
   if (sampler === undefined) return
-  const ratio = sampler.arg === undefined ? Number.NaN : Number(sampler.arg)
+  const ratio = Number(sampler.arg)
   if (ratio >= 0 && ratio <= 1) return
   const given =
     sampler.arg === undefined

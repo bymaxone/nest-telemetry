@@ -34,7 +34,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
-//   - sdk: 5,556 B measured, 5.46 KiB budget (5,591 B, 35 B of headroom), the whole subpath: redaction, the
+//   - sdk: 5,548 B measured, 5.45 KiB budget (5,580 B, 32 B of headroom), the whole subpath: redaction, the
 //     environment reader, the SDK assembly, the resource-detector selection that keeps the process
 //     command line out of the exported resource, the start cache and the handle lifecycle with its
 //     shutdown deadline (about 0.1 KiB: the timer, its warning and the clamp of the configured
@@ -43,7 +43,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //     changes nothing, with their full explanatory text, and the winston transport check (about
 //     0.38 KiB: the resolver, the three lookups and the warning text) and the sampler ratio check
 //     (about 0.3 KiB: the ratio reader, the check and the warning text).
-//   - register: 5,751 B measured, 5.65 KiB budget (5,786 B, 35 B of headroom). The preload bundles its own copy
+//   - register: 5,747 B measured, 5.64 KiB budget (5,775 B, 28 B of headroom). The preload bundles its own copy
 //     of the start logic, shutdown deadline, export-failure warning, warning sink, resource and timer handling and the winston transport and sampler ratio checks included: the copies share their state through
 //     `globalThis`, not through a module.
 //   - nest: 1.67 KiB real -> 1.72 KiB budget (~3% headroom), the global module and the shutdown hook
@@ -52,8 +52,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
 //   met by shortening the text of a warning.
 const BUDGETS = [
-  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 5.46 * 1024 },
-  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 5.65 * 1024 },
+  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 5.45 * 1024 },
+  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 5.64 * 1024 },
   { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 1.72 * 1024 }
 ]
 
