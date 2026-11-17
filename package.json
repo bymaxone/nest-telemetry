@@ -74,6 +74,7 @@
     "check:mutants": "node scripts/check-mutation-directives.mjs",
     "check:published": "node scripts/check-published-surface.mjs",
     "check:file-length": "node scripts/check-file-length.mjs",
+    "check:function-length": "node scripts/check-function-length.mjs",
     "clean": "rm -rf dist coverage",
     "check:socket-gate": "node scripts/check-socket-gate.mjs",
     "check:spec-headers": "node scripts/check-spec-headers.mjs",

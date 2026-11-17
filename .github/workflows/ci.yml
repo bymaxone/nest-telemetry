@@ -84,6 +84,17 @@ jobs:
           else
             pnpm check:file-length
           fi
+      - name: Functions and test bodies stay within the length limit
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # A pull request is also compared with the baseline on its base branch, so the baseline
+          # it carries cannot admit the offender it adds. The checkout above is not shallow.
+          if [ -n "$BASE_REF" ]; then
+            pnpm check:function-length --base "origin/$BASE_REF"
+          else
+            pnpm check:function-length
+          fi
       - name: Each suite alone meets the coverage gate
         # The `ci` job measures the unit and e2e suites combined, which passes when each covers
         # what the other misses. The two commands below hold each suite to 100 on its own.

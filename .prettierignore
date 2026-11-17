@@ -7,3 +7,11 @@ pnpm-lock.yaml
 dist/
 coverage/
 reports/
+
+# Copied byte for byte from bymaxone/.github (.github/script-templates/check-function-length), so a
+# formatter must not touch them: the family check compares them with the template.
+scripts/check-function-length.mjs
+scripts/function-length-key.mjs
+src/check-function-length.spec.ts
+src/check-function-length.baseline.spec.ts
+src/check-function-length.key.spec.ts
