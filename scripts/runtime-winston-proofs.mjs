@@ -15,6 +15,11 @@
  *   does not reach the receiver, which is the control that shows the first run proves something, and
  *   the library emits `BYMAX_TELEMETRY_WINSTON_TRANSPORT_MISSING`;
  * - log sending is off: no record and no warning.
+ *
+ * The consumer sits inside the repository, so the packages resolve through the repository's own pnpm
+ * layout: the application depends on winston and on the auto-instrumentations package directly, and
+ * the winston instrumentation lives in the virtual store. The hidden-transport run is therefore the
+ * warning in a pnpm layout where the check has to find the instrumentation from the application.
  */
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
