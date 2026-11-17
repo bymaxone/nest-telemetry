@@ -8,6 +8,24 @@ The `release.yml` workflow extracts the section matching the pushed `vX.Y.Z` tag
 as the GitHub Release body, so each released version needs a matching `## [X.Y.Z]`
 heading here.
 
+## [Unreleased]
+
+### Fixed
+
+- **Winston log forwarding says when it cannot work.** The winston instrumentation forwards a record by
+  adding a transport from `@opentelemetry/winston-transport`, which it loads with a `require` and which is
+  not one of its dependencies. An application that had not installed the package got no winston record in
+  the logs pipeline and no message, although 1.0.4 and the README said `sendLogs` covers winston. The start
+  now warns once with `BYMAX_TELEMETRY_WINSTON_TRANSPORT_MISSING` when log sending is on, winston is
+  installed for the application and the transport cannot be resolved from the instrumentation. The README
+  says to install `@opentelemetry/winston-transport` as a direct dependency of the application, with what
+  was measured under npm and pnpm. The check asks whether winston is installed, not loaded, so an installed
+  winston the application never uses can warn once for nothing.
+
+### Documentation
+
+- The README says the node-redis measurements were taken with `redis` 5 and 6.
+
 ## [1.0.4] - 2026-11-14
 
 ### Security
