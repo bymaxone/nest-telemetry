@@ -14,6 +14,7 @@ import {
   shutdownTelemetry
 } from './handle'
 import { startTelemetry } from './start'
+import type { TelemetryOptions } from './types'
 
 const mockSdkInstance = {
   start: jest.fn<void, []>(),
@@ -91,6 +92,19 @@ describe('startTelemetry', () => {
       expect(mockResourceFromAttributes).not.toHaveBeenCalled()
       expect(currentHandle()).toBeUndefined()
       await expect(handle.shutdown()).resolves.toBeUndefined()
+    })
+
+    it('reads the process environment when env is null, as when it is absent', async () => {
+      // Scenario: a key set to null is the same as no key; a null env must not throw, and the SDK
+      // reads the process environment, which here turns it off.
+      process.env['OTEL_SDK_DISABLED'] = 'true'
+      try {
+        const handle = await startTelemetry({ env: null } as unknown as TelemetryOptions)
+        expect(handle.enabled).toBe(false)
+        expect(mockNodeSdk).not.toHaveBeenCalled()
+      } finally {
+        delete process.env['OTEL_SDK_DISABLED']
+      }
     })
 
     it('is disabled by the standard OTEL_SDK_DISABLED switch when the host is silent', async () => {

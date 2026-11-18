@@ -260,7 +260,7 @@ The count is the number of failed exports since the process started. It lives on
 
 This library starts the SDK and traces what the OpenTelemetry instrumentations cover (HTTP, Redis, databases). The Bymax libraries add spans of their own for their domain operations, under the name `<library>.<operation>`, through the optional `@opentelemetry/api`: with no SDK registered the API does nothing, and with this one started the spans are exported like any other. The standard asks that their attributes use the `bymax.<library>.<attribute>` namespace and closed sets of values, with no secret, no user or tenant id and no payload, and that a failure set the span status to error with the library's error code.
 
-The names below are the ones the observability standard reserves. A library emits one from the release whose CHANGELOG lists it, and its own README documents the attributes.
+The names below are the ones the Bymax observability standard reserves for each library; they are not read from this repository. A library emits one from the release whose CHANGELOG lists it, and its own README documents the attributes.
 
 | Library                                                                                                                                                                                                                  | Span names                                                                                            |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |

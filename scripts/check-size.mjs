@@ -36,7 +36,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 // Calibration history (newest first):
 //   - observability: 673 B measured, 0.69 KiB budget (706 B, 33 B of headroom): the metrics contributor and
 //     its one counter; `prom-client` and `@bymax-one/nest-core` stay external.
-//   - sdk: 5,929 B measured, 5.82 KiB budget (5,960 B, 31 B of headroom), the whole subpath: redaction, the
+//   - sdk: 5,934 B measured, 5.82 KiB budget (5,960 B, 26 B of headroom), the whole subpath: redaction, the
 //     environment reader, the SDK assembly, the resource-detector selection that keeps the process
 //     command line out of the exported resource, the start cache and the handle lifecycle with its
 //     shutdown deadline (about 0.1 KiB: the timer, its warning and the clamp of the configured
@@ -48,7 +48,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //     0.15 KiB: the six names, the near-miss reader and the warning text) and the dropping of absent option keys
 //     before the merge with the defaults, each known option read by property access, and the count of
 //     failed exports that the metrics contributor reads (about 0.06 KiB).
-//   - register: 6,142 B measured, 6.03 KiB budget (6,175 B, 33 B of headroom). The preload bundles its own copy
+//   - register: 6,148 B measured, 6.03 KiB budget (6,175 B, 27 B of headroom). The preload bundles its own copy
 //     of the start logic, shutdown deadline, export-failure warning, warning sink, resource and timer handling and the winston transport, sampler ratio and sampler name checks included: the copies share their state through
 //     `globalThis`, not through a module.
 //   - nest: 1.67 KiB real -> 1.72 KiB budget (~3% headroom), the global module and the shutdown hook
