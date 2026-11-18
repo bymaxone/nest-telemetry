@@ -24,8 +24,10 @@ const CODE_TOKEN = /^[A-Z0-9_]{1,40}$/
 
 /** Reads a short code from an error, or `UNKNOWN`: the message and the stack are never read. */
 function codeOf(error: Error): string {
-  const code = String(Reflect.get(error, 'code'))
-  return CODE_TOKEN.test(code) ? code : 'UNKNOWN'
+  const code: unknown = Reflect.get(error, 'code')
+  // Only a string or a number is read: converting an object runs its own toString, which can throw.
+  const text = typeof code === 'string' || typeof code === 'number' ? String(code) : ''
+  return CODE_TOKEN.test(text) ? text : 'UNKNOWN'
 }
 
 /** Injection token of the optional structured logger a failed flush is reported through. */

@@ -149,6 +149,39 @@ describe('TelemetryShutdownHook', () => {
     })
 
     it.each([
+      ['ECONNREFUSED', 'ECONNREFUSED'],
+      ['a code of one character', 'E'],
+      ['a code of 40 characters', 'A'.repeat(40)],
+      ['a numeric code', 503],
+      ['an empty code', ''],
+      ['a code of 41 characters', 'A'.repeat(41)],
+      ['a lower-case code', 'econnrefused'],
+      ['a code with a trailing newline', 'SAFE\n'],
+      ['a code with a trailing carriage return and newline', 'SAFE\r\n'],
+      [
+        'a code object whose toString throws',
+        {
+          toString: () => {
+            throw new Error('boom')
+          }
+        }
+      ],
+      ['a code object without a prototype', Object.create(null)]
+    ])('names the code in the Nest logger entry for %s, or UNKNOWN', async (_what, code) => {
+      // Scenario: only an upper-case token of 1 to 40 characters, a string or a number, reaches
+      // the entry; anything else, however odd, becomes UNKNOWN and the entry is still written.
+      const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+      const failure = Object.assign(new Error('x'), { code })
+      registerHandle(createHandle(() => Promise.reject(failure)))
+      await new TelemetryShutdownHook(moduleRef()).onApplicationShutdown()
+      const accepted = typeof code === 'string' || typeof code === 'number'
+      const token = accepted && /^[A-Z0-9_]{1,40}$/.test(String(code)) ? String(code) : 'UNKNOWN'
+      expect(error).toHaveBeenCalledTimes(1)
+      expect(error).toHaveBeenCalledWith(expect.stringContaining(`(code ${token}).`))
+      expect(String(error.mock.calls[0]?.[0])).not.toContain('\n')
+    })
+
+    it.each([
       [
         'a string code that is not a plain token',
         'http://user:hunter2@collector.example/v1/traces'
