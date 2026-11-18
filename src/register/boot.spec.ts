@@ -148,7 +148,7 @@ describe('bootFromEnvironment', () => {
 
   it('reports a thrown value that is not an error by its code alone, as UNKNOWN', async () => {
     // Scenario: a loader that throws a string still produces a readable warning, and the text it
-    // threw is not echoed. (An earlier version wrote the text.)
+    // threw is not echoed.
     const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
     const { deps } = dependencies(handle(true))
     await bootFromEnvironment(PARENT, {

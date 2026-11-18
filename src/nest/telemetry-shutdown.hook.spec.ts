@@ -133,7 +133,7 @@ describe('TelemetryShutdownHook', () => {
     it('falls back to the Nest logger, with the key in the message, when no structured logger is provided', async () => {
       // Scenario: a host that did not provide TELEMETRY_LOGGER still gets the failure, on the
       // logger Nest routes through app.useLogger(), with the key and a short code and nothing the
-      // exporter said. (An earlier version wrote the error message and the stack here.)
+      // exporter said.
       const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
       const failure = Object.assign(new Error('collector refused'), { code: 'ECONNREFUSED' })
       registerHandle(createHandle(() => Promise.reject(failure)))
