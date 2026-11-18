@@ -25,6 +25,11 @@ describe('codeOf', () => {
     ['a code that is a URL', { code: 'http://user:hunter2@host/' }, 'UNKNOWN'],
     ['a code object whose toString throws', { code: throwing }, 'UNKNOWN'],
     ['a code object without a prototype', { code: Object.create(null) }, 'UNKNOWN'],
+    [
+      'a code object that converts to a valid token',
+      { code: { toString: () => 'ECONNREFUSED' } },
+      'UNKNOWN'
+    ],
     ['no code', {}, 'UNKNOWN']
   ])('reads %s', (_what, error, expected) => {
     // Scenario: only an upper-case token of 1 to 40 characters, a string or a number, is a code.

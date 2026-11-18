@@ -25,7 +25,8 @@ const PACKAGE = /@opentelemetry\/[a-z0-9-]+/
 export function codeOf(error: unknown): string {
   try {
     const code: unknown = Reflect.get(Object(error), 'code')
-    const text = typeof code === 'string' || typeof code === 'number' ? String(code) : 'UNKNOWN'
+    if (typeof code !== 'string' && typeof code !== 'number') return 'UNKNOWN'
+    const text = String(code)
     return CODE_TOKEN.test(text) ? text : 'UNKNOWN'
   } catch {
     return 'UNKNOWN'
