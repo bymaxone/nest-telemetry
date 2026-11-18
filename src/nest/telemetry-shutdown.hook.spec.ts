@@ -99,8 +99,7 @@ describe('TelemetryShutdownHook', () => {
       const ref: IProviderLookup = { get: () => provided }
       await expect(new TelemetryShutdownHook(ref).onApplicationShutdown()).resolves.toBeUndefined()
       expect(error).toHaveBeenCalledWith(
-        'TRACING_FLUSH_FAILED: collector refused',
-        expect.any(String)
+        expect.stringContaining('TRACING_FLUSH_FAILED: the telemetry flush failed')
       )
     })
 
@@ -116,8 +115,7 @@ describe('TelemetryShutdownHook', () => {
       ).resolves.toBeUndefined()
       expect(errorStructured).toHaveBeenCalledTimes(1)
       expect(error).toHaveBeenCalledWith(
-        'TRACING_FLUSH_FAILED: collector refused',
-        expect.any(String)
+        expect.stringContaining('TRACING_FLUSH_FAILED: the telemetry flush failed')
       )
     })
 
@@ -134,16 +132,45 @@ describe('TelemetryShutdownHook', () => {
 
     it('falls back to the Nest logger, with the key in the message, when no structured logger is provided', async () => {
       // Scenario: a host that did not provide TELEMETRY_LOGGER still gets the failure, on the
-      // logger Nest routes through app.useLogger().
+      // logger Nest routes through app.useLogger(), with the key and a short code and nothing the
+      // exporter said. (An earlier version wrote the error message and the stack here.)
       const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
-      const failure = new Error('collector refused')
+      const failure = Object.assign(new Error('collector refused'), { code: 'ECONNREFUSED' })
       registerHandle(createHandle(() => Promise.reject(failure)))
       await new TelemetryShutdownHook(moduleRef()).onApplicationShutdown()
       expect(error).toHaveBeenCalledTimes(1)
-      expect(error).toHaveBeenCalledWith('TRACING_FLUSH_FAILED: collector refused', failure.stack)
+      expect(error).toHaveBeenCalledWith(
+        expect.stringMatching(
+          /^TRACING_FLUSH_FAILED: the telemetry flush failed \(code ECONNREFUSED\)\./
+        )
+      )
       // The entry is written under the library's own context, so it can be told apart in the output.
       expect(Reflect.get(error.mock.contexts[0] as object, 'context')).toBe('Telemetry')
     })
+
+    it.each([
+      [
+        'a string code that is not a plain token',
+        'http://user:hunter2@collector.example/v1/traces'
+      ],
+      ['no code', undefined]
+    ])(
+      'writes neither the message nor the stack of the failure to the Nest logger, with %s',
+      async (_what, code) => {
+        // Scenario: an exporter's error can carry the endpoint it called, credentials included, in
+        // its message and in the first line of its stack; the fallback entry must hold library
+        // text only, and the code falls back to UNKNOWN unless it is a plain token.
+        const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+        const failure = new Error('POST http://user:hunter2@collector.example/v1/traces refused')
+        if (code !== undefined) Object.assign(failure, { code })
+        registerHandle(createHandle(() => Promise.reject(failure)))
+        await new TelemetryShutdownHook(moduleRef()).onApplicationShutdown()
+        const written = JSON.stringify(error.mock.calls)
+        expect(written).not.toContain('hunter2')
+        expect(written).not.toContain('collector.example')
+        expect(written).toContain('(code UNKNOWN)')
+      }
+    )
   })
 })
 

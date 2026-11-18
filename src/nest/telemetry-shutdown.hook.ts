@@ -19,6 +19,15 @@ export const TELEMETRY_SHUTDOWN_TIMEOUT_KEY = 'TRACING_SHUTDOWN_TIMEOUT'
 /** Log key of the entry a failed span export leaves, stable so an alert can match it. */
 export const TELEMETRY_EXPORT_FAILED_KEY = 'TRACING_EXPORT_FAILED'
 
+/** What a code may look like to be named in a log entry: an upper-case token, never free text. */
+const CODE_TOKEN = /^[A-Z0-9_]{1,40}$/
+
+/** Reads a short code from an error, or `UNKNOWN`: the message and the stack are never read. */
+function codeOf(error: Error): string {
+  const code = String(Reflect.get(error, 'code'))
+  return CODE_TOKEN.test(code) ? code : 'UNKNOWN'
+}
+
 /** Injection token of the optional structured logger a failed flush is reported through. */
 export const TELEMETRY_LOGGER = Symbol('TELEMETRY_LOGGER')
 
@@ -153,9 +162,10 @@ export class TelemetryShutdownHook implements OnApplicationShutdown, OnModuleIni
       // Falls through to the Nest logger below.
     }
     try {
+      // Library text only: the failure of an exporter can carry an endpoint with credentials, in its
+      // message and in the first line of its stack, so neither is written. A short code names it.
       new Logger('Telemetry').error(
-        `${TELEMETRY_FLUSH_FAILED_KEY}: ${failure.message}`,
-        failure.stack
+        `${TELEMETRY_FLUSH_FAILED_KEY}: the telemetry flush failed (code ${codeOf(failure)}). Bind TELEMETRY_LOGGER to receive the error itself.`
       )
     } catch {
       // Nothing is left to report through, and the shutdown must still not fail.

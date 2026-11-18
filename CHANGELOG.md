@@ -46,6 +46,11 @@ heading here.
 
 ### Fixed
 
+- **The failed-flush entry on the Nest logger no longer writes the error's message or stack.** Without a
+  bound `TELEMETRY_LOGGER`, `TelemetryShutdownHook` wrote `TRACING_FLUSH_FAILED: <message>` with the stack to
+  the Nest logger. The error of an exporter can carry the endpoint it called, credentials included, in both,
+  so the entry now holds library text and a short error code (`UNKNOWN` unless it is a plain token). A bound
+  `TELEMETRY_LOGGER` still receives the `Error` object itself.
 - **An option key set to `undefined` or `null` is the same as no key, for every option that has a
   default.** A `null` in an instrumentation override, in `ignoreIncomingRequest` or in a repeated call's
   options was read as a given value: an override key set to `undefined` replaced a library default, and a
@@ -68,7 +73,8 @@ a backend that does not use it changes nothing. A derived backend acts on these 
    known one only by case or whitespace; an environment that sets such a value was already sampling every
    trace. The existing `BYMAX_TELEMETRY_SAMPLER_ARG_INVALID` warning calls a whitespace-only ratio argument
    blank instead of not set, and the winston warning text says when to ignore it. An alert or a log filter
-   that matches either text needs the new words.
+   that matches either text needs the new words. The `TRACING_FLUSH_FAILED` entry on the Nest logger no
+   longer carries the error's message or stack: bind `TELEMETRY_LOGGER` to receive the `Error` itself.
 3. An option key set to `undefined` or `null` is the same as no key. A backend that set a key to `undefined` in an
    instrumentation override now gets the library default, and `env: null` no longer throws a
    `TypeError` at start: the process environment is read.
