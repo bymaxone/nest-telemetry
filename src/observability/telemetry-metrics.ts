@@ -37,6 +37,7 @@ export class TelemetryMetrics implements IMetricsContributor {
       collect(): void {
         const total = exportFailureCount()
         // A count that went back (only a test harness resets it) adds nothing: a counter cannot fall.
+        // Stryker disable next-line EqualityOperator: adding 0 to a counter changes no sample, so `>=` is the same behaviour.
         if (total > published) this.inc(total - published)
         published = total
       }
