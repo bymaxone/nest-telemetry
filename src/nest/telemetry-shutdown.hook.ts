@@ -6,6 +6,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common'
 import type { OnApplicationShutdown, OnModuleInit } from '@nestjs/common'
 import { ModuleRef } from '@nestjs/core'
 
+import { codeOf } from '../sdk/error-code'
 import { shutdownTelemetry } from '../sdk/handle'
 import { registerWarningSink } from '../sdk/warning-sink'
 import type { TelemetryWarning } from '../sdk/warning-sink'
@@ -18,17 +19,6 @@ export const TELEMETRY_SHUTDOWN_TIMEOUT_KEY = 'TRACING_SHUTDOWN_TIMEOUT'
 
 /** Log key of the entry a failed span export leaves, stable so an alert can match it. */
 export const TELEMETRY_EXPORT_FAILED_KEY = 'TRACING_EXPORT_FAILED'
-
-/** What a code may look like to be named in a log entry: an upper-case token, never free text. */
-const CODE_TOKEN = /^[A-Z0-9_]{1,40}$/
-
-/** Reads a short code from an error, or `UNKNOWN`: the message and the stack are never read. */
-function codeOf(error: Error): string {
-  const code: unknown = Reflect.get(error, 'code')
-  // Only a string or a number is read: converting an object runs its own toString, which can throw.
-  const text = typeof code === 'string' || typeof code === 'number' ? String(code) : ''
-  return CODE_TOKEN.test(text) ? text : 'UNKNOWN'
-}
 
 /** Injection token of the optional structured logger a failed flush is reported through. */
 export const TELEMETRY_LOGGER = Symbol('TELEMETRY_LOGGER')

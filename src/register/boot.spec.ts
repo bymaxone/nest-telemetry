@@ -141,13 +141,14 @@ describe('bootFromEnvironment', () => {
     expect(start).toHaveBeenCalledTimes(1)
     expect(emitWarning).toHaveBeenCalledTimes(1)
     expect(emitWarning).toHaveBeenCalledWith(
-      'The OpenTelemetry loader hook could not be registered (Error: Cannot find package), so native ES modules are not instrumented. Install @opentelemetry/instrumentation to instrument them; CommonJS code is unaffected.',
+      'The OpenTelemetry loader hook could not be registered (code UNKNOWN), so native ES modules are not instrumented. Install @opentelemetry/instrumentation to instrument them; CommonJS code is unaffected.',
       { type: 'Warning', code: 'BYMAX_TELEMETRY_ESM_HOOK_UNAVAILABLE' }
     )
   })
 
-  it('reports a thrown value that is not an error by its text', async () => {
-    // Scenario: a loader that throws a string still produces a readable warning.
+  it('reports a thrown value that is not an error by its code alone, as UNKNOWN', async () => {
+    // Scenario: a loader that throws a string still produces a readable warning, and the text it
+    // threw is not echoed. (An earlier version wrote the text.)
     const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
     const { deps } = dependencies(handle(true))
     await bootFromEnvironment(PARENT, {
@@ -158,9 +159,34 @@ describe('bootFromEnvironment', () => {
       }
     })
     expect(emitWarning).toHaveBeenCalledWith(
-      expect.stringContaining('(plain text)'),
+      expect.stringContaining('(code UNKNOWN)'),
       expect.anything()
     )
+    expect(String(emitWarning.mock.calls[0]?.[0])).not.toContain('plain text')
+  })
+
+  it('writes neither an endpoint with credentials nor a header a loader error quotes', async () => {
+    // Scenario: a loader error can quote its configuration; the warning names the code and the
+    // package, and nothing else of the message.
+    const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    const { deps } = dependencies(handle(true))
+    await bootFromEnvironment(PARENT, {
+      ...deps,
+      env: {},
+      registerHook: () => {
+        throw Object.assign(
+          new Error(
+            "Cannot find package '@opentelemetry/instrumentation' via http://user:hunter2@registry.example/ with header Authorization: Bearer s3cret"
+          ),
+          { code: 'ERR_MODULE_NOT_FOUND' }
+        )
+      }
+    })
+    const text = String(emitWarning.mock.calls[0]?.[0])
+    expect(text).toContain('(code ERR_MODULE_NOT_FOUND, package @opentelemetry/instrumentation)')
+    for (const secret of ['hunter2', 's3cret', 'registry.example']) {
+      expect(text).not.toContain(secret)
+    }
   })
 
   describe('when the SDK cannot be started', () => {
@@ -183,11 +209,32 @@ describe('bootFromEnvironment', () => {
       await expect(result.shutdown()).resolves.toBeUndefined()
       expect(emitWarning).toHaveBeenCalledTimes(1)
       expect(emitWarning).toHaveBeenCalledWith(
-        expect.stringMatching(
-          /^Telemetry could not be started \(Error: (exporter initialization failed|constructor failed)\), so the application continues without it\.$/
-        ),
+        'Telemetry could not be started (code UNKNOWN), so the application continues without it.',
         { type: 'Warning', code: 'BYMAX_TELEMETRY_START_FAILED' }
       )
+    })
+
+    it('writes neither an endpoint with credentials nor a header the start error quotes', async () => {
+      // Scenario: an SDK error can quote its configuration; the warning names the code and the
+      // package, and nothing else of the message.
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      const { registerHook } = dependencies(handle(true))
+      const failure = Object.assign(
+        new Error(
+          "Cannot find package '@opentelemetry/sdk-node' while posting to http://user:hunter2@collector.example/v1/traces with header Authorization: Bearer s3cret"
+        ),
+        { code: 'ERR_MODULE_NOT_FOUND' }
+      )
+      await bootFromEnvironment(PARENT, {
+        env: {},
+        registerHook,
+        start: () => Promise.reject(failure)
+      })
+      const text = String(emitWarning.mock.calls[0]?.[0])
+      expect(text).toContain('(code ERR_MODULE_NOT_FOUND, package @opentelemetry/sdk-node)')
+      for (const secret of ['hunter2', 's3cret', 'collector.example']) {
+        expect(text).not.toContain(secret)
+      }
     })
 
     it('installs no exit listener for a start that failed', async () => {

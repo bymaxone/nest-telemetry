@@ -36,7 +36,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 // Calibration history (newest first):
 //   - observability: 673 B measured, 0.69 KiB budget (706 B, 33 B of headroom): the metrics contributor and
 //     its one counter; `prom-client` and `@bymax-one/nest-core` stay external.
-//   - sdk: 5,934 B measured, 5.82 KiB budget (5,960 B, 26 B of headroom), the whole subpath: redaction, the
+//   - sdk: 5,970 B measured, 5.86 KiB budget (6,001 B, 31 B of headroom), the whole subpath: redaction, the
 //     environment reader, the SDK assembly, the resource-detector selection that keeps the process
 //     command line out of the exported resource, the start cache and the handle lifecycle with its
 //     shutdown deadline (about 0.1 KiB: the timer, its warning and the clamp of the configured
@@ -47,20 +47,21 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //     (about 0.3 KiB: the ratio reader, the check and the warning text), the sampler name check (about
 //     0.15 KiB: the six names, the near-miss reader and the warning text) and the dropping of absent option keys
 //     before the merge with the defaults, each known option read by property access, and the count of
-//     failed exports that the metrics contributor reads (about 0.06 KiB).
-//   - register: 6,148 B measured, 6.03 KiB budget (6,175 B, 27 B of headroom). The preload bundles its own copy
+//     failed exports that the metrics contributor reads (about 0.06 KiB), and the failure description
+//     that names a code and an OpenTelemetry package instead of echoing an error (about 0.04 KiB).
+//   - register: 6,274 B measured, 6.16 KiB budget (6,307 B, 33 B of headroom). The preload bundles its own copy
 //     of the start logic, shutdown deadline, export-failure warning, warning sink, resource and timer handling and the winston transport, sampler ratio and sampler name checks included: the copies share their state through
 //     `globalThis`, not through a module.
-//   - nest: 1,815 B measured, 1.80 KiB budget (1,843 B, 28 B of headroom), the global module and the shutdown hook
+//   - nest: 1,847 B measured, 1.83 KiB budget (1,874 B, 27 B of headroom), the global module and the shutdown hook
 //     with every step of failure reporting guarded, the route that hands the two runtime warnings to
 //     a bound structured logger, and the fallback entry that holds library text and a short error code
 //     instead of the error's message and stack (about 0.1 KiB: the code reader and the longer text).
 //   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
 //   met by shortening the text of a warning.
 const BUDGETS = [
-  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 5.82 * 1024 },
-  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 6.03 * 1024 },
-  { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 1.8 * 1024 },
+  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 5.86 * 1024 },
+  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 6.16 * 1024 },
+  { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 1.83 * 1024 },
   { name: 'observability (metrics)', path: 'dist/observability/index.mjs', brotli: 0.69 * 1024 }
 ]
 

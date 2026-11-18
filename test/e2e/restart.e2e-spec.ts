@@ -51,7 +51,8 @@ describe('a start after a shutdown', () => {
       registerHook: () => undefined
     })
     expect(handle.enabled).toBe(false)
-    expect(emitWarning).toHaveBeenCalledWith(expect.stringContaining('once per process'), {
+    // The preload names the failure by its code only; the refusal's own text is the public API's.
+    expect(emitWarning).toHaveBeenCalledWith(expect.stringContaining('(code UNKNOWN)'), {
       type: 'Warning',
       code: 'BYMAX_TELEMETRY_START_FAILED'
     })

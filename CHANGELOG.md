@@ -58,6 +58,9 @@ heading here.
   before they are merged with the defaults, and each known option is read by property access, so options
   given as a class instance with getters read as a plain object does. A table covers each defaulted option
   with both values and with a class instance.
+  The two preload warnings, `BYMAX_TELEMETRY_START_FAILED` and `BYMAX_TELEMETRY_ESM_HOOK_UNAVAILABLE`, no
+  longer interpolate the error either: they name its code and, when its message names one, the
+  OpenTelemetry package, so a missing peer is still named.
 
 ### Apply to a derived backend
 
@@ -74,7 +77,8 @@ a backend that does not use it changes nothing. A derived backend acts on these 
    trace. The existing `BYMAX_TELEMETRY_SAMPLER_ARG_INVALID` warning calls a whitespace-only ratio argument
    blank instead of not set, and the winston warning text says when to ignore it. An alert or a log filter
    that matches either text needs the new words. The `TRACING_FLUSH_FAILED` entry on the Nest logger no
-   longer carries the error's message or stack: bind `TELEMETRY_LOGGER` to receive the `Error` itself.
+   longer carries the error's message or stack: bind `TELEMETRY_LOGGER` to receive the `Error` itself. The two preload warnings now read `(code <CODE>[, package <name>])` where they quoted the error's text,
+   so a log filter that matched that text needs the code.
 3. An option key set to `undefined` or `null` is the same as no key. A backend that set a key to `undefined` in an
    instrumentation override now gets the library default, and `env: null` no longer throws a
    `TypeError` at start: the process environment is read.

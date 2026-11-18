@@ -33,6 +33,53 @@ describe('TelemetryModule when the flush fails, in a real Nest application', () 
     expect(errorStructured).toHaveBeenCalledWith('TRACING_FLUSH_FAILED', failure)
   })
 
+  it('names a numeric code of the failure in the Nest logger entry', async () => {
+    // Scenario: a collector that answers with a status; the entry carries the number as the code.
+    mockShutdown.mockRejectedValueOnce(Object.assign(new Error('Bad Gateway'), { code: 502 }))
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+    const app = await Test.createTestingModule({ imports: [TelemetryModule] }).compile()
+    await app.init()
+    await expect(app.close()).resolves.toBeUndefined()
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('(code 502)'))
+  })
+
+  it('writes a code that is not a plain token as UNKNOWN, never as text', async () => {
+    // Scenario: a code that is a URL with credentials is free text, not a code, and is not written.
+    mockShutdown.mockRejectedValueOnce(
+      Object.assign(new Error('refused'), { code: 'http://user:hunter2@collector.example/' })
+    )
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+    const app = await Test.createTestingModule({ imports: [TelemetryModule] }).compile()
+    await app.init()
+    await expect(app.close()).resolves.toBeUndefined()
+    const written = JSON.stringify(error.mock.calls)
+    expect(written).toContain('(code UNKNOWN)')
+    expect(written).not.toContain('hunter2')
+  })
+
+  it('writes neither the message nor the code of a failure whose code cannot be read', async () => {
+    // Scenario: the failure of an exporter quotes its endpoint, and its code is a getter that throws;
+    // the entry is still written, with library text and the code UNKNOWN.
+    const failure = Object.defineProperty(
+      new Error('POST http://user:hunter2@collector.example/'),
+      'code',
+      {
+        get: () => {
+          throw new Error('boom')
+        }
+      }
+    )
+    mockShutdown.mockRejectedValueOnce(failure)
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
+    const app = await Test.createTestingModule({ imports: [TelemetryModule] }).compile()
+    await app.init()
+    await expect(app.close()).resolves.toBeUndefined()
+    expect(error).toHaveBeenCalledTimes(1)
+    const written = JSON.stringify(error.mock.calls)
+    expect(written).toContain('(code UNKNOWN)')
+    expect(written).not.toContain('hunter2')
+  })
+
   it('falls back to the Nest logger when none is provided, and wraps a value that is not an error', async () => {
     // Scenario: no TELEMETRY_LOGGER anywhere in the application, and the rejection is a string.
     mockShutdown.mockRejectedValueOnce('plain text')
@@ -41,8 +88,7 @@ describe('TelemetryModule when the flush fails, in a real Nest application', () 
     await app.init()
     await expect(app.close()).resolves.toBeUndefined()
     expect(error).toHaveBeenCalledWith(
-      'TRACING_FLUSH_FAILED: The telemetry SDK failed to shut down.',
-      expect.any(String)
+      expect.stringContaining('TRACING_FLUSH_FAILED: the telemetry flush failed (code UNKNOWN)')
     )
   })
 
@@ -70,8 +116,7 @@ describe('TelemetryModule when the flush fails, in a real Nest application', () 
     await app.init()
     await expect(app.close()).resolves.toBeUndefined()
     expect(error).toHaveBeenCalledWith(
-      'TRACING_FLUSH_FAILED: collector refused',
-      expect.any(String)
+      expect.stringContaining('TRACING_FLUSH_FAILED: the telemetry flush failed (code UNKNOWN)')
     )
   })
 
