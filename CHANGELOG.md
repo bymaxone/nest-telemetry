@@ -49,7 +49,7 @@ heading here.
 - **The failed-flush entry on the Nest logger no longer writes the error's message or stack.** Without a
   bound `TELEMETRY_LOGGER`, `TelemetryShutdownHook` wrote `TRACING_FLUSH_FAILED: <message>` with the stack to
   the Nest logger. The error of an exporter can carry the endpoint it called, credentials included, in both,
-  so the entry now holds library text and a short error code (`UNKNOWN` unless it is a plain token). A bound
+  so the entry now holds library text and a short error code (`UNKNOWN` unless it is an upper-case token). A bound
   `TELEMETRY_LOGGER` still receives the `Error` object itself.
 - **An option key set to `undefined` or `null` is the same as no key, for every option that has a
   default.** A `null` in an instrumentation override, in `ignoreIncomingRequest` or in a repeated call's
