@@ -29,9 +29,9 @@ const INSTRUMENTATION = '@opentelemetry/instrumentation-winston'
 /** The text of the warning. */
 const MESSAGE =
   `Log forwarding is on and winston is installed, but ${TRANSPORT} cannot be resolved from ` +
-  `${INSTRUMENTATION}, so winston records will not reach the logs pipeline. Install ${TRANSPORT} as a ` +
+  `${INSTRUMENTATION}, so winston records will not be forwarded. Install ${TRANSPORT} as a ` +
   'direct dependency of the application, or set instrumentations.sendLogs to false. Ignore this if the ' +
-  'application does not use winston.'
+  'application never creates a winston logger, or if OTEL_LOGS_EXPORTER is none: nothing is forwarded then either way.'
 
 /**
  * Resolves a package the way Node does for a file, from that file's directory upwards.

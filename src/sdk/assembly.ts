@@ -57,6 +57,49 @@ export function planSignals(env: TelemetryEnvironment): SignalPlan {
 }
 
 /**
+ * Whether an option was given: a key that holds `undefined` or `null` is the same as no key.
+ *
+ * @param value - The option value.
+ * @returns `false` for `undefined` and `null`.
+ */
+function isPresent<T>(value: T | null | undefined): value is T {
+  return value !== undefined && value !== null
+}
+
+/**
+ * Reads each known option by property access, so an options object that is a class instance, with
+ * its values behind prototype getters, is read the same as a plain one. The type has a key for every
+ * option, so an option added to `TelemetryOptions` without a line here does not compile.
+ *
+ * @param options - The options of a call.
+ * @returns Each option's value, or `undefined` for one that is absent.
+ */
+function readEachOption(options: TelemetryOptions): Record<keyof TelemetryOptions, unknown> {
+  return {
+    enabled: options.enabled,
+    serviceName: options.serviceName,
+    serviceVersion: options.serviceVersion,
+    ignoreIncomingRequest: options.ignoreIncomingRequest,
+    instrumentations: options.instrumentations,
+    extraRedactedQueryParams: options.extraRedactedQueryParams,
+    unsafe: options.unsafe,
+    shutdownTimeoutMs: options.shutdownTimeoutMs,
+    env: options.env
+  }
+}
+
+/**
+ * Copies the keys of an options object that hold a value, so a key set to `undefined` or `null`
+ * cannot replace a default it is merged over.
+ *
+ * @param config - The options of one library.
+ * @returns The same keys without the absent ones.
+ */
+function definedEntries(config: object): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(config).filter(([, value]) => isPresent(value)))
+}
+
+/**
  * Reads an optional string option, treating a blank value as absent.
  *
  * @param value - The option value.
@@ -106,7 +149,7 @@ export function buildInstrumentationConfig(
   const instrumentations = options.instrumentations ?? {}
   const overrides: Record<string, Record<string, unknown>> = {}
   for (const [name, config] of Object.entries(instrumentations.overrides ?? {})) {
-    if (config !== undefined) overrides[name] = { ...config }
+    if (isPresent(config)) overrides[name] = definedEntries(config)
   }
   const redactRedis = options.unsafe?.disableRedisArgumentRedaction !== true
   const disableLogSending = !(instrumentations.sendLogs ?? signals.sendLogs)
@@ -129,7 +172,7 @@ export function buildInstrumentationConfig(
       ...(options.extraRedactedQueryParams ?? [])
     ])
   }
-  if (options.ignoreIncomingRequest !== undefined) {
+  if (isPresent(options.ignoreIncomingRequest)) {
     merged[HTTP_INSTRUMENTATION]['ignoreIncomingRequestHook'] = options.ignoreIncomingRequest
   }
   if (redactRedis) {
@@ -205,15 +248,34 @@ const SHOWN_VALUE_LENGTH = 40
  */
 export function warnAboutSamplerRatio(sampler: RatioSampler | undefined): void {
   if (sampler === undefined) return
-  const ratio = Number(sampler.arg)
+  // `Number` reads a blank string as 0, which is a usable ratio; the SDK reads it as no argument.
+  const ratio = sampler.arg?.trim() === '' ? Number.NaN : Number(sampler.arg)
   if (ratio >= 0 && ratio <= 1) return
   const given =
     sampler.arg === undefined
       ? 'not set'
-      : `${JSON.stringify(sampler.arg.slice(0, SHOWN_VALUE_LENGTH))}, which is not a number from 0 to 1`
+      : sampler.arg.trim() === ''
+        ? 'blank'
+        : `${JSON.stringify(sampler.arg.slice(0, SHOWN_VALUE_LENGTH))}, which is not a number from 0 to 1`
   reportWarning({
     code: 'BYMAX_TELEMETRY_SAMPLER_ARG_INVALID',
     text: `OTEL_TRACES_SAMPLER is ${sampler.name}, but OTEL_TRACES_SAMPLER_ARG is ${given}, so the SDK samples every trace. Set it to the share of traces to keep, from 0 to 1, such as 0.1.`
+  })
+}
+
+/**
+ * Reports a sampler name that differs from a known one only by letter case or surrounding whitespace.
+ *
+ * The SDK compares the name exactly and, for any other value, uses its default sampler, which keeps
+ * every trace. The value is not repeated: only the name that was meant is.
+ *
+ * @param meant - The known sampler name the value was close to, if any.
+ */
+export function warnAboutSamplerName(meant: string | undefined): void {
+  if (meant === undefined) return
+  reportWarning({
+    code: 'BYMAX_TELEMETRY_SAMPLER_NAME_UNKNOWN',
+    text: `OTEL_TRACES_SAMPLER differs from "${meant}" only in letter case or whitespace. The SDK compares the name exactly, so it ignores the value and samples every trace. Write it as "${meant}".`
   })
 }
 
@@ -243,7 +305,7 @@ export function warnAboutOversizedTimers(env: TelemetryEnvironment): void {
  */
 export function warnAboutIgnoredOptions(options: TelemetryOptions): void {
   const stop = options.enabled === false
-  if (stop || Object.values(options).some((v) => v !== undefined)) {
+  if (stop || Object.values(readEachOption(options)).some(isPresent)) {
     process.emitWarning(
       stop
         ? 'startTelemetry({ enabled: false }) was called while telemetry is already running. It does not stop the running SDK: call shutdownTelemetry() for that.'

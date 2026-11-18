@@ -98,6 +98,23 @@ describe('the sampler ratio check', () => {
     expect(samplerWarnings(emitWarning)).toHaveLength(0)
   })
 
+  it('warns once at start about a sampler name that differs from a known one only by case, and not for an exact one', async () => {
+    // Scenario: the SDK would not recognise `TraceIdRatio`, use its default and sample every trace;
+    // the start says so through the warning route once, and says nothing for the exact name.
+    const nameWarnings = (spy: jest.SpyInstance): unknown[][] =>
+      spy.mock.calls.filter(
+        ([, options]) =>
+          (options as { code?: string }).code === 'BYMAX_TELEMETRY_SAMPLER_NAME_UNKNOWN'
+      )
+    const slip = await startWithProcessSampler({ OTEL_TRACES_SAMPLER: 'TraceIdRatio' })
+    expect(nameWarnings(slip)).toHaveLength(1)
+    clearHandle()
+    clearPendingStart()
+    slip.mockClear()
+    const exact = await startWithProcessSampler({ OTEL_TRACES_SAMPLER: 'traceidratio' })
+    expect(nameWarnings(exact)).toHaveLength(0)
+  })
+
   it('judges the process environment, not the environment the host hands to the start', async () => {
     // Scenario: the SDK reads the sampler from the process environment whatever `env` says. A bad
     // ratio there is reported although `env` is fine, and a bad ratio in `env` alone is not,

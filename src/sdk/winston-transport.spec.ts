@@ -111,6 +111,8 @@ describe('warnAboutMissingWinstonTransport', () => {
     expect(text).toContain('@opentelemetry/winston-transport')
     expect(text).toContain('direct dependency of the application')
     expect(text).toContain('instrumentations.sendLogs')
+    expect(text).toContain('OTEL_LOGS_EXPORTER is none')
+    expect(text).toContain('never creates a winston logger')
   })
 
   it('routes the warning through the registered sink', () => {

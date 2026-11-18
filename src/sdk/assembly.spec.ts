@@ -14,11 +14,12 @@ import {
   planSignals,
   warnAboutMissingServiceName,
   warnAboutOversizedTimers,
+  warnAboutSamplerName,
   warnAboutSamplerRatio,
   warnAboutUnsafeOptions
 } from './assembly'
 import type { SignalPlan } from './assembly'
-import { readRatioSampler, readTelemetryEnvironment } from './environment'
+import { readRatioSampler, readSamplerNearMiss, readTelemetryEnvironment } from './environment'
 import type { RatioSampler, TelemetryEnvironment } from './environment'
 import { DEFAULT_REDACTED_QUERY_PARAMS, serializeRedisCommandName } from './redaction'
 import type { TelemetryOptions, UnsafeOptions } from './types'
@@ -488,6 +489,57 @@ describe('warnAboutMissingServiceName', () => {
   )
 })
 
+describe('warnAboutSamplerName', () => {
+  let emitWarning: jest.SpyInstance
+
+  beforeEach(() => {
+    emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+  })
+
+  it.each([
+    ['TraceIdRatio', 'traceidratio'],
+    [' traceidratio ', 'traceidratio'],
+    ['ALWAYS_OFF', 'always_off'],
+    ['Always_On', 'always_on'],
+    ['ParentBased_TraceIdRatio\n', 'parentbased_traceidratio'],
+    ['\tparentbased_always_off', 'parentbased_always_off'],
+    ['PARENTBASED_ALWAYS_ON', 'parentbased_always_on']
+  ])('warns once, naming %p as the sampler %p that was meant', (value, meant) => {
+    // Scenario: the SDK compares the name exactly, so each of these is an unknown name that it
+    // replaces with its default and samples every trace, with a note only on the diagnostic channel.
+    warnAboutSamplerName(readSamplerNearMiss({ OTEL_TRACES_SAMPLER: value }))
+    expect(emitWarning).toHaveBeenCalledTimes(1)
+    const [text, options] = emitWarning.mock.calls[0] as [string, { code: string }]
+    expect(options.code).toBe('BYMAX_TELEMETRY_SAMPLER_NAME_UNKNOWN')
+    expect(text).toContain('OTEL_TRACES_SAMPLER')
+    expect(text).toContain(`Write it as "${meant}"`)
+    expect(text).toContain('samples every trace')
+  })
+
+  it('does not repeat the value it was given, only the name that was meant', () => {
+    // Scenario: the value is the operator's, so a control character in it cannot reach the log.
+    warnAboutSamplerName(readSamplerNearMiss({ OTEL_TRACES_SAMPLER: 'TraceIdRatio\n' }))
+    const text = String(emitWarning.mock.calls[0]?.[0])
+    expect(text).not.toContain('TraceIdRatio')
+    expect(text).not.toContain('\n')
+  })
+
+  it.each([
+    undefined,
+    'always_on',
+    'traceidratio',
+    'parentbased_traceidratio',
+    'jaeger_remote',
+    'on',
+    ''
+  ])('stays silent for %p', (value) => {
+    // Scenario: an exact name, an unset or empty variable, and a name that is not close to a known
+    // one are not a case or whitespace slip, so there is nothing to say.
+    warnAboutSamplerName(readSamplerNearMiss({ OTEL_TRACES_SAMPLER: value }))
+    expect(emitWarning).not.toHaveBeenCalled()
+  })
+})
+
 describe('warnAboutSamplerRatio', () => {
   let emitWarning: jest.SpyInstance
 
@@ -521,11 +573,25 @@ describe('warnAboutSamplerRatio', () => {
     expect(text).toContain('every trace')
   })
 
-  it.each(['', '   '])('warns for a ratio sampler whose argument is blank (%p)', (arg) => {
-    // Scenario: an empty variable, as a template leaves it when its value is unset, is not given.
-    warnAboutSamplerRatio(ratio('parentbased_traceidratio', arg))
-    expect(emitWarning).toHaveBeenCalledTimes(1)
-    expect(String(emitWarning.mock.calls[0]?.[0])).toContain('not set')
+  it.each(['', '   ', '\t\n'])(
+    'says a blank argument %p is blank and not that it is unset',
+    (arg) => {
+      // Scenario: a variable that is present but empty or only whitespace, as a template leaves it, is
+      // there, so telling the operator it is "not set" sends them looking for a variable that exists.
+      warnAboutSamplerRatio(ratio('parentbased_traceidratio', arg))
+      expect(emitWarning).toHaveBeenCalledTimes(1)
+      const text = String(emitWarning.mock.calls[0]?.[0])
+      expect(text).toContain('OTEL_TRACES_SAMPLER_ARG is blank')
+      expect(text).not.toContain('not set')
+    }
+  )
+
+  it('says an unset argument is not set', () => {
+    // Scenario: the control for the blank case above: with the variable absent the text differs.
+    warnAboutSamplerRatio(ratio('traceidratio', undefined))
+    const text = String(emitWarning.mock.calls[0]?.[0])
+    expect(text).toContain('OTEL_TRACES_SAMPLER_ARG is not set')
+    expect(text).not.toContain('blank')
   })
 
   it.each(['0', '1', '0.5', '0.01', '1e-1', '0x1', ' 0.5 ', '.5', '-0'])(

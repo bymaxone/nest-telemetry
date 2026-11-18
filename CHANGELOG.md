@@ -10,6 +10,37 @@ heading here.
 
 ## [Unreleased]
 
+### Added
+
+- **A start warning for a sampler name that differs from a known one only by case or whitespace.** The SDK
+  compares `OTEL_TRACES_SAMPLER` exactly against `always_on`, `always_off`, `traceidratio`,
+  `parentbased_always_on`, `parentbased_always_off` and `parentbased_traceidratio`, replaces any other
+  value with its default and samples every trace, noting it only on a diagnostic channel. So
+  `TraceIdRatio`, ` traceidratio` or `ALWAYS_OFF` kept every trace in silence. The start now warns once
+  with `BYMAX_TELEMETRY_SAMPLER_NAME_UNKNOWN`, naming the name that was meant and not repeating the value.
+  Measured with the real SDK: `TraceIdRatio`, ` traceidratio` and `ALWAYS_OFF` with a ratio of `0` sampled
+  all 200 root spans, and the exact names sampled none.
+
+### Changed
+
+- **A whitespace-only `OTEL_TRACES_SAMPLER_ARG` is called blank, not unset.** The ratio warning said the
+  variable was "not set" for an empty or whitespace-only value, which sends the reader looking for a
+  variable that exists. An unset variable still reads "not set".
+- **The winston warning says when to ignore it.** It now says to ignore it when the application never
+  creates a winston logger or when `OTEL_LOGS_EXPORTER` is `none`, where nothing is forwarded either way;
+  the README says the same and notes that the warning also fires with `instrumentations.sendLogs: true`
+  and with the `console` exporter. The sampler matching rule is in the README.
+
+### Fixed
+
+- **An option key set to `undefined` or `null` is the same as no key, for every option that has a
+  default.** A `null` in an instrumentation override, in `ignoreIncomingRequest` or in a repeated call's
+  options was read as a given value: an override key set to `undefined` replaced a library default, and a
+  repeated start whose options were all `null` was reported as ignoring them. The keys are now dropped
+  before they are merged with the defaults, and each known option is read by property access, so options
+  given as a class instance with getters read as a plain object does. A table covers each defaulted option
+  with both values and with a class instance.
+
 ## [1.0.5] - 2026-11-17
 
 ### Added
