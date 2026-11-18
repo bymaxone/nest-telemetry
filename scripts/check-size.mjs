@@ -34,7 +34,9 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
-//   - sdk: 5,870 B measured, 5.76 KiB budget (5,898 B, 28 B of headroom), the whole subpath: redaction, the
+//   - observability: 673 B measured, 0.69 KiB budget (706 B, 33 B of headroom): the metrics contributor and
+//     its one counter; `prom-client` and `@bymax-one/nest-core` stay external.
+//   - sdk: 5,929 B measured, 5.82 KiB budget (5,960 B, 31 B of headroom), the whole subpath: redaction, the
 //     environment reader, the SDK assembly, the resource-detector selection that keeps the process
 //     command line out of the exported resource, the start cache and the handle lifecycle with its
 //     shutdown deadline (about 0.1 KiB: the timer, its warning and the clamp of the configured
@@ -44,8 +46,9 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //     0.38 KiB: the resolver, the three lookups and the warning text) and the sampler ratio check
 //     (about 0.3 KiB: the ratio reader, the check and the warning text), the sampler name check (about
 //     0.15 KiB: the six names, the near-miss reader and the warning text) and the dropping of absent option keys
-//     before the merge with the defaults, each known option read by property access.
-//   - register: 6,084 B measured, 5.97 KiB budget (6,113 B, 29 B of headroom). The preload bundles its own copy
+//     before the merge with the defaults, each known option read by property access, and the count of
+//     failed exports that the metrics contributor reads (about 0.06 KiB).
+//   - register: 6,142 B measured, 6.03 KiB budget (6,175 B, 33 B of headroom). The preload bundles its own copy
 //     of the start logic, shutdown deadline, export-failure warning, warning sink, resource and timer handling and the winston transport, sampler ratio and sampler name checks included: the copies share their state through
 //     `globalThis`, not through a module.
 //   - nest: 1.67 KiB real -> 1.72 KiB budget (~3% headroom), the global module and the shutdown hook
@@ -54,9 +57,10 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
 //   met by shortening the text of a warning.
 const BUDGETS = [
-  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 5.76 * 1024 },
-  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 5.97 * 1024 },
-  { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 1.72 * 1024 }
+  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 5.82 * 1024 },
+  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 6.03 * 1024 },
+  { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 1.72 * 1024 },
+  { name: 'observability (metrics)', path: 'dist/observability/index.mjs', brotli: 0.69 * 1024 }
 ]
 
 const fmt = (n) => `${(n / 1024).toFixed(2)} kB`

@@ -5,7 +5,8 @@
  * The batch processor drops a batch the collector does not accept and reports the failure only
  * through the OpenTelemetry diagnostic logger, which is off by default, so a collector that is down
  * or refuses every export leaves the application silent. This wraps the exporter's `export` to
- * report one warning, at most once a minute, naming the exporter and a short error code.
+ * report one warning, at most once a minute, naming the exporter and a short error code. Every
+ * failed export is also counted, with no limit, for the metrics contributor.
  *
  * Only the trace exporter is wrapped. A wrapper for a logs exporter must not report through the
  * warning sink: a bound logger can forward its records to OTLP logs, so a failed logs export would
@@ -27,6 +28,20 @@ export interface ObservableExporter {
 
 /** The shortest time between two warnings. */
 const WINDOW_MS = 60_000
+
+/** The registry symbol under which the count of failed exports is published. */
+const COUNT_KEY = Symbol.for('@bymax-one/nest-telemetry/export-failures')
+
+/**
+ * Reads how many span exports have failed in this process, whichever copy of the library wrapped
+ * the exporter: the count lives on `globalThis`, as the handle and the warning sink do.
+ *
+ * @returns The number of failed exports since the process started.
+ */
+export function exportFailureCount(): number {
+  const count = Reflect.get(globalThis, COUNT_KEY)
+  return typeof count === 'number' ? count : 0
+}
 
 /** The value of `ExportResultCode.SUCCESS` in `@opentelemetry/core`. */
 const SUCCESS = 0
@@ -58,6 +73,10 @@ export function warnOnExportFailure<E extends ObservableExporter>(
   let lastWarning = Number.NEGATIVE_INFINITY
   exporter.export = (spans, done): void => {
     original(spans, (result) => {
+      if (result.code !== SUCCESS) {
+        // Counted before the warning window, so a collector that stays down keeps counting.
+        Reflect.set(globalThis, COUNT_KEY, exportFailureCount() + 1)
+      }
       if (result.code !== SUCCESS && clock() - lastWarning >= WINDOW_MS) {
         lastWarning = clock()
         try {

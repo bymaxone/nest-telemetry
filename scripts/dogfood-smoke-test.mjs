@@ -57,7 +57,8 @@ const EXPECTED_EXPORTS = {
     'TelemetryShutdownHook',
     'TELEMETRY_LOGGER',
     'TELEMETRY_FLUSH_FAILED_KEY'
-  ]
+  ],
+  observability: ['TelemetryMetrics', 'SPAN_EXPORT_FAILURES_METRIC']
 }
 const SUBPATHS = Object.keys(EXPECTED_EXPORTS)
 
@@ -199,6 +200,9 @@ try {
       // The peers `./nest` imports at load time; the consumer installs them as a Nest application would.
       '@nestjs/common': '^11.0.16',
       '@nestjs/core': '^11.1.18',
+      // The two optional peers `./observability` imports at load time.
+      '@bymax-one/nest-core': '^1.1.0',
+      'prom-client': '^15.0.0',
       'reflect-metadata': '^0.2.0',
       rxjs: '^7.8.0'
     }

@@ -12,6 +12,18 @@ heading here.
 
 ### Added
 
+- **A metrics contributor for `@bymax-one/nest-core`, on the new `./observability` subpath.**
+  `TelemetryMetrics` registers the counter `bymax_telemetry_span_export_failures_total`, the span export
+  batches the collector did not accept, with no label and with a value of 0 before the first failure. The
+  exporter wrapper now counts every failed export, not only the one a minute that warns, and keeps the count
+  on `globalThis` so the preload's copy and the application's copy agree. `@bymax-one/nest-core` and
+  `prom-client` are optional peers, no other entry loads them, and with the core metrics feature off nothing
+  is created. The subpath's budget is 0.69 KiB brotli; the `sdk` and `register` bundles grew by 59 and 58
+  bytes for the count.
+- **The README catalogs the domain span names of the Bymax libraries**, with a link to each library, the
+  attribute and error rules of the observability standard, and the one propagator requirement of the queue.
+  A test now fails when the README leaves out an export of any subpath or an `OTEL_*` variable the
+  environment reader names.
 - **A start warning for a sampler name that differs from a known one only by case or whitespace.** The SDK
   compares `OTEL_TRACES_SAMPLER` exactly against `always_on`, `always_off`, `traceidratio`,
   `parentbased_always_on`, `parentbased_always_off` and `parentbased_traceidratio`, replaces any other
@@ -40,6 +52,21 @@ heading here.
   before they are merged with the defaults, and each known option is read by property access, so options
   given as a class instance with getters read as a plain object does. A table covers each defaulted option
   with both values and with a class instance.
+
+### Apply to a derived backend
+
+The declarations gained the `./observability` subpath; nothing else about the public types changed, and
+a backend that does not use it changes nothing. A derived backend acts on these behaviours:
+
+1. To publish the failed-export counter, install `@bymax-one/nest-core` (1.1.0 or later) and `prom-client`
+   (15), add `TelemetryMetrics` from `@bymax-one/nest-telemetry/observability` to the providers of any module,
+   and alert on `increase(bymax_telemetry_span_export_failures_total[5m]) > 0`.
+2. A start can now warn with `BYMAX_TELEMETRY_SAMPLER_NAME_UNKNOWN` for a sampler name that differs from a
+   known one only by case or whitespace, and with `BYMAX_TELEMETRY_SAMPLER_ARG_INVALID` for a whitespace-only
+   ratio argument that it passed in silence before. Both name the fix; an environment that sets such a value
+   was already sampling every trace.
+3. An option key set to `undefined` or `null` is the same as no key. A backend that passed `null` in an
+   instrumentation override to replace a default now gets the default.
 
 ## [1.0.5] - 2026-11-17
 

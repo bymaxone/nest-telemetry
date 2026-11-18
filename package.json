@@ -51,6 +51,16 @@
         "default": "./dist/nest/index.cjs"
       }
     },
+    "./observability": {
+      "import": {
+        "types": "./dist/observability/index.d.ts",
+        "default": "./dist/observability/index.mjs"
+      },
+      "require": {
+        "types": "./dist/observability/index.d.cts",
+        "default": "./dist/observability/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "main": "./dist/sdk/index.cjs",
@@ -63,6 +73,9 @@
       ],
       "nest": [
         "./dist/nest/index.d.cts"
+      ],
+      "observability": [
+        "./dist/observability/index.d.cts"
       ]
     }
   },
@@ -106,6 +119,7 @@
     ]
   },
   "peerDependencies": {
+    "@bymax-one/nest-core": "^1.1.0",
     "@nestjs/common": "^11.0.16",
     "@nestjs/core": "^11.1.18",
     "@opentelemetry/api": "^1.10.0",
@@ -115,10 +129,14 @@
     "@opentelemetry/resources": "^3.1.0",
     "@opentelemetry/sdk-node": "^0.301.0",
     "@opentelemetry/sdk-trace": "^3.1.0",
+    "prom-client": "^15.0.0",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.0"
   },
   "peerDependenciesMeta": {
+    "@bymax-one/nest-core": {
+      "optional": true
+    },
     "@nestjs/common": {
       "optional": true
     },
@@ -146,6 +164,9 @@
     "@opentelemetry/sdk-trace": {
       "optional": true
     },
+    "prom-client": {
+      "optional": true
+    },
     "reflect-metadata": {
       "optional": true
     },
@@ -155,6 +176,7 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
+    "@bymax-one/nest-core": "1.6.10",
     "@commitlint/cli": "^21.0.2",
     "@commitlint/config-conventional": "^21.0.2",
     "@eslint/js": "^9.39.4",
@@ -195,6 +217,7 @@
     "mysql2": "3.24.6",
     "pino": "10.4.0",
     "prettier": "^3.8.3",
+    "prom-client": "15.1.3",
     "redis": "^6.3.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.0",

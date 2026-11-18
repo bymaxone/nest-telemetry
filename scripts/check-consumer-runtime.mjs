@@ -18,7 +18,11 @@
  *    rather than on a log line.
  * 2. `./nest` loads with `@nestjs/*` available and NO OpenTelemetry package resolvable:
  *    the Nest part adds no OpenTelemetry cost of its own.
- * 3. Every entry exports the names its subpath promises.
+ * 3. `./observability` loads with `@nestjs/*`, `@bymax-one/nest-core` and `prom-client` available
+ *    and no OpenTelemetry package but `@opentelemetry/api` resolvable: the metrics contributor
+ *    reads a count the exporter keeps and imports no OpenTelemetry package itself, and `prom-client`
+ *    requires the API on its own.
+ * 4. Every entry exports the names its subpath promises.
  *
  * Entry points are separate bundles, so a module reached from two of them by a
  * relative path is copied into each, and a copied class is a different injection
@@ -143,6 +147,12 @@ const PROBES = [
         'TELEMETRY_FLUSH_FAILED_KEY'
       ]
     },
+    calls: []
+  },
+  {
+    label: 'observability without any OpenTelemetry package but the API prom-client requires',
+    deny: OTEL_PACKAGES.filter((prefix) => prefix !== '@opentelemetry/api'),
+    entries: { './observability': ['TelemetryMetrics', 'SPAN_EXPORT_FAILURES_METRIC'] },
     calls: []
   }
 ]
