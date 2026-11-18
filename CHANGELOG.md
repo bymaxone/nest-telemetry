@@ -69,8 +69,8 @@ a backend that does not use it changes nothing. A derived backend acts on these 
    trace. The existing `BYMAX_TELEMETRY_SAMPLER_ARG_INVALID` warning calls a whitespace-only ratio argument
    blank instead of not set, and the winston warning text says when to ignore it. An alert or a log filter
    that matches either text needs the new words.
-3. An option key set to `undefined` or `null` is the same as no key. A backend that passed `null` in an
-   instrumentation override to replace a default now gets the default, and `env: null` no longer throws a
+3. An option key set to `undefined` or `null` is the same as no key. A backend that set a key to `undefined` in an
+   instrumentation override now gets the library default, and `env: null` no longer throws a
    `TypeError` at start: the process environment is read.
 
 ## [1.0.5] - 2026-11-17
