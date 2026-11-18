@@ -18,8 +18,7 @@ heading here.
   exporter wrapper now counts every failed export, not only the one a minute that warns, and keeps the count
   on `globalThis` so the preload's copy and the application's copy agree. `@bymax-one/nest-core` and
   `prom-client` are optional peers, no other entry loads them, and with the core metrics feature off nothing
-  is created. The subpath's budget is 0.69 KiB brotli; the `sdk` and `register` bundles grew by 59 and 58
-  bytes for the count.
+  is created.
 - **The README catalogs the domain span names of the Bymax libraries**, with a link to each library, the
   attribute and error rules of the observability standard, and the one propagator requirement of the queue.
   A test now fails when the README leaves out an export of any subpath or an `OTEL_*` variable the
