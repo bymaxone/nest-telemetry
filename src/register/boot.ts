@@ -6,6 +6,7 @@
 import { register } from 'node:module'
 
 import { readTelemetryEnvironment } from '../sdk/environment'
+import { describeFailure } from '../sdk/error-code'
 import { startTelemetry } from '../sdk/start'
 import type { TelemetryHandle, TelemetryOptions } from '../sdk/types'
 
@@ -79,7 +80,7 @@ async function startOrWarn(
     return await start(options)
   } catch (error) {
     process.emitWarning(
-      `Telemetry could not be started (${String(error)}), so the application continues without it.`,
+      `Telemetry could not be started (${describeFailure(error)}), so the application continues without it.`,
       { type: 'Warning', code: 'BYMAX_TELEMETRY_START_FAILED' }
     )
     return { enabled: false, shutdown: () => Promise.resolve() }
@@ -100,7 +101,7 @@ function registerLoaderHook(
     register(ESM_HOOK_SPECIFIER, parentUrl)
   } catch (error) {
     process.emitWarning(
-      `The OpenTelemetry loader hook could not be registered (${String(error)}), so native ES modules are not instrumented. Install @opentelemetry/instrumentation to instrument them; CommonJS code is unaffected.`,
+      `The OpenTelemetry loader hook could not be registered (${describeFailure(error)}), so native ES modules are not instrumented. Install @opentelemetry/instrumentation to instrument them; CommonJS code is unaffected.`,
       { type: 'Warning', code: HOOK_WARNING_CODE }
     )
   }

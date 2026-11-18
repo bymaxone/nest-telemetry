@@ -6,6 +6,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common'
 import type { OnApplicationShutdown, OnModuleInit } from '@nestjs/common'
 import { ModuleRef } from '@nestjs/core'
 
+import { codeOf } from '../sdk/error-code'
 import { shutdownTelemetry } from '../sdk/handle'
 import { registerWarningSink } from '../sdk/warning-sink'
 import type { TelemetryWarning } from '../sdk/warning-sink'
@@ -153,9 +154,10 @@ export class TelemetryShutdownHook implements OnApplicationShutdown, OnModuleIni
       // Falls through to the Nest logger below.
     }
     try {
+      // Library text only: the failure of an exporter can carry an endpoint with credentials, in its
+      // message and in the first line of its stack, so neither is written. A short code names it.
       new Logger('Telemetry').error(
-        `${TELEMETRY_FLUSH_FAILED_KEY}: ${failure.message}`,
-        failure.stack
+        `${TELEMETRY_FLUSH_FAILED_KEY}: the telemetry flush failed (code ${codeOf(failure)}). Bind TELEMETRY_LOGGER to receive the error itself.`
       )
     } catch {
       // Nothing is left to report through, and the shutdown must still not fail.

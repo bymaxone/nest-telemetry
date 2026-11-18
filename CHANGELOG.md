@@ -46,13 +46,21 @@ heading here.
 
 ### Fixed
 
+- **The failed-flush entry on the Nest logger no longer writes the error's message or stack.** Without a
+  bound `TELEMETRY_LOGGER`, `TelemetryShutdownHook` wrote `TRACING_FLUSH_FAILED: <message>` with the stack to
+  the Nest logger. The error of an exporter can carry the endpoint it called, credentials included, in both,
+  so the entry now holds library text and a short error code (`UNKNOWN` unless it is an upper-case token). A bound
+  `TELEMETRY_LOGGER` still receives the `Error` object itself.
 - **An option key set to `undefined` or `null` is the same as no key, for every option that has a
   default.** A `null` in an instrumentation override, in `ignoreIncomingRequest` or in a repeated call's
   options was read as a given value: an override key set to `undefined` replaced a library default, and a
-  repeated start whose options were all `null` was reported as ignoring them. The keys are now dropped
+  repeated start whose options were all `null` was reported as ignoring them. `env: null` threw a `TypeError` at start instead of reading the process environment. The keys are now dropped
   before they are merged with the defaults, and each known option is read by property access, so options
   given as a class instance with getters read as a plain object does. A table covers each defaulted option
   with both values and with a class instance.
+  The two preload warnings, `BYMAX_TELEMETRY_START_FAILED` and `BYMAX_TELEMETRY_ESM_HOOK_UNAVAILABLE`, no
+  longer interpolate the error either: they name its code and, when its message names one, the
+  OpenTelemetry package, so a missing peer is still named.
 
 ### Apply to a derived backend
 
@@ -60,14 +68,20 @@ The declarations gained the `./observability` subpath; nothing else about the pu
 a backend that does not use it changes nothing. A derived backend acts on these behaviours:
 
 1. To publish the failed-export counter, install `@bymax-one/nest-core` (1.1.0 or later) and `prom-client`
-   (15), add `TelemetryMetrics` from `@bymax-one/nest-telemetry/observability` to the providers of any module,
-   and alert on `increase(bymax_telemetry_span_export_failures_total[5m]) > 0`.
+   (15), which are optional peers, with `@nestjs/common` and `reflect-metadata` that a Nest application
+   already has; add `TelemetryMetrics` from `@bymax-one/nest-telemetry/observability` to the providers of
+   any module, and alert on `increase(bymax_telemetry_span_export_failures_total[5m]) > 0`. The exporter
+   counts every failed export from this release on, whether or not the metric is published.
 2. A start can now warn with `BYMAX_TELEMETRY_SAMPLER_NAME_UNKNOWN` for a sampler name that differs from a
-   known one only by case or whitespace, and with `BYMAX_TELEMETRY_SAMPLER_ARG_INVALID` for a whitespace-only
-   ratio argument that it passed in silence before. Both name the fix; an environment that sets such a value
-   was already sampling every trace.
-3. An option key set to `undefined` or `null` is the same as no key. A backend that passed `null` in an
-   instrumentation override to replace a default now gets the default.
+   known one only by case or whitespace; an environment that sets such a value was already sampling every
+   trace. The existing `BYMAX_TELEMETRY_SAMPLER_ARG_INVALID` warning calls a whitespace-only ratio argument
+   blank instead of not set, and the winston warning text says when to ignore it. An alert or a log filter
+   that matches either text needs the new words. The `TRACING_FLUSH_FAILED` entry on the Nest logger no
+   longer carries the error's message or stack: bind `TELEMETRY_LOGGER` to receive the `Error` itself. The two preload warnings now read `(code <CODE>[, package <name>])` where they quoted the error's text,
+   so a log filter that matched that text needs the code.
+3. An option key set to `undefined` or `null` is the same as no key. A backend that set a key to `undefined` in an
+   instrumentation override now gets the library default, and `env: null` no longer throws a
+   `TypeError` at start: the process environment is read.
 
 ## [1.0.5] - 2026-11-17
 

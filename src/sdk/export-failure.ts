@@ -13,6 +13,7 @@
  * be reported by writing a record that exports as logs and can fail in turn.
  */
 
+import { codeOf } from './error-code'
 import { reportWarning } from './warning-sink'
 
 /** What an export hands its callback: `code` is 0 for success, anything else is a failure. */
@@ -45,15 +46,6 @@ export function exportFailureCount(): number {
 
 /** The value of `ExportResultCode.SUCCESS` in `@opentelemetry/core`. */
 const SUCCESS = 0
-
-/** What a code may look like to be named in a warning: an upper-case token, never free text. */
-const CODE_TOKEN = /^[A-Z0-9_]{1,40}$/
-
-/** Reads a short code from an error, or `UNKNOWN`: the message and payload are never read. */
-function codeOf(error: unknown): string {
-  const code = String(Reflect.get(Object(error), 'code'))
-  return CODE_TOKEN.test(code) ? code : 'UNKNOWN'
-}
 
 /**
  * Wraps an exporter so a failed export emits `BYMAX_TELEMETRY_EXPORT_FAILED`, at most once per

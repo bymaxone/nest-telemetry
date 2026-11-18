@@ -60,7 +60,8 @@ const DISABLED_HANDLE: TelemetryHandle = {
  * @returns The handle, which flushes and stops the SDK.
  */
 export async function startTelemetry(options: TelemetryOptions = {}): Promise<TelemetryHandle> {
-  const env = readTelemetryEnvironment(options.env)
+  // A null env is the same as none: the default parameter of the reader only covers undefined.
+  const env = readTelemetryEnvironment(options.env ?? undefined)
   if (options.enabled === false || env.sdkDisabled) {
     // Turning telemetry off by a later call hands back a disabled handle and leaves a running SDK
     // running.

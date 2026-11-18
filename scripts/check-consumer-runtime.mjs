@@ -134,7 +134,10 @@ const PROBES = [
     esmOnly: ['./register'],
     calls: [],
     files: ['probe.mjs'],
-    expectOutput: ['BYMAX_TELEMETRY_START_FAILED', 'denied resolution of @opentelemetry']
+    expectOutput: [
+      'BYMAX_TELEMETRY_START_FAILED',
+      'code ERR_DENIED_BY_RUNTIME_GATE, package @opentelemetry/'
+    ]
   },
   {
     label: 'nest without any OpenTelemetry package',
