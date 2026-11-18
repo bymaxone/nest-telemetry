@@ -12,7 +12,14 @@ const common = {
   }),
   // Peers are never bundled: a bundled copy would be a second instance of the package
   // the host already loaded (a different injection token, a different OTel global).
-  external: [/^@nestjs\//, /^@opentelemetry\//, 'reflect-metadata', 'rxjs'],
+  external: [
+    /^@nestjs\//,
+    /^@opentelemetry\//,
+    /^@bymax-one\/nest-core/,
+    'prom-client',
+    'reflect-metadata',
+    'rxjs'
+  ],
   target: 'node24' as const,
   clean: false,
   splitting: false,
@@ -40,5 +47,7 @@ export default defineConfig([
   },
   { ...common, dts: { only: true }, entry: { 'register/index': 'src/register/index.ts' } },
   // NestJS module and shutdown provider.
-  { ...common, entry: { 'nest/index': 'src/nest/index.ts' } }
+  { ...common, entry: { 'nest/index': 'src/nest/index.ts' } },
+  // Metrics contributor for `@bymax-one/nest-core`; `prom-client` and the core package are optional peers.
+  { ...common, entry: { 'observability/index': 'src/observability/index.ts' } }
 ])

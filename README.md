@@ -81,13 +81,14 @@ Install it with the OpenTelemetry peers you use: the command is in [Quick Start]
 
 One package, separate entry points. Import only what your app needs:
 
-| Subpath      | Import                               | Purpose                                                                                                                                                                                       |    Dependencies     |
-| ------------ | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :-----------------: |
-| **SDK**      | `@bymax-one/nest-telemetry`          | `startTelemetry`, `shutdownTelemetry`, `ignorePaths`, `DEFAULT_REDACTED_QUERY_PARAMS`, types                                                                                                  | OpenTelemetry peers |
-| **Register** | `@bymax-one/nest-telemetry/register` | The preload for `node --import`; importing it runs it, and it exports nothing                                                                                                                 | OpenTelemetry peers |
-| **Nest**     | `@bymax-one/nest-telemetry/nest`     | `TelemetryModule`, `TelemetryShutdownHook`, `TELEMETRY_LOGGER`, `TELEMETRY_FLUSH_FAILED_KEY`, `TELEMETRY_SHUTDOWN_TIMEOUT_KEY`, `TELEMETRY_EXPORT_FAILED_KEY`, `ITelemetryErrorLogger` (type) |      NestJS 11      |
+| Subpath           | Import                                    | Purpose                                                                                                                                                                                       |                   Dependencies                   |
+| ----------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------: |
+| **SDK**           | `@bymax-one/nest-telemetry`               | `startTelemetry`, `shutdownTelemetry`, `ignorePaths`, `DEFAULT_REDACTED_QUERY_PARAMS`, types                                                                                                  |               OpenTelemetry peers                |
+| **Register**      | `@bymax-one/nest-telemetry/register`      | The preload for `node --import`; importing it runs it, and it exports nothing                                                                                                                 |               OpenTelemetry peers                |
+| **Nest**          | `@bymax-one/nest-telemetry/nest`          | `TelemetryModule`, `TelemetryShutdownHook`, `TELEMETRY_LOGGER`, `TELEMETRY_FLUSH_FAILED_KEY`, `TELEMETRY_SHUTDOWN_TIMEOUT_KEY`, `TELEMETRY_EXPORT_FAILED_KEY`, `ITelemetryErrorLogger` (type) |                    NestJS 11                     |
+| **Observability** | `@bymax-one/nest-telemetry/observability` | `TelemetryMetrics`, `SPAN_EXPORT_FAILURES_METRIC`                                                                                                                                             | NestJS 11, `@bymax-one/nest-core`, `prom-client` |
 
-The SDK entry and `./register` import no `@nestjs/*` package; only `./nest` does. Requiring `./register` from CommonJS throws and names `node --import`.
+The SDK entry and `./register` import no `@nestjs/*` package; only `./nest` and `./observability` do. `./observability` is optional: it needs `@bymax-one/nest-core` and `prom-client`, which are optional peers, and the other entries never load them. Requiring `./register` from CommonJS throws and names `node --import`.
 
 ---
 
@@ -236,6 +237,42 @@ The programmatic `startTelemetry` keeps its rejection when the SDK cannot start,
 With `OTEL_LOGS_EXPORTER=otlp`, or `instrumentations.sendLogs: true`, the records of pino, winston and bunyan go to the OpenTelemetry logs pipeline. Winston needs one more package: install `@opentelemetry/winston-transport` as a direct dependency of your application. The winston instrumentation loads it with a `require` from its own directory, and the package is not one of that instrumentation's dependencies, so without it winston records are not forwarded. Measured with winston 3.19.0 and `@opentelemetry/winston-transport` 0.35.0: a winston record reached the collector when the package was a direct dependency under npm, under pnpm 11.20.0 with the default layout and under pnpm with `hoist=false`, and it did not under npm without the package. A package that reaches the project only as another package's dependency was not measured.
 
 At start the library warns once, with `BYMAX_TELEMETRY_WINSTON_TRANSPORT_MISSING`, when log sending is on, winston resolves from the script that started the application (from the working directory when there is none), and the transport does not resolve from the winston instrumentation, which is found through `@opentelemetry/auto-instrumentations-node`. The check asks whether winston is installed, not whether it is loaded, because winston is usually not loaded yet at start: an installed winston that your application never uses causes one warning for nothing. The warning also appears with `instrumentations.sendLogs: true` while `OTEL_LOGS_EXPORTER` is `none`, where no record is forwarded whether the transport is installed or not, and with the `console` exporter, where it is correct.
+
+### Metrics
+
+With `@bymax-one/nest-core` and `prom-client` installed, the application can publish how many span exports failed. Provide `TelemetryMetrics` from `@bymax-one/nest-telemetry/observability` in any module; `BymaxCoreModule` finds it and hands it the registry its scrape endpoint serves, only when its metrics feature is on. With metrics off, nothing is created.
+
+```ts
+import { Module } from '@nestjs/common'
+import { TelemetryMetrics } from '@bymax-one/nest-telemetry/observability'
+
+@Module({ providers: [TelemetryMetrics] })
+export class ObservabilityModule {}
+```
+
+| Metric                                       | Type    | Labels | Meaning                                                                                                                                                                  |
+| -------------------------------------------- | ------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `bymax_telemetry_span_export_failures_total` | counter | none   | Span export batches the collector did not accept, so the batch was dropped. Every failure is counted, while `BYMAX_TELEMETRY_EXPORT_FAILED` warns at most once a minute. |
+
+The count is the number of failed exports since the process started. It lives on `globalThis`, as the handle does, so it is the same when the SDK starts from the preload and the application loads the library again. The series exists with a value of 0 before the first failure, so an alert on `increase(bymax_telemetry_span_export_failures_total[5m]) > 0` needs no special case. Register the contributor at most once per registry: a second registration of the name fails the boot, and says which name.
+
+### Span names across the Bymax libraries
+
+This library starts the SDK and traces what the OpenTelemetry instrumentations cover (HTTP, Redis, databases). The Bymax libraries add spans of their own for their domain operations, under the name `<library>.<operation>`, through the optional `@opentelemetry/api`: with no SDK registered the API does nothing, and with this one started the spans are exported like any other. The standard asks that their attributes use the `bymax.<library>.<attribute>` namespace and closed sets of values, with no secret, no user or tenant id and no payload, and that a failure set the span status to error with the library's error code.
+
+The names below are the ones the observability standard reserves. A library emits one from the release whose CHANGELOG lists it, and its own README documents the attributes.
+
+| Library                                                                                                                                                                                                                  | Span names                                                                                            |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| [nest-auth](https://github.com/bymaxone/nest-auth)                                                                                                                                                                       | `auth.login`, `auth.refresh`, `auth.mfa.verify`, `auth.password_reset`                                |
+| [nest-queue](https://github.com/bymaxone/nest-queue)                                                                                                                                                                     | `queue.enqueue`, `queue.process`                                                                      |
+| [nest-notification](https://github.com/bymaxone/nest-notification)                                                                                                                                                       | `notification.send`, `notification.otp.verify`                                                        |
+| [nest-storage](https://github.com/bymaxone/nest-storage)                                                                                                                                                                 | `storage.upload`, `storage.download_url`, `storage.scan`                                              |
+| [nest-realtime](https://github.com/bymaxone/nest-realtime)                                                                                                                                                               | `realtime.handshake`, `realtime.reauthenticate`                                                       |
+| [nest-ai-tokens](https://github.com/bymaxone/nest-ai-tokens)                                                                                                                                                             | `ai_tokens.consume`, `ai_tokens.hold`, `ai_tokens.settle`                                             |
+| [nest-core](https://github.com/bymaxone/nest-core), [nest-cache](https://github.com/bymaxone/nest-cache), [nest-logger](https://github.com/bymaxone/nest-logger), [nest-config](https://github.com/bymaxone/nest-config) | none: HTTP and Redis are traced by the instrumentations, and the other work is not a domain operation |
+
+The standard asks `nest-queue` to carry the trace context from the request that enqueues a job into the job, as a W3C `traceparent` in the job's options metadata, so a request, its job and the job's side effects form one trace. That needs the SDK's default propagator: a host that sets `OTEL_PROPAGATORS` to a list without `tracecontext` breaks it. With no SDK registered the propagation writes nothing, and a job without a `traceparent` starts its own trace.
 
 ### Flushing
 
@@ -423,6 +460,13 @@ No exports. `node --import @bymax-one/nest-telemetry/register` registers the loa
 | `TELEMETRY_SHUTDOWN_TIMEOUT_KEY` | constant | The stable key, `TRACING_SHUTDOWN_TIMEOUT`, under which a shutdown that hit `shutdownTimeoutMs` is reported                                                                                                        |
 | `TELEMETRY_EXPORT_FAILED_KEY`    | constant | The stable key, `TRACING_EXPORT_FAILED`, under which a failed span export is reported, with the exporter kind and the error code as metadata                                                                       |
 | `ITelemetryErrorLogger`          | type     | The shape `TELEMETRY_LOGGER` provides: `errorStructured(logKey, error)` and an optional `warnStructured`                                                                                                           |
+
+### Observability: `@bymax-one/nest-telemetry/observability`
+
+| Export                        | Kind     | Purpose                                                                                                                                                      |
+| ----------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `TelemetryMetrics`            | provider | A `@bymax-one/nest-core` metrics contributor: registers the `bymax_telemetry_span_export_failures_total` counter on the registry it is handed, with no label |
+| `SPAN_EXPORT_FAILURES_METRIC` | constant | The metric name, `bymax_telemetry_span_export_failures_total`                                                                                                |
 
 ---
 

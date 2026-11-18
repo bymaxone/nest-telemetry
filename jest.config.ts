@@ -17,7 +17,8 @@ const config: Config = {
   moduleNameMapper: {
     '^@bymax-one/nest-telemetry$': '<rootDir>/sdk/index.ts',
     '^@bymax-one/nest-telemetry/register$': '<rootDir>/register/index.ts',
-    '^@bymax-one/nest-telemetry/nest$': '<rootDir>/nest/index.ts'
+    '^@bymax-one/nest-telemetry/nest$': '<rootDir>/nest/index.ts',
+    '^@bymax-one/nest-telemetry/observability$': '<rootDir>/observability/index.ts'
   },
   transform: {
     '^.+\\.ts$': [

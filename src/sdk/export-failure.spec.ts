@@ -3,11 +3,12 @@
  * and the error code, silence on success.
  * @layer sdk
  */
-import { warnOnExportFailure } from './export-failure'
+import { exportFailureCount, warnOnExportFailure } from './export-failure'
 import type { ExportOutcome, ObservableExporter } from './export-failure'
 import { clearWarningSink, registerWarningSink } from './warning-sink'
 
 const FAILED = 1
+const COUNT_KEY = Symbol.for('@bymax-one/nest-telemetry/export-failures')
 const CODE = 'BYMAX_TELEMETRY_EXPORT_FAILED'
 
 /** An exporter double whose next result the test chooses. */
@@ -222,5 +223,54 @@ describe('warnOnExportFailure', () => {
     } finally {
       clearWarningSink()
     }
+  })
+})
+
+describe('the export failure count', () => {
+  beforeEach(() => {
+    jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    Reflect.deleteProperty(globalThis, COUNT_KEY)
+  })
+
+  it('counts every failed export, also those the warning window keeps silent', () => {
+    // Scenario: the warning is limited to one a minute, the count is not: a metric that followed
+    // the warning would hide a collector that stays down.
+    let now = 0
+    const double = fakeExporter()
+    double.next = { code: FAILED, error: new Error('x') }
+    warnOnExportFailure(double.exporter, 'otlp-http traces', () => now)
+    for (let i = 0; i < 5; i++) exportOnce(double.exporter)
+    now += 120_000
+    exportOnce(double.exporter)
+    expect(exportFailureCount()).toBe(6)
+  })
+
+  it('does not count a successful export', () => {
+    // Scenario: only failures move the count.
+    const double = fakeExporter()
+    warnOnExportFailure(double.exporter, 'otlp-http traces')
+    exportOnce(double.exporter)
+    expect(exportFailureCount()).toBe(0)
+  })
+
+  it('keeps the count in the process-wide registry, so another copy of the library reads it', () => {
+    // Scenario: the preload and the application are separate bundles that share only globalThis.
+    const double = fakeExporter()
+    double.next = { code: FAILED }
+    warnOnExportFailure(double.exporter, 'otlp-http traces')
+    exportOnce(double.exporter)
+    expect(Reflect.get(globalThis, COUNT_KEY)).toBe(1)
+  })
+
+  it('counts a failure although the warning route throws', () => {
+    // Scenario: a broken sink must not make the metric lose the failure.
+    jest.spyOn(process, 'emitWarning').mockImplementation(() => {
+      throw new Error('sink')
+    })
+    const double = fakeExporter()
+    double.next = { code: FAILED }
+    warnOnExportFailure(double.exporter, 'otlp-http traces')
+    exportOnce(double.exporter)
+    expect(exportFailureCount()).toBe(1)
   })
 })

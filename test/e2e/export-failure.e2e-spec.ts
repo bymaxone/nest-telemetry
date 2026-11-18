@@ -6,8 +6,13 @@ import { createServer } from 'node:net'
 import type { AddressInfo, Server, Socket } from 'node:net'
 
 import { context, propagation, trace } from '@opentelemetry/api'
+import { Registry } from 'prom-client'
 
 import { shutdownTelemetry, startTelemetry } from '@bymax-one/nest-telemetry'
+import {
+  SPAN_EXPORT_FAILURES_METRIC,
+  TelemetryMetrics
+} from '@bymax-one/nest-telemetry/observability'
 
 import { allowRestart } from './fixtures/restart'
 
@@ -21,6 +26,7 @@ async function closedPort(): Promise<number> {
 }
 
 afterEach(() => {
+  Reflect.deleteProperty(globalThis, Symbol.for('@bymax-one/nest-telemetry/export-failures'))
   for (const name of [
     'OTEL_EXPORTER_OTLP_ENDPOINT',
     'OTEL_EXPORTER_OTLP_TIMEOUT',
@@ -90,5 +96,33 @@ describe('a collector that is down', () => {
       .map(([text]) => String(text))
     expect(warned).toHaveLength(1)
     expect(warned[0]).toContain('code UNKNOWN')
+  })
+})
+
+describe('a collector that is down, seen through the metrics contributor', () => {
+  it('counts every failed batch although the warning appears once', async () => {
+    // Scenario: three spans go out in separate batches to a port with nothing listening. The warning
+    // is limited to one a minute; the scrape of the registry shows every failed batch.
+    const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    const registry = new Registry()
+    new TelemetryMetrics().registerMetrics(registry)
+    process.env['OTEL_EXPORTER_OTLP_ENDPOINT'] = `http://127.0.0.1:${await closedPort()}`
+    process.env['OTEL_EXPORTER_OTLP_TIMEOUT'] = '300'
+    process.env['OTEL_BSP_SCHEDULE_DELAY'] = '50'
+    await startTelemetry({ serviceName: 'api', shutdownTimeoutMs: 20_000, env: process.env })
+    for (const name of ['one', 'two', 'three']) {
+      trace.getTracer('e2e').startSpan(name).end()
+      await new Promise((resolve) => setTimeout(resolve, 400))
+    }
+    await shutdownTelemetry()
+    const warnings = emitWarning.mock.calls.filter(
+      ([, options]) => (options as { code?: string }).code === 'BYMAX_TELEMETRY_EXPORT_FAILED'
+    )
+    expect(warnings).toHaveLength(1)
+    const scraped = await registry.metrics()
+    const line = scraped.split('\n').find((it) => it.startsWith(`${SPAN_EXPORT_FAILURES_METRIC} `))
+    expect(Number(line?.split(' ')[1])).toBeGreaterThanOrEqual(3)
+    // A second scrape with no new failure reports the same total.
+    expect(await registry.metrics()).toContain(line)
   })
 })
