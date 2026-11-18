@@ -6,7 +6,7 @@
  * through the OpenTelemetry diagnostic logger, which is off by default, so a collector that is down
  * or refuses every export leaves the application silent. This wraps the exporter's `export` to
  * report one warning, at most once a minute, naming the exporter and a short error code. Every
- * failed export is also counted, with no limit.
+ * failed export is also counted, with no limit, for the metrics contributor.
  *
  * Only the trace exporter is wrapped. A wrapper for a logs exporter must not report through the
  * warning sink: a bound logger can forward its records to OTLP logs, so a failed logs export would
