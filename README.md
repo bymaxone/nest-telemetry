@@ -250,9 +250,9 @@ import { TelemetryMetrics } from '@bymax-one/nest-telemetry/observability'
 export class ObservabilityModule {}
 ```
 
-| Metric                                       | Type    | Labels | Meaning                                                                                                                                                                        |
-| -------------------------------------------- | ------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `bymax_telemetry_span_export_failures_total` | counter | none   | Span export batches the collector did not accept, so the batch was dropped. Every failure is counted, while the `BYMAX_TELEMETRY_EXPORT_FAILED` warning appears once a minute. |
+| Metric                                       | Type    | Labels | Meaning                                                                                                                                                                  |
+| -------------------------------------------- | ------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `bymax_telemetry_span_export_failures_total` | counter | none   | Span export batches the collector did not accept, so the batch was dropped. Every failure is counted, while `BYMAX_TELEMETRY_EXPORT_FAILED` warns at most once a minute. |
 
 The count is the number of failed exports since the process started. It lives on `globalThis`, as the handle does, so it is the same when the SDK starts from the preload and the application loads the library again. The series exists with a value of 0 before the first failure, so an alert on `increase(bymax_telemetry_span_export_failures_total[5m]) > 0` needs no special case. Register the contributor at most once per registry: a second registration of the name fails the boot, and says which name.
 
