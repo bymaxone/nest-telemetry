@@ -26,6 +26,10 @@ heading here.
   `TELEMETRY_LOGGER` or from the logger installed with `Logger.overrideLogger`, is absorbed and the shutdown
   still resolves, now pinned through a real Nest logger. A rejecting asynchronous `error` method installed
   with `overrideLogger` is not caught by Nest or by this library and is an unhandled rejection.
+- **The README no longer says the library never touches the sampler variables.** It reads `OTEL_TRACES_SAMPLER`
+  and `OTEL_TRACES_SAMPLER_ARG` to warn when the SDK will ignore a ratio argument or sample every trace, and the
+  variable table lists them. Two other sentences are clearer: where the Nest module reports a refused flush, and
+  why the Nest logger entry leaves out the error message and stack.
 
 **Apply note.** No action is needed. If your `TELEMETRY_LOGGER` methods return promises, a rejection is now
 dropped silently instead of surfacing as an unhandled rejection.
