@@ -10,6 +10,24 @@ heading here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **An asynchronous `TELEMETRY_LOGGER` can no longer end the process.** The hook reports a failed flush, a
+  shutdown that hit its deadline and a failed span export through the application's logger and did not look
+  at what the logger returned, so a logger whose promise rejected (a network sink that is down) produced an
+  unhandled rejection, which ends a Node process by default. The returned promise is now absorbed, since the
+  report is best effort and nothing waits for it.
+
+### Documentation
+
+- **The README says what a logger that throws or rejects does.** A synchronous throw, from a
+  `TELEMETRY_LOGGER` or from the logger installed with `Logger.overrideLogger`, is absorbed and the shutdown
+  still resolves, now pinned through a real Nest logger. A rejecting asynchronous `error` method installed
+  with `overrideLogger` is not caught by Nest or by this library and is an unhandled rejection.
+
+**Apply note.** No action is needed. If your `TELEMETRY_LOGGER` methods return promises, a rejection is now
+dropped silently instead of surfacing as an unhandled rejection.
+
 ## [1.0.6] - 2026-11-18
 
 ### Added

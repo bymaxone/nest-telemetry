@@ -130,4 +130,28 @@ describe('TelemetryModule when the flush fails, in a real Nest application', () 
     await app.init()
     await expect(app.close()).resolves.toBeUndefined()
   })
+  it('closes cleanly when the logger the application installed with overrideLogger throws', async () => {
+    // Scenario: the host replaced Nest's logger with one that throws synchronously, as a broken
+    // custom logger does. The call goes through a real Nest Logger, not a spy on its prototype, and
+    // the shutdown still resolves.
+    jest.restoreAllMocks()
+    mockShutdown.mockRejectedValueOnce(new Error('collector refused'))
+    const attempts = jest.fn()
+    try {
+      const app = await Test.createTestingModule({ imports: [TelemetryModule] }).compile()
+      Logger.overrideLogger({
+        log: () => undefined,
+        warn: () => undefined,
+        error: () => {
+          attempts()
+          throw new Error('host logger failed')
+        }
+      })
+      await app.init()
+      await expect(app.close()).resolves.toBeUndefined()
+      expect(attempts).toHaveBeenCalledTimes(1)
+    } finally {
+      Logger.overrideLogger(['log', 'warn', 'error'])
+    }
+  })
 })
