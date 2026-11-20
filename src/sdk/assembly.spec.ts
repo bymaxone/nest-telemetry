@@ -634,6 +634,35 @@ describe('warnAboutSamplerRatio', () => {
     expect(text).not.toContain('x'.repeat(41))
     expect(text).not.toContain('INJECTED')
   })
+
+  it.each([
+    ['the delete control', 0x7f],
+    ['a C1 control, next line', 0x85],
+    ['the line separator', 0x2028],
+    ['the paragraph separator', 0x2029],
+    ['a zero-width space', 0x200b],
+    ['a right-to-left mark', 0x200f],
+    ['the word joiner', 0x2060],
+    ['the byte order mark', 0xfeff],
+    ['a left-to-right embedding', 0x202a],
+    ['a right-to-left override', 0x202e],
+    ['a left-to-right isolate', 0x2066],
+    ['a pop directional isolate', 0x2069]
+  ])('writes %s in the value as an escape, never as the character', (_what, code) => {
+    // Scenario: `JSON.stringify` leaves these characters as they are, so an operator's value could
+    // reorder, hide or break the warning line; each must reach the log as its \\uXXXX escape.
+    const char = String.fromCharCode(code)
+    warnAboutSamplerRatio(ratio('traceidratio', `1${char}5%`))
+    const text = String(emitWarning.mock.calls[0]?.[0])
+    expect(text).not.toContain(char)
+    expect(text).toContain(`"1\\u${code.toString(16).padStart(4, '0')}5%"`)
+  })
+
+  it('leaves ordinary text, accents included, as it was written', () => {
+    // Scenario: only the listed characters are escaped; a value in another script is still readable.
+    warnAboutSamplerRatio(ratio('traceidratio', 'dez por cento: 10 %, café'))
+    expect(String(emitWarning.mock.calls[0]?.[0])).toContain('"dez por cento: 10 %, café"')
+  })
 })
 
 describe('warnAboutOversizedTimers', () => {

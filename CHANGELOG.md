@@ -10,6 +10,16 @@ heading here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The sampler ratio warning escapes direction and invisible characters in the value it repeats.** It quoted the
+  operator's `OTEL_TRACES_SAMPLER_ARG` with `JSON.stringify`, which leaves the delete and C1 controls, the line
+  and paragraph separators, the zero-width characters and direction marks, the bidirectional controls and the byte
+  order mark as they are, so a value could reorder or hide the warning line. They are now written as `\uXXXX`.
+- **The unsafe options are read once for each step that needs them.** The SDK build read `options.unsafe` three
+  times and the warning about turned-off redactions four times, so an option object whose `unsafe` is a getter
+  could make the warning and the SDK disagree. Each step reads it once.
+
 ## [1.0.7] - 2026-11-20
 
 ### Fixed

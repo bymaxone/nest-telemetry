@@ -78,6 +78,19 @@ describe('a ratio sampler without a usable ratio', () => {
   })
 })
 
+describe('a ratio sampler whose argument carries a direction or invisible character', () => {
+  it('writes the character as an escape in the warning, never as itself', async () => {
+    // Scenario: a deployment template pastes a right-to-left override into the variable. The warning
+    // repeats the value for the operator, and the override must reach the log only as its escape.
+    const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    await startWith('traceidratio', '1\u202e5%')
+    const text = String(samplerWarnings(emitWarning)[0]?.[0])
+    expect(text).toContain('"1\\u202e5%"')
+    expect(text).not.toContain('\u202e')
+    expect(sampledRoots()).toBe(SPANS)
+  })
+})
+
 describe('a ratio sampler whose argument is only whitespace', () => {
   it.each(['   ', '\t'])(
     'is reported as blank for %p, and the SDK samples every trace',
