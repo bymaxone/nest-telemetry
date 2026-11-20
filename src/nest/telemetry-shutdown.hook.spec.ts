@@ -333,3 +333,63 @@ describe('the warning route', () => {
     expect(first.warnStructured).not.toHaveBeenCalled()
   })
 })
+
+describe('an asynchronous structured logger', () => {
+  /** Lets every pending microtask and the unhandled-rejection check of Node run. */
+  const settle = (): Promise<void> => new Promise((resolve) => setImmediate(resolve))
+
+  const unhandled = jest.fn()
+
+  beforeEach(() => {
+    unhandled.mockClear()
+    process.on('unhandledRejection', unhandled)
+    jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+  })
+
+  afterEach(() => {
+    process.off('unhandledRejection', unhandled)
+  })
+
+  const rejecting = jest.fn(() => Promise.reject(new Error('logger sink is down')))
+
+  it('does not turn a rejected errorStructured into an unhandled rejection on a failed flush', async () => {
+    // Scenario: the host's logger writes over the network and its promise rejects while the flush
+    // failure is being reported; Node must not see an unhandled rejection, which ends the process.
+    registerHandle(createHandle(() => Promise.reject(new Error('collector refused'))))
+    await new TelemetryShutdownHook(
+      moduleRef({ errorStructured: rejecting })
+    ).onApplicationShutdown()
+    await settle()
+    expect(rejecting).toHaveBeenCalled()
+    expect(unhandled).not.toHaveBeenCalled()
+  })
+
+  it('does not turn a rejected warnStructured into an unhandled rejection on a failed export', async () => {
+    // Scenario: the same logger rejects while a failed span export is reported through the sink.
+    new TelemetryShutdownHook(moduleRef({ warnStructured: rejecting })).onModuleInit()
+    reportWarning({
+      code: 'BYMAX_TELEMETRY_EXPORT_FAILED',
+      text: 'Exporting spans failed (otlp-http traces, code ECONNREFUSED), so the batch was dropped.',
+      fields: { kind: 'otlp-http traces', code: 'ECONNREFUSED' }
+    })
+    await settle()
+    expect(unhandled).not.toHaveBeenCalled()
+  })
+
+  it('does not turn a rejected errorStructured into an unhandled rejection on a shutdown timeout', async () => {
+    // Scenario: the deadline passes and the host's logger rejects while the timeout is reported.
+    jest.useFakeTimers()
+    try {
+      registerHandle(createHandle(() => new Promise<void>(() => undefined), 400))
+      const hook = new TelemetryShutdownHook(moduleRef({ errorStructured: rejecting }))
+      hook.onModuleInit()
+      const done = hook.onApplicationShutdown()
+      await jest.advanceTimersByTimeAsync(400)
+      await done
+    } finally {
+      jest.useRealTimers()
+    }
+    await settle()
+    expect(unhandled).not.toHaveBeenCalled()
+  })
+})

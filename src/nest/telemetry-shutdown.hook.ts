@@ -61,6 +61,17 @@ export interface IProviderLookup {
   get(token: symbol, options: { strict: false }): unknown
 }
 
+/**
+ * Keeps the promise an asynchronous application logger returns from becoming an unhandled
+ * rejection, which ends a Node process by default: the report is best effort and nothing waits for
+ * it. A logger that returns nothing is unaffected.
+ *
+ * @param result - Whatever the logger method returned.
+ */
+function absorbRejection(result: unknown): void {
+  Promise.resolve(result).catch(() => undefined)
+}
+
 /** Awaits the SDK flush as part of the application's own graceful shutdown. */
 @Injectable()
 export class TelemetryShutdownHook implements OnApplicationShutdown, OnModuleInit {
@@ -116,16 +127,20 @@ export class TelemetryShutdownHook implements OnApplicationShutdown, OnModuleIni
       warning.code === 'BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT' &&
       typeof logger?.errorStructured === 'function'
     ) {
-      logger.errorStructured(TELEMETRY_SHUTDOWN_TIMEOUT_KEY, new Error(warning.text))
+      absorbRejection(
+        logger.errorStructured(TELEMETRY_SHUTDOWN_TIMEOUT_KEY, new Error(warning.text))
+      )
       return true
     }
     if (
       warning.code === 'BYMAX_TELEMETRY_EXPORT_FAILED' &&
       typeof logger?.warnStructured === 'function'
     ) {
-      logger.warnStructured(TELEMETRY_EXPORT_FAILED_KEY, warning.text, undefined, {
-        ...warning.fields
-      })
+      absorbRejection(
+        logger.warnStructured(TELEMETRY_EXPORT_FAILED_KEY, warning.text, undefined, {
+          ...warning.fields
+        })
+      )
       return true
     }
     return false
@@ -147,7 +162,7 @@ export class TelemetryShutdownHook implements OnApplicationShutdown, OnModuleIni
     try {
       const logger = this.structuredLogger()
       if (typeof logger?.errorStructured === 'function') {
-        logger.errorStructured(TELEMETRY_FLUSH_FAILED_KEY, failure)
+        absorbRejection(logger.errorStructured(TELEMETRY_FLUSH_FAILED_KEY, failure))
         return
       }
     } catch {

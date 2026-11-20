@@ -130,4 +130,49 @@ describe('TelemetryModule when the flush fails, in a real Nest application', () 
     await app.init()
     await expect(app.close()).resolves.toBeUndefined()
   })
+  it('closes cleanly when the logger the application installed with overrideLogger throws', async () => {
+    // Scenario: the host replaced Nest's logger with one that throws synchronously, as a broken
+    // custom logger does. The call goes through a real Nest Logger, not a spy on its prototype, and
+    // the shutdown still resolves.
+    jest.restoreAllMocks()
+    mockShutdown.mockRejectedValueOnce(new Error('collector refused'))
+    const attempts = jest.fn()
+    try {
+      const app = await Test.createTestingModule({ imports: [TelemetryModule] }).compile()
+      Logger.overrideLogger({
+        log: () => undefined,
+        warn: () => undefined,
+        error: () => {
+          attempts()
+          throw new Error('host logger failed')
+        }
+      })
+      await app.init()
+      await expect(app.close()).resolves.toBeUndefined()
+      expect(attempts).toHaveBeenCalledTimes(1)
+    } finally {
+      Logger.overrideLogger(['log', 'warn', 'error'])
+    }
+  })
+  it('closes cleanly and raises no unhandled rejection when an asynchronous TELEMETRY_LOGGER rejects', async () => {
+    // Scenario: the application binds a logger whose methods return a promise, and the promise
+    // rejects while the failed flush is reported, as a network sink that is down does.
+    mockShutdown.mockRejectedValueOnce(new Error('collector refused'))
+    const unhandled = jest.fn()
+    process.on('unhandledRejection', unhandled)
+    try {
+      const errorStructured = jest.fn(() => Promise.reject(new Error('sink is down')))
+      const app = await Test.createTestingModule({
+        imports: [TelemetryModule],
+        providers: [{ provide: TELEMETRY_LOGGER, useValue: { errorStructured } }]
+      }).compile()
+      await app.init()
+      await expect(app.close()).resolves.toBeUndefined()
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(errorStructured).toHaveBeenCalledTimes(1)
+      expect(unhandled).not.toHaveBeenCalled()
+    } finally {
+      process.off('unhandledRejection', unhandled)
+    }
+  })
 })
