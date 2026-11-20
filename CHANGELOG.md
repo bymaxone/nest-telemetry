@@ -10,6 +10,12 @@ heading here.
 
 ## [Unreleased]
 
+### Documentation
+
+- **The README `env` option row says where the two sampler variables come from.** `OTEL_TRACES_SAMPLER` and
+  `OTEL_TRACES_SAMPLER_ARG` are always read from the process environment, whatever the `env` option holds, as the
+  SDK reads them.
+
 ## [1.0.7] - 2026-11-20
 
 ### Fixed
