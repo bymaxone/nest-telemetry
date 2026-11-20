@@ -22,6 +22,12 @@ heading here.
   times and the warning about turned-off redactions four times, so an option object whose `unsafe` is a getter
   could make the warning and the SDK disagree. Each step reads it once.
 
+### Documentation
+
+- **The README `env` option row says where the two sampler variables come from.** `OTEL_TRACES_SAMPLER` and
+  `OTEL_TRACES_SAMPLER_ARG` are always read from the process environment, whatever the `env` option holds, as the
+  SDK reads them.
+
 ## [1.0.7] - 2026-11-20
 
 ### Fixed
