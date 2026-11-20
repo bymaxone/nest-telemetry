@@ -238,25 +238,26 @@ export function warnAboutUnsafeOptions(options: TelemetryOptions): void {
 const SHOWN_VALUE_LENGTH = 40
 
 /**
- * Characters `JSON.stringify` leaves as they are but that break, reorder or hide text in a log line: the
- * delete and C1 controls, the line and paragraph separators, the zero-width characters and direction
- * marks, the bidirectional embeddings, overrides and isolates, and the byte order mark.
+ * Characters `JSON.stringify` leaves as they are but that break, reorder or hide text in a log line:
+ * the delete and C1 controls (`Cc`), every format character (`Cf`: the soft hyphen, the zero-width
+ * characters, the direction marks, overrides and isolates, the invisible operators and the byte order
+ * mark) and the line and paragraph separators (`Zl`, `Zp`). Named by category, so a character the
+ * Unicode standard adds to one of them is covered without a list to keep.
  */
-const UNSAFE_IN_LOG =
-  /[\u007f-\u009f\u2028\u2029\u200b-\u200f\u2060\ufeff\u202a-\u202e\u2066-\u2069]/g
+const UNSAFE_IN_LOG = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu
 
 /**
  * Quotes a value the operator wrote so it can be repeated in a warning: cut short, and with every
- * control, separator and direction character written as `\uXXXX`.
+ * control, separator and format character written as `\uXXXX`, or `\u{X}` beyond the first plane.
  *
  * @param value - The operator's text.
  * @returns The quoted, escaped, shortened text.
  */
 function quoteOperatorValue(value: string): string {
-  return JSON.stringify(value.slice(0, SHOWN_VALUE_LENGTH)).replace(
-    UNSAFE_IN_LOG,
-    (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`
-  )
+  return JSON.stringify(value.slice(0, SHOWN_VALUE_LENGTH)).replace(UNSAFE_IN_LOG, (char) => {
+    const hex = Number(char.codePointAt(0)).toString(16)
+    return hex.length > 4 ? `\\u{${hex}}` : `\\u${hex.padStart(4, '0')}`
+  })
 }
 
 /**

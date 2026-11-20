@@ -647,15 +647,34 @@ describe('warnAboutSamplerRatio', () => {
     ['a left-to-right embedding', 0x202a],
     ['a right-to-left override', 0x202e],
     ['a left-to-right isolate', 0x2066],
-    ['a pop directional isolate', 0x2069]
+    ['a pop directional isolate', 0x2069],
+    ['the soft hyphen', 0xad],
+    ['the arabic letter mark', 0x61c],
+    ['the function application operator', 0x2061],
+    ['the invisible plus', 0x2064],
+    ['the inhibit symmetric swapping mark', 0x206a],
+    ['the nominal digit shapes mark', 0x206f],
+    ['a language tag character, beyond the first plane', 0xe0001],
+    ['a musical begin beam, beyond the first plane', 0x1d173]
   ])('writes %s in the value as an escape, never as the character', (_what, code) => {
     // Scenario: `JSON.stringify` leaves these characters as they are, so an operator's value could
     // reorder, hide or break the warning line; each must reach the log as its \\uXXXX escape.
-    const char = String.fromCharCode(code)
+    const char = String.fromCodePoint(code)
     warnAboutSamplerRatio(ratio('traceidratio', `1${char}5%`))
     const text = String(emitWarning.mock.calls[0]?.[0])
+    const hex = code.toString(16)
+    const escape = hex.length > 4 ? `\\u{${hex}}` : `\\u${hex.padStart(4, '0')}`
     expect(text).not.toContain(char)
-    expect(text).toContain(`"1\\u${code.toString(16).padStart(4, '0')}5%"`)
+    expect(text).toContain(`"1${escape}5%"`)
+  })
+
+  it('keeps a character it must escape out of the 40 that are shown, never splitting its escape', () => {
+    // Scenario: the cut is made before the escape, so a value of 39 letters and a format character
+    // shows the whole escape, and a 41st character is not shown.
+    warnAboutSamplerRatio(ratio('traceidratio', `${'a'.repeat(39)}\u202e${'b'.repeat(10)}`))
+    const text = String(emitWarning.mock.calls[0]?.[0])
+    expect(text).toContain(`"${'a'.repeat(39)}\\u202e"`)
+    expect(text).not.toContain('bbb')
   })
 
   it('leaves ordinary text, accents included, as it was written', () => {

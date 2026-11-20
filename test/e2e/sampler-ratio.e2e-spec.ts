@@ -79,14 +79,17 @@ describe('a ratio sampler without a usable ratio', () => {
 })
 
 describe('a ratio sampler whose argument carries a direction or invisible character', () => {
-  it('writes the character as an escape in the warning, never as itself', async () => {
-    // Scenario: a deployment template pastes a right-to-left override into the variable. The warning
-    // repeats the value for the operator, and the override must reach the log only as its escape.
+  it.each([
+    ['a right-to-left override', 0x202e, '\\u202e'],
+    ['a language tag character beyond the first plane', 0xe0001, '\\u{e0001}']
+  ])('writes %s as an escape in the warning, never as itself', async (_what, code, escape) => {
+    // Scenario: a deployment template pastes the character into the variable. The warning repeats the
+    // value for the operator, and the character must reach the log only as its escape.
     const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
-    await startWith('traceidratio', '1\u202e5%')
+    await startWith('traceidratio', `1${String.fromCodePoint(code)}5%`)
     const text = String(samplerWarnings(emitWarning)[0]?.[0])
-    expect(text).toContain('"1\\u202e5%"')
-    expect(text).not.toContain('\u202e')
+    expect(text).toContain(`"1${escape}5%"`)
+    expect(text).not.toContain(String.fromCodePoint(code))
     expect(sampledRoots()).toBe(SPANS)
   })
 })
