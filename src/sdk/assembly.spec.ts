@@ -634,6 +634,54 @@ describe('warnAboutSamplerRatio', () => {
     expect(text).not.toContain('x'.repeat(41))
     expect(text).not.toContain('INJECTED')
   })
+
+  it.each([
+    ['the delete control', 0x7f],
+    ['a C1 control, next line', 0x85],
+    ['the line separator', 0x2028],
+    ['the paragraph separator', 0x2029],
+    ['a zero-width space', 0x200b],
+    ['a right-to-left mark', 0x200f],
+    ['the word joiner', 0x2060],
+    ['the byte order mark', 0xfeff],
+    ['a left-to-right embedding', 0x202a],
+    ['a right-to-left override', 0x202e],
+    ['a left-to-right isolate', 0x2066],
+    ['a pop directional isolate', 0x2069],
+    ['the soft hyphen', 0xad],
+    ['the arabic letter mark', 0x61c],
+    ['the function application operator', 0x2061],
+    ['the invisible plus', 0x2064],
+    ['the inhibit symmetric swapping mark', 0x206a],
+    ['the nominal digit shapes mark', 0x206f],
+    ['a language tag character, beyond the first plane', 0xe0001],
+    ['a musical begin beam, beyond the first plane', 0x1d173]
+  ])('writes %s in the value as an escape, never as the character', (_what, code) => {
+    // Scenario: `JSON.stringify` leaves these characters as they are, so an operator's value could
+    // reorder, hide or break the warning line; each must reach the log as its \\uXXXX escape.
+    const char = String.fromCodePoint(code)
+    warnAboutSamplerRatio(ratio('traceidratio', `1${char}5%`))
+    const text = String(emitWarning.mock.calls[0]?.[0])
+    const hex = code.toString(16)
+    const escape = hex.length > 4 ? `\\u{${hex}}` : `\\u${hex.padStart(4, '0')}`
+    expect(text).not.toContain(char)
+    expect(text).toContain(`"1${escape}5%"`)
+  })
+
+  it('keeps a character it must escape out of the 40 that are shown, never splitting its escape', () => {
+    // Scenario: the cut is made before the escape, so a value of 39 letters and a format character
+    // shows the whole escape, and a 41st character is not shown.
+    warnAboutSamplerRatio(ratio('traceidratio', `${'a'.repeat(39)}\u202e${'b'.repeat(10)}`))
+    const text = String(emitWarning.mock.calls[0]?.[0])
+    expect(text).toContain(`"${'a'.repeat(39)}\\u202e"`)
+    expect(text).not.toContain('bbb')
+  })
+
+  it('leaves ordinary text, accents included, as it was written', () => {
+    // Scenario: only the listed characters are escaped; a value in another script is still readable.
+    warnAboutSamplerRatio(ratio('traceidratio', 'dez por cento: 10 %, café'))
+    expect(String(emitWarning.mock.calls[0]?.[0])).toContain('"dez por cento: 10 %, café"')
+  })
 })
 
 describe('warnAboutOversizedTimers', () => {

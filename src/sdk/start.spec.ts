@@ -16,6 +16,9 @@ import {
 import { startTelemetry } from './start'
 import type { TelemetryOptions } from './types'
 
+/** The steps of a start that read `options.unsafe`: the warnings, the instrumentation config and the SDK build. */
+const UNSAFE_READS = 3
+
 const mockSdkInstance = {
   start: jest.fn<void, []>(),
   shutdown: jest.fn<Promise<void>, []>()
@@ -291,6 +294,23 @@ describe('startTelemetry', () => {
       expect(reports[1]).not.toHaveProperty(['process.command_args'])
       expect(reports[1]).not.toHaveProperty(['process.command'])
       expect(reports[2]).not.toHaveProperty(['host.id'])
+    })
+
+    it('reads the unsafe options once for each step that needs them, not once for each flag', async () => {
+      // Scenario: an options object whose `unsafe` is a getter answers a different object each time,
+      // as a computed or lazy option can; the three opt-outs of the SDK build must come from one read,
+      // so the redaction a warning announces and the redaction the SDK applies cannot disagree.
+      jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      let reads = 0
+      const options: TelemetryOptions = {
+        env: {},
+        get unsafe() {
+          reads += 1
+          return { exportHostId: true as const }
+        }
+      }
+      await startTelemetry(options)
+      expect(reads).toBe(UNSAFE_READS)
     })
 
     it('keeps the host id when the host exports it explicitly', async () => {

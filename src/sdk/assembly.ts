@@ -207,25 +207,26 @@ export function warnAboutMissingServiceName(
  * @param options - The start options.
  */
 export function warnAboutUnsafeOptions(options: TelemetryOptions): void {
-  if (options.unsafe?.disableUrlRedaction === true) {
+  const unsafe = options.unsafe
+  if (unsafe?.disableUrlRedaction === true) {
     process.emitWarning(
       'URL redaction is disabled: url.query, url.full, http.url and http.target are exported as recorded.',
       WARNING_OPTIONS
     )
   }
-  if (options.unsafe?.exportProcessCommandArgs === true) {
+  if (unsafe?.exportProcessCommandArgs === true) {
     process.emitWarning(
       'Process command-line redaction is disabled: process.command_args, process.command_line and process.command are exported in the resource, and command-line arguments can carry secrets.',
       WARNING_OPTIONS
     )
   }
-  if (options.unsafe?.exportHostId === true) {
+  if (unsafe?.exportHostId === true) {
     process.emitWarning(
       'Host id redaction is disabled: host.id, the machine identifier, is exported in the resource, and it identifies the machine to every collector and backend.',
       WARNING_OPTIONS
     )
   }
-  if (options.unsafe?.disableRedisArgumentRedaction === true) {
+  if (unsafe?.disableRedisArgumentRedaction === true) {
     process.emitWarning(
       'Redis argument redaction is disabled: command arguments, EVAL and EVALSHA payloads included, are exported in db.query.text.',
       WARNING_OPTIONS
@@ -235,6 +236,29 @@ export function warnAboutUnsafeOptions(options: TelemetryOptions): void {
 
 /** The longest part of an operator's ratio value that a warning repeats. */
 const SHOWN_VALUE_LENGTH = 40
+
+/**
+ * Characters `JSON.stringify` leaves as they are but that break, reorder or hide text in a log line:
+ * the delete and C1 controls (`Cc`), every format character (`Cf`: the soft hyphen, the zero-width
+ * characters, the direction marks, overrides and isolates, the invisible operators and the byte order
+ * mark) and the line and paragraph separators (`Zl`, `Zp`). Named by category, so a character the
+ * Unicode standard adds to one of them is covered without a list to keep.
+ */
+const UNSAFE_IN_LOG = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu
+
+/**
+ * Quotes a value the operator wrote so it can be repeated in a warning: cut short, and with every
+ * control, separator and format character written as `\uXXXX`, or `\u{X}` beyond the first plane.
+ *
+ * @param value - The operator's text.
+ * @returns The quoted, escaped, shortened text.
+ */
+function quoteOperatorValue(value: string): string {
+  return JSON.stringify(value.slice(0, SHOWN_VALUE_LENGTH)).replace(UNSAFE_IN_LOG, (char) => {
+    const hex = Number(char.codePointAt(0)).toString(16)
+    return hex.length > 4 ? `\\u{${hex}}` : `\\u${hex.padStart(4, '0')}`
+  })
+}
 
 /**
  * Reports a ratio sampler whose ratio the SDK will not use.
@@ -256,7 +280,7 @@ export function warnAboutSamplerRatio(sampler: RatioSampler | undefined): void {
       ? 'not set'
       : sampler.arg.trim() === ''
         ? 'blank'
-        : `${JSON.stringify(sampler.arg.slice(0, SHOWN_VALUE_LENGTH))}, which is not a number from 0 to 1`
+        : `${quoteOperatorValue(sampler.arg)}, which is not a number from 0 to 1`
   reportWarning({
     code: 'BYMAX_TELEMETRY_SAMPLER_ARG_INVALID',
     text: `OTEL_TRACES_SAMPLER is ${sampler.name}, but OTEL_TRACES_SAMPLER_ARG is ${given}, so the SDK samples every trace. Set it to the share of traces to keep, from 0 to 1, such as 0.1.`

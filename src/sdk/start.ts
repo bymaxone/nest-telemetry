@@ -138,6 +138,8 @@ function buildSdk(
 ): SdkNode.NodeSDK {
   const { sdkNode, sdkTrace, autoInstrumentations, exporter, resources } = packages
   const signals = planSignals(env)
+  // Read once: a getter could answer differently each time, and the three opt-outs below must come from one object.
+  const unsafe = options.unsafe
   return new sdkNode.NodeSDK({
     ...signals.overrides,
     resource: resources.resourceFromAttributes(buildResourceAttributes(options, env)),
@@ -151,13 +153,13 @@ function buildSdk(
         serviceinstance: resources.serviceInstanceIdDetector
       },
       {
-        keepCommandLine: options.unsafe?.exportProcessCommandArgs === true,
-        keepHostId: options.unsafe?.exportHostId === true
+        keepCommandLine: unsafe?.exportProcessCommandArgs === true,
+        keepHostId: unsafe?.exportHostId === true
       }
     ),
     spanProcessors: [
       // Ordered before the batch processor, so each span is redacted in place before it is exported.
-      ...(options.unsafe?.disableUrlRedaction === true ? [] : [createUrlQueryRedactor()]),
+      ...(unsafe?.disableUrlRedaction === true ? [] : [createUrlQueryRedactor()]),
       new sdkTrace.BatchSpanProcessor({
         exporter: warnOnExportFailure(new exporter.OTLPTraceExporter(), 'otlp-http traces'),
         ...env.batchSpanProcessor
