@@ -21,9 +21,16 @@ heading here.
 - **The unsafe options are read once for each step that needs them.** The SDK build read `options.unsafe` three
   times and the warning about turned-off redactions four times, so an option object whose `unsafe` is a getter
   could make the warning and the SDK disagree. Each step reads it once.
+- **A bound logger whose promise rejects no longer swallows the report.** The hook absorbed the rejection of a
+  `TELEMETRY_LOGGER` method (1.0.7) but then wrote nothing, so a failed flush, a shutdown that hit its deadline or
+  a failed span export vanished with it. The failed flush now goes to the Nest logger under `TRACING_FLUSH_FAILED`
+  with a short code, and the other two take a process warning, as they do with no logger bound.
 
 ### Documentation
 
+- **The README says that an unknown sampler name is not warned about.** A name that is not one of the six
+  up to case and whitespace, such as `xyz` or `always_offf`, samples every trace without a warning. It also names
+  `app.useLogger()` next to `Logger.overrideLogger`, which it calls, and says where a rejected report goes.
 - **The README `env` option row says where the two sampler variables come from.** `OTEL_TRACES_SAMPLER` and
   `OTEL_TRACES_SAMPLER_ARG` are always read from the process environment, whatever the `env` option holds, as the
   SDK reads them.

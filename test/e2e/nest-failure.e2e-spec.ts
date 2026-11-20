@@ -10,6 +10,8 @@ import { Test } from '@nestjs/testing'
 
 import { TELEMETRY_LOGGER, TelemetryModule } from '@bymax-one/nest-telemetry/nest'
 
+import { reportWarning } from '../../src/sdk/warning-sink'
+
 // The flush fails, as when the collector refuses the final export.
 const mockShutdown = jest.fn<Promise<void>, []>()
 jest.mock('../../src/sdk/handle', () => ({
@@ -159,6 +161,7 @@ describe('TelemetryModule when the flush fails, in a real Nest application', () 
     // rejects while the failed flush is reported, as a network sink that is down does.
     mockShutdown.mockRejectedValueOnce(new Error('collector refused'))
     const unhandled = jest.fn()
+    const nestLogger = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
     process.on('unhandledRejection', unhandled)
     try {
       const errorStructured = jest.fn(() => Promise.reject(new Error('sink is down')))
@@ -171,6 +174,61 @@ describe('TelemetryModule when the flush fails, in a real Nest application', () 
       await new Promise((resolve) => setImmediate(resolve))
       expect(errorStructured).toHaveBeenCalledTimes(1)
       expect(unhandled).not.toHaveBeenCalled()
+      expect(nestLogger).toHaveBeenCalledWith(
+        expect.stringContaining('TRACING_FLUSH_FAILED: the telemetry flush failed (code UNKNOWN)')
+      )
+    } finally {
+      process.off('unhandledRejection', unhandled)
+    }
+  })
+  it.each([
+    ['a failed span export', 'BYMAX_TELEMETRY_EXPORT_FAILED', 'warnStructured'],
+    ['a shutdown that hit its deadline', 'BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT', 'errorStructured']
+  ])(
+    'reports %s as a process warning when the asynchronous TELEMETRY_LOGGER rejects',
+    async (_what, code, method) => {
+      // Scenario: the application's logger takes the runtime warning and its promise rejects, so the
+      // logger never wrote it; the warning then takes the process channel instead of vanishing.
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      const unhandled = jest.fn()
+      process.on('unhandledRejection', unhandled)
+      try {
+        const logger = { [method]: jest.fn(() => Promise.reject(new Error('sink is down'))) }
+        const app = await Test.createTestingModule({
+          imports: [TelemetryModule],
+          providers: [{ provide: TELEMETRY_LOGGER, useValue: logger }]
+        }).compile()
+        await app.init()
+        reportWarning({ code, text: `warning ${code}`, fields: { kind: 'otlp-http traces' } })
+        await new Promise((resolve) => setImmediate(resolve))
+        expect(emitWarning).toHaveBeenCalledWith(`warning ${code}`, { type: 'Warning', code })
+        expect(unhandled).not.toHaveBeenCalled()
+        await app.close()
+      } finally {
+        process.off('unhandledRejection', unhandled)
+      }
+    }
+  )
+  it('raises nothing when the process warning that replaces a rejected report throws', async () => {
+    // Scenario: the application's logger rejects and the process channel fails as well; the report is
+    // best effort, so neither failure may surface as an unhandled rejection.
+    jest.spyOn(process, 'emitWarning').mockImplementation(() => {
+      throw new Error('warning channel failed')
+    })
+    const unhandled = jest.fn()
+    process.on('unhandledRejection', unhandled)
+    try {
+      const warnStructured = jest.fn(() => Promise.reject(new Error('sink is down')))
+      const app = await Test.createTestingModule({
+        imports: [TelemetryModule],
+        providers: [{ provide: TELEMETRY_LOGGER, useValue: { warnStructured } }]
+      }).compile()
+      await app.init()
+      reportWarning({ code: 'BYMAX_TELEMETRY_EXPORT_FAILED', text: 'export failed', fields: {} })
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(warnStructured).toHaveBeenCalledTimes(1)
+      expect(unhandled).not.toHaveBeenCalled()
+      await app.close()
     } finally {
       process.off('unhandledRejection', unhandled)
     }

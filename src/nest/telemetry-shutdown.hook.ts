@@ -8,7 +8,7 @@ import { ModuleRef } from '@nestjs/core'
 
 import { codeOf } from '../sdk/error-code'
 import { shutdownTelemetry } from '../sdk/handle'
-import { registerWarningSink } from '../sdk/warning-sink'
+import { emitAsProcessWarning, registerWarningSink } from '../sdk/warning-sink'
 import type { TelemetryWarning } from '../sdk/warning-sink'
 
 /** Log key of the entry a failed flush leaves, stable so an alert can match it. */
@@ -63,13 +63,17 @@ export interface IProviderLookup {
 
 /**
  * Keeps the promise an asynchronous application logger returns from becoming an unhandled
- * rejection, which ends a Node process by default: the report is best effort and nothing waits for
- * it. A logger that returns nothing is unaffected.
+ * rejection, which ends a Node process by default, and reports through the fallback when it
+ * rejects, since the logger then never took the entry. Nothing waits for it. A logger that returns
+ * nothing is unaffected, and a fallback that throws is absorbed too.
  *
  * @param result - Whatever the logger method returned.
+ * @param fallback - Reports through the channel that needs no application logger.
  */
-function absorbRejection(result: unknown): void {
-  Promise.resolve(result).catch(() => undefined)
+function absorbRejection(result: unknown, fallback: () => void): void {
+  Promise.resolve(result)
+    .catch(fallback)
+    .catch(() => undefined)
 }
 
 /** Awaits the SDK flush as part of the application's own graceful shutdown. */
@@ -128,7 +132,8 @@ export class TelemetryShutdownHook implements OnApplicationShutdown, OnModuleIni
       typeof logger?.errorStructured === 'function'
     ) {
       absorbRejection(
-        logger.errorStructured(TELEMETRY_SHUTDOWN_TIMEOUT_KEY, new Error(warning.text))
+        logger.errorStructured(TELEMETRY_SHUTDOWN_TIMEOUT_KEY, new Error(warning.text)),
+        () => emitAsProcessWarning(warning)
       )
       return true
     }
@@ -139,7 +144,8 @@ export class TelemetryShutdownHook implements OnApplicationShutdown, OnModuleIni
       absorbRejection(
         logger.warnStructured(TELEMETRY_EXPORT_FAILED_KEY, warning.text, undefined, {
           ...warning.fields
-        })
+        }),
+        () => emitAsProcessWarning(warning)
       )
       return true
     }
@@ -162,12 +168,25 @@ export class TelemetryShutdownHook implements OnApplicationShutdown, OnModuleIni
     try {
       const logger = this.structuredLogger()
       if (typeof logger?.errorStructured === 'function') {
-        absorbRejection(logger.errorStructured(TELEMETRY_FLUSH_FAILED_KEY, failure))
+        absorbRejection(logger.errorStructured(TELEMETRY_FLUSH_FAILED_KEY, failure), () =>
+          this.reportToNestLogger(failure)
+        )
         return
       }
     } catch {
       // Falls through to the Nest logger below.
     }
+    this.reportToNestLogger(failure)
+  }
+
+  /**
+   * Writes the failed flush to the Nest logger, which needs nothing the application bound. It never
+   * throws: nothing is left to report through when this one fails, and the shutdown must still not
+   * fail.
+   *
+   * @param failure - The failure, of which only a short code is written.
+   */
+  private reportToNestLogger(failure: Error): void {
     try {
       // Library text only: the failure of an exporter can carry an endpoint with credentials, in its
       // message and in the first line of its stack, so neither is written. A short code names it.
@@ -175,7 +194,7 @@ export class TelemetryShutdownHook implements OnApplicationShutdown, OnModuleIni
         `${TELEMETRY_FLUSH_FAILED_KEY}: the telemetry flush failed (code ${codeOf(failure)}). Bind TELEMETRY_LOGGER to receive the error itself.`
       )
     } catch {
-      // Nothing is left to report through, and the shutdown must still not fail.
+      // Nothing is left to report through.
     }
   }
 

@@ -334,49 +334,76 @@ describe('the warning route', () => {
   })
 })
 
-describe('an asynchronous structured logger', () => {
+describe('an asynchronous structured logger that rejects', () => {
   /** Lets every pending microtask and the unhandled-rejection check of Node run. */
   const settle = (): Promise<void> => new Promise((resolve) => setImmediate(resolve))
 
+  const EXPORT = {
+    code: 'BYMAX_TELEMETRY_EXPORT_FAILED',
+    text: 'Exporting spans failed (otlp-http traces, code ECONNREFUSED), so the batch was dropped.',
+    fields: { kind: 'otlp-http traces', code: 'ECONNREFUSED' }
+  }
   const unhandled = jest.fn()
+  const rejecting = jest.fn(() => Promise.reject(new Error('logger sink is down')))
+  let emitWarning: jest.SpyInstance
 
   beforeEach(() => {
     unhandled.mockClear()
     process.on('unhandledRejection', unhandled)
-    jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
   })
 
   afterEach(() => {
     process.off('unhandledRejection', unhandled)
   })
 
-  const rejecting = jest.fn(() => Promise.reject(new Error('logger sink is down')))
-
-  it('does not turn a rejected errorStructured into an unhandled rejection on a failed flush', async () => {
+  it('reports a failed flush through the Nest logger, with no unhandled rejection', async () => {
     // Scenario: the host's logger writes over the network and its promise rejects while the flush
-    // failure is being reported; Node must not see an unhandled rejection, which ends the process.
+    // failure is being reported. The logger never took the entry, so it goes to the Nest logger
+    // with its key and a short code, and Node must not see an unhandled rejection.
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
     registerHandle(createHandle(() => Promise.reject(new Error('collector refused'))))
     await new TelemetryShutdownHook(
       moduleRef({ errorStructured: rejecting })
     ).onApplicationShutdown()
     await settle()
-    expect(rejecting).toHaveBeenCalled()
+    expect(rejecting).toHaveBeenCalledTimes(1)
+    expect(error).toHaveBeenCalledTimes(1)
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining('TRACING_FLUSH_FAILED: the telemetry flush failed (code UNKNOWN)')
+    )
     expect(unhandled).not.toHaveBeenCalled()
   })
 
-  it('does not turn a rejected warnStructured into an unhandled rejection on a failed export', async () => {
-    // Scenario: the same logger rejects while a failed span export is reported through the sink.
-    new TelemetryShutdownHook(moduleRef({ warnStructured: rejecting })).onModuleInit()
-    reportWarning({
-      code: 'BYMAX_TELEMETRY_EXPORT_FAILED',
-      text: 'Exporting spans failed (otlp-http traces, code ECONNREFUSED), so the batch was dropped.',
-      fields: { kind: 'otlp-http traces', code: 'ECONNREFUSED' }
+  it('still resolves and raises nothing when the Nest logger throws as well', async () => {
+    // Scenario: the structured logger rejects and the fallback has nothing left to write through.
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {
+      throw new Error('nest logger failed')
     })
+    registerHandle(createHandle(() => Promise.reject(new Error('collector refused'))))
+    await expect(
+      new TelemetryShutdownHook(moduleRef({ errorStructured: rejecting })).onApplicationShutdown()
+    ).resolves.toBeUndefined()
     await settle()
     expect(unhandled).not.toHaveBeenCalled()
   })
 
-  it('does not turn a rejected errorStructured into an unhandled rejection on a shutdown timeout', async () => {
+  it('reports a failed export as a process warning when warnStructured rejects', async () => {
+    // Scenario: the same logger rejects while a failed span export is reported through the sink; the
+    // warning is then not lost, it takes the channel it has when no logger is bound.
+    new TelemetryShutdownHook(moduleRef({ warnStructured: rejecting })).onModuleInit()
+    reportWarning(EXPORT)
+    expect(emitWarning).not.toHaveBeenCalled()
+    await settle()
+    expect(emitWarning).toHaveBeenCalledTimes(1)
+    expect(emitWarning).toHaveBeenCalledWith(EXPORT.text, {
+      type: 'Warning',
+      code: 'BYMAX_TELEMETRY_EXPORT_FAILED'
+    })
+    expect(unhandled).not.toHaveBeenCalled()
+  })
+
+  it('reports a shutdown timeout as a process warning when errorStructured rejects', async () => {
     // Scenario: the deadline passes and the host's logger rejects while the timeout is reported.
     jest.useFakeTimers()
     try {
@@ -389,6 +416,22 @@ describe('an asynchronous structured logger', () => {
     } finally {
       jest.useRealTimers()
     }
+    await settle()
+    expect(emitWarning).toHaveBeenCalledTimes(1)
+    expect(emitWarning).toHaveBeenCalledWith(
+      expect.stringContaining('400 ms'),
+      expect.objectContaining({ code: 'BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT' })
+    )
+    expect(unhandled).not.toHaveBeenCalled()
+  })
+
+  it('raises nothing when the process warning that replaces a rejected report throws', async () => {
+    // Scenario: both the application's logger and the process warning fail.
+    emitWarning.mockImplementation(() => {
+      throw new Error('warning channel failed')
+    })
+    new TelemetryShutdownHook(moduleRef({ warnStructured: rejecting })).onModuleInit()
+    reportWarning(EXPORT)
     await settle()
     expect(unhandled).not.toHaveBeenCalled()
   })

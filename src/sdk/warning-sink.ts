@@ -61,5 +61,14 @@ export function reportWarning(warning: TelemetryWarning): void {
   } catch {
     // A failing sink falls through to the process warning below.
   }
+  emitAsProcessWarning(warning)
+}
+
+/**
+ * Emits a warning as a process warning, the channel it takes when no logger takes it.
+ *
+ * @param warning - The warning.
+ */
+export function emitAsProcessWarning(warning: TelemetryWarning): void {
   process.emitWarning(warning.text, { type: 'Warning', code: warning.code })
 }
