@@ -10,6 +10,8 @@ heading here.
 
 ## [Unreleased]
 
+## [1.0.7] - 2026-11-20
+
 ### Fixed
 
 - **An asynchronous `TELEMETRY_LOGGER` can no longer end the process.** The hook reports a failed flush, a
@@ -332,6 +334,7 @@ First release.
 - Verification from the packed tarball: real `node --import` processes in a CommonJS and a native-ESM
   application, with planted secrets absent from the exported body and negative controls.
 
+[1.0.7]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.7
 [1.0.6]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.6
 [1.0.5]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.5
 [1.0.4]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.4
