@@ -28,7 +28,7 @@ heading here.
 
 ### Documentation
 
-- **The README says that an unknown sampler name is not warned about.** A name that is not one of the six
+- **The README says that an unknown sampler name is not warned about.** A name that is not a sampler name
   up to case and whitespace, such as `xyz` or `always_offf`, samples every trace without a warning. It also names
   `app.useLogger()` next to `Logger.overrideLogger`, which it calls, and says where a rejected report goes.
 - **The README `env` option row says where the two sampler variables come from.** `OTEL_TRACES_SAMPLER` and
