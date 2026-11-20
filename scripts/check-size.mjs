@@ -52,16 +52,17 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //   - register: 6,274 B measured, 6.16 KiB budget (6,307 B, 33 B of headroom). The preload bundles its own copy
 //     of the start logic, shutdown deadline, export-failure warning, warning sink, resource and timer handling and the winston transport, sampler ratio and sampler name checks included: the copies share their state through
 //     `globalThis`, not through a module.
-//   - nest: 1,847 B measured, 1.83 KiB budget (1,874 B, 27 B of headroom), the global module and the shutdown hook
+//   - nest: 1,888 B measured, 1.87 KiB budget (1,915 B, 27 B of headroom), the global module and the shutdown hook
 //     with every step of failure reporting guarded, the route that hands the two runtime warnings to
 //     a bound structured logger, and the fallback entry that holds library text and a short error code
-//     instead of the error's message and stack (about 0.1 KiB: the code reader and the longer text).
+//     instead of the error's message and stack (about 0.1 KiB: the code reader and the longer text), and
+//     the absorbed promise of an asynchronous logger (about 0.04 KiB).
 //   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
 //   met by shortening the text of a warning.
 const BUDGETS = [
   { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 5.86 * 1024 },
   { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 6.16 * 1024 },
-  { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 1.83 * 1024 },
+  { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 1.87 * 1024 },
   { name: 'observability (metrics)', path: 'dist/observability/index.mjs', brotli: 0.69 * 1024 }
 ]
 
