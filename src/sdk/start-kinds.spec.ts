@@ -85,9 +85,9 @@ describe('startTelemetry refuses an option of the wrong kind', () => {
     it.each(NOT_BOOLEANS)(
       'rejects %s, names the option and starts nothing',
       async (_what, value) => {
-        // Scenario: a boolean option holds something that is not a boolean. The string 'false' used to
-        // turn log export on and the string 'true' on an unsafe flag used to be dropped without a word;
-        // both are refused now, with the option named and the value left out.
+        // Scenario: a boolean option holds something that is not a boolean. Whatever its kind, the
+        // string 'false' is not read as true and the string 'true' is not dropped: the start is refused
+        // with the option named and the value left out.
         const error = await refusal({ env: {}, ...(build(value) as object) })
         expect(error).toBeInstanceOf(TelemetryOptionError)
         expect(error).toMatchObject({ code: 'BYMAX_TELEMETRY_OPTION_INVALID', option: name })
@@ -239,9 +239,26 @@ describe('startTelemetry reads enabled and env once', () => {
 })
 
 describe('startTelemetry keeps the documented fallback for shutdownTimeoutMs', () => {
-  it.each(['soon', -1, Number.NaN, 500000])('starts for %p and uses the default', async (value) => {
-    // Scenario: a value that is not a finite number in range means the default; it is not refused.
-    const handle = await startTelemetry({ env: {}, shutdownTimeoutMs: value as number })
-    expect(handle.enabled).toBe(true)
+  afterEach(() => {
+    jest.useRealTimers()
   })
+
+  it.each(['soon', -1, Number.NaN, 500000])(
+    'waits 5000 ms for a flush that never ends when the option is %p',
+    async (value) => {
+      // Scenario: a value that is not a finite number in range means the default, and is not refused:
+      // shutdown with a flush that never ends gives up at 5000 ms and says so.
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      mockSdkInstance.shutdown.mockReturnValue(new Promise<void>(() => undefined))
+      const handle = await startTelemetry({ env: {}, shutdownTimeoutMs: value as number })
+      emitWarning.mockClear()
+      jest.useFakeTimers()
+      const done = handle.shutdown()
+      await jest.advanceTimersByTimeAsync(4999)
+      expect(emitWarning).not.toHaveBeenCalled()
+      await jest.advanceTimersByTimeAsync(1)
+      await done
+      expect(String(emitWarning.mock.calls[0]?.[0])).toContain('did not finish within 5000 ms')
+    }
+  )
 })
