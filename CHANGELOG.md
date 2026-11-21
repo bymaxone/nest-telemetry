@@ -37,7 +37,15 @@ heading here.
   `OTEL_TRACES_SAMPLER_ARG` are always read from the process environment, whatever the `env` option holds, as the
   SDK reads them.
 
-**Apply note.** No action is needed. A sampler ratio warning now shows a direction or invisible character in the value as an escape, so a log match on that text sees the escape. If a `TELEMETRY_LOGGER` method returns a promise that rejects, you now also get the Nest logger entry `TRACING_FLUSH_FAILED` or a process warning, where 1.0.7 wrote nothing.
+### Apply to a derived backend
+
+The declarations changed only by a private method on `TelemetryShutdownHook` (`reportToNestLogger`), which no
+backend can call, so nothing in your types changes. A derived backend acts on these behaviours:
+
+1. A sampler ratio warning now shows a direction or invisible character in the value as an escape, so a log match
+   on that text sees the escape.
+2. If a `TELEMETRY_LOGGER` method returns a promise that rejects, you now also get the Nest logger entry
+   `TRACING_FLUSH_FAILED` or a process warning, where 1.0.7 wrote nothing.
 
 ## [1.0.7] - 2026-11-20
 
