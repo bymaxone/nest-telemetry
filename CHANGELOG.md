@@ -10,6 +10,13 @@ heading here.
 
 ## [Unreleased]
 
+### Documentation
+
+- **The README narrows what a failed start leaves behind.** "No SDK started and no handle left" holds for a first
+  start; a later call that finds an SDK already running can also reject, while it checks which options it
+  ignores, and the running SDK and its handle are not touched. It also says that the sampler ratio warning cuts
+  the value it repeats to 40 characters and writes control, separator and invisible characters as escapes.
+
 ## [1.0.9] - 2026-11-20
 
 ### Fixed
