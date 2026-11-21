@@ -230,7 +230,7 @@ The programmatic `startTelemetry` keeps its rejection when the SDK cannot start,
 ### What is traced
 
 - **Load order matters only for modules your application loads itself.** The core `http` module is patched even when the preload runs after it. A client such as `ioredis` is patched only if the preload ran before the application required it. Measured: an application that required `ioredis` first exported no `ioredis` span.
-- **`ioredis` commands are traced only under an active span; node-redis commands are not.** The `ioredis` instrumentation defaults to `requireParentSpan: true`, so a command issued outside any request produces no span. The node-redis (`redis`) instrumentation defaults to `false`, so it traces a command with no request around it too. Measured with `redis` 5 and 6.
+- **`ioredis` commands are traced only under an active span; node-redis commands are not.** The `ioredis` instrumentation defaults to `requireParentSpan: true`, so a command issued outside any request produces no span. The node-redis (`redis`) instrumentation defaults to `false`, so it traces a command with no request around it too. Measured as of 2026-11-13 with `redis` 5 and 6; the proofs in this repository run `redis` 6.
 - **`fs` instrumentation is off by default**, because it floods traces with disk activity that has no context. Turn it on with `instrumentations.fs`.
 
 ### Forwarding log records
@@ -281,13 +281,13 @@ Awaiting `shutdown()` or `shutdownTelemetry()` means the spans were exported, wh
 
 The wait is bounded. A collector that accepts a connection and never answers would otherwise hold shutdown for the exporter's own timeout, ten seconds by default, so a flush that has not finished within `shutdownTimeoutMs` (5 seconds unless set, at most 120 seconds) stops holding the caller: shutdown emits `BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT` and resolves. The flush keeps running in the background and a failure after the deadline is dropped. Spans still queued at that point may be lost.
 
-A start after a shutdown in the same process is refused: `startTelemetry` rejects, with an error that says to start once per process (in a test suite, once in a global setup), and the process emits `BYMAX_TELEMETRY_RESTART_UNSUPPORTED`. Auto-instrumented spans can never resume after a shutdown, because the modules the first start instrumented are already patched against its tracer provider; spans created through the API could, but a half-working restart is refused on purpose. Measured with an in-process HTTP request and one manual span per run: after a restart that released the API globals, the manual span was exported and the HTTP spans were not. The preload turns the refusal into a `BYMAX_TELEMETRY_START_FAILED` warning and the application still boots.
+A start after a shutdown in the same process is refused: `startTelemetry` rejects, with an error that says to start once per process (in a test suite, once in a global setup), and the process emits `BYMAX_TELEMETRY_RESTART_UNSUPPORTED`. Auto-instrumented spans can never resume after a shutdown, because the modules the first start instrumented are already patched against its tracer provider; spans created through the API could, but a half-working restart is refused on purpose. Measured as of 2026-11-13, in runs that are not part of this repository, with an in-process HTTP request and one manual span per run: after a restart that released the API globals, the manual span was exported and the HTTP spans were not. The preload turns the refusal into a `BYMAX_TELEMETRY_START_FAILED` warning and the application still boots.
 
 ---
 
 ## 🏭 Production
 
-Every figure here was measured on one laptop, with Node 24 and a handler that does nothing but answer. Read them as orders of magnitude for your own measurement to confirm, not as promises.
+Every figure here was measured on one laptop, with Node 24 and a handler that does nothing but answer, in single runs as of 2026-11-13; no script in this repository reproduces them. Read them as orders of magnitude for your own measurement to confirm, not as promises.
 
 - **Sampling.** The default samples every trace. For high traffic set `OTEL_TRACES_SAMPLER=parentbased_traceidratio` and `OTEL_TRACES_SAMPLER_ARG=0.1`. Of 2,000 spans created in one run each, the default exported all of them, a ratio of `0.1` exported 210 and a ratio of `0.01` exported 25. A ratio sampler needs `OTEL_TRACES_SAMPLER_ARG` to be a number from 0 to 1. When it is unset, empty or only whitespace, not a number or outside that range, the SDK falls back to a ratio of 1 and samples every trace, noting it only on a diagnostic channel; the start warns once with `BYMAX_TELEMETRY_SAMPLER_ARG_INVALID`, naming the variable and, when a non-blank value was given, the value (cut to 40 characters, with control, separator and invisible characters written as escapes) (a blank value is called blank, not unset, and is not repeated). The SDK matches the sampler name exactly: `always_on`, `always_off`, `traceidratio`, `parentbased_always_on`, `parentbased_always_off` and `parentbased_traceidratio`, in lower case and without surrounding whitespace. Any other value, `TraceIdRatio` included, is replaced by its default and samples every trace; when the value differs from one of those names only in letter case or surrounding whitespace, the start warns once with `BYMAX_TELEMETRY_SAMPLER_NAME_UNKNOWN`, naming the name that was meant and not repeating the value. A name that is not one of those up to case and whitespace, such as `xyz` or a misspelling like `always_offf`, is not warned about: it samples every trace as well, so check the spelling of the variable. It reads the process environment, as the SDK does, and not the `env` option.
 - **TLS to the collector.** Against a collector whose certificate Node does not trust, every export failed with `self-signed certificate`. Setting `OTEL_EXPORTER_OTLP_CERTIFICATE` to the CA file, or `NODE_EXTRA_CA_CERTS`, exported all 2,000 spans in the same setup.
@@ -444,7 +444,7 @@ pnpm check:runtime     # packed-tarball consumer proofs
 | `InstrumentationOptions`        | type                                                       | `fs`, `sendLogs` and `overrides`                                                                                                                              |
 | `IncomingRequestTarget`         | type                                                       | What an incoming-request predicate sees: the request `url`                                                                                                    |
 
-`ignorePaths` copies each pattern without its `g` and `y` flags, which would keep state between calls. Anchor the patterns at both ends, with no nested quantifiers: an unanchored one also matches routes that merely contain the word, and `/^\/(a+)+$/` took 2.5 s and 5.5 s in two runs on a 28-character path, and the time grows exponentially with the length.
+`ignorePaths` copies each pattern without its `g` and `y` flags, which would keep state between calls. Anchor the patterns at both ends, with no nested quantifiers: an unanchored one also matches routes that merely contain the word, and `/^\/(a+)+$/` took 2.5 s and 5.5 s in two runs on a 28-character path (as of 2026-11-13, not a test; the tests pin the refusal of a path over 2,048 characters), and the time grows exponentially with the length.
 
 ### Register: `@bymax-one/nest-telemetry/register`
 
@@ -475,7 +475,7 @@ No exports. `node --import @bymax-one/nest-telemetry/register` registers the loa
 
 ## 🚫 What This Library Does NOT Do
 
-By design, the following are out of scope:
+By design, the following are out of scope. The attribute names below are the ones the instrumentations recorded as of 2026-11-13; only the mysql2 behaviour has a canary in the proofs, so check the others against the versions you install:
 
 - ❌ **Redact secrets in the URL path** — only the query string is removed. A path such as `/reset/<token>` is exported as it is
 - ❌ **Redact SQL text with inline literals** — database instrumentations record the statement, and values written into it are exported. A value bound to a placeholder is not recorded by `instrumentation-mysql2` 0.71, measured with mysql2 2.3.3, 3.0.0, 3.9.0 and 3.24.6; a canary in the proofs fails if that stops being true
@@ -490,7 +490,7 @@ By design, the following are out of scope:
 - ❌ **Redact baggage**
 - ❌ **Redact request and response bodies, or HTTP headers** — they are not captured by default, and they are not redacted if you enable capturing them
 - ❌ **Redact attributes your own code sets**
-- ❌ **Redact log records forwarded through `OTEL_LOGS_EXPORTER`** — the library redacts spans, and a log record is exported as the logger produced it, so redact in the logger. Measured with `@bymax-one/nest-logger` 1.4.16, which redacts before it hands the record over: a password and a nested token never reached the collector, and the `[REDACTED]` marker did. A plain pino logger with no redaction exported its password
+- ❌ **Redact log records forwarded through `OTEL_LOGS_EXPORTER`** — the library redacts spans, and a log record is exported as the logger produced it, so redact in the logger. Measured as of 2026-11-13, in a run that is not part of this repository, with `@bymax-one/nest-logger` 1.4.16, which redacts before it hands the record over: a password and a nested token never reached the collector, and the `[REDACTED]` marker did. A plain pino logger with no redaction exported its password
 - ❌ **Choose a sampler** — configure `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG`
 - ❌ **Run a collector or a backend** — point `OTEL_EXPORTER_OTLP_ENDPOINT` at one
 - ❌ **Decide your span names** — those come from the instrumentations and from your code
