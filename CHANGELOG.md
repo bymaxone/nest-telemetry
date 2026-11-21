@@ -14,26 +14,36 @@ heading here.
 
 ### Fixed
 
-- **The start reads `unsafe` and `instrumentations` once, and the other two instrumentation options once.** The
-  warning about turned-off redactions, the SDK build and the instrumentation config each read `unsafe`, the
-  winston transport warning and the config each read `instrumentations`, and the config read
-  `ignoreIncomingRequest` twice, so an option object with a getter could make a warning and the effect disagree:
-  a first read of `{}` gave no warning while the host id, the process command line and the raw URL were exported.
-  The start now reads each once and hands the value to the steps. This replaces the per-step reads that 1.0.8
-  described.
+- **The start reads `unsafe` and `instrumentations` once, each field once, and `ignoreIncomingRequest` once.** The
+  warning about turned-off redactions, the SDK build and the instrumentation config each read `unsafe` (and its
+  fields), the winston transport warning and the config each read `instrumentations`, and the config read
+  `ignoreIncomingRequest` twice, so an option object with a getter, on the option or on one of its fields, could
+  make a warning and the effect disagree: a first read of `{}` gave no warning while the host id, the process
+  command line and the raw URL were exported. The start now copies both options into a plain object, reading each
+  field once, and every step works from the copy. This replaces the per-step reads that 1.0.8 described.
+- **An option that throws when read can no longer leave a started SDK without a handle.** `shutdownTimeoutMs` was
+  read after the SDK had started, so a getter that threw there made the start reject while the SDK kept running
+  and nothing could stop it. It is read before the start now, with the other options, and every position at which
+  an operation on the options fails ends in that error with no SDK started.
 
 ### Documentation
 
 - **The README says that the sampler ratio warning does not repeat a blank value.** It repeats the value only when
   it is not blank; a blank one is called blank.
+- **A pointer from 1.0.7's note.** It says a rejection of a `TELEMETRY_LOGGER` promise is dropped silently; 1.0.8
+  superseded that, and the README's logger paragraph says where the report goes now. The README also says that
+  starting twice returns the running handle unless `enabled: false`, which returns a disabled one.
+- **The README says what `startTelemetry` rejects with.** The error that was thrown, as it was thrown: there is no
+  library error class for a start. When an option cannot be read, the start ends with that error, with no SDK
+  started and no handle left.
 
 ### Apply to a derived backend
 
 The public declarations did not change. A derived backend acts on this behaviour:
 
-1. An options object whose `unsafe` or `instrumentations` is a getter (a computed or lazy option) is now read once
-   for the whole start, so the redaction warning and the redaction the SDK applies come from the same object. An
-   option that answers differently on each read no longer splits them.
+1. An options object whose `unsafe` or `instrumentations` is a getter, or whose fields are getters (a computed or lazy
+   option), is now read once, each field once, for the whole start, so the redaction warning and the redaction the
+   SDK applies come from the same values. An option that answers differently on each read no longer splits them.
 
 ## [1.0.8] - 2026-11-20
 

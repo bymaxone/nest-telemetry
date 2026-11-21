@@ -156,7 +156,7 @@ const telemetry = await startTelemetry({
 await telemetry.shutdown()
 ```
 
-This package installs no signal handler and shows none, because handling signals belongs to the application: a `SIGTERM` listener replaces Node's default termination, so it has to end the process itself once its work is done. `startTelemetry` resolves to a handle with `enabled` and `shutdown()`. Starting twice returns the handle already running, including across two copies of the module (an ES-module preload and a CommonJS application share the handle through `globalThis`). A later call that passes options is told they were ignored, and `enabled: false` against a running SDK is told it does not stop it: `shutdownTelemetry()` does.
+This package installs no signal handler and shows none, because handling signals belongs to the application: a `SIGTERM` listener replaces Node's default termination, so it has to end the process itself once its work is done. `startTelemetry` resolves to a handle with `enabled` and `shutdown()`. Starting twice returns the handle already running (unless `enabled: false`, which returns a disabled handle), including across two copies of the module (an ES-module preload and a CommonJS application share the handle through `globalThis`). A later call that passes options is told they were ignored, and `enabled: false` against a running SDK is told it does not stop it: `shutdownTelemetry()` does.
 
 ---
 
@@ -225,7 +225,7 @@ The start emits these warnings:
 | `BYMAX_TELEMETRY_WINSTON_TRANSPORT_MISSING` | Log forwarding is on and winston is installed, but `@opentelemetry/winston-transport` cannot be resolved from the winston instrumentation, so winston records are not forwarded. Install it as a direct dependency of the application, or ignore the warning when your application never creates a winston logger or `OTEL_LOGS_EXPORTER` is `none`. |
 | `BYMAX_TELEMETRY_BSP_VALUE_IGNORED`         | An `OTEL_BSP_SCHEDULE_DELAY` or `OTEL_BSP_EXPORT_TIMEOUT` above 2147483647 ms was ignored, because a timer cannot hold it and Node would clamp it to 1 ms. The default applies.                                                                                                                                                                      |
 
-The programmatic `startTelemetry` keeps its rejection when the SDK cannot start, for callers that want it.
+The programmatic `startTelemetry` keeps its rejection when the SDK cannot start, for callers that want it. It rejects with the error that was thrown, as it was thrown: the library has no error class of its own for a start, so an option whose getter throws (or a proxy that fails an operation) ends the start with that error, with no SDK started and no handle left.
 
 ### What is traced
 
