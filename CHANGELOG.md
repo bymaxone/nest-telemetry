@@ -17,15 +17,9 @@ heading here.
   sends data off the host; the string `'true'` for an `unsafe` flag was dropped without a word; a string for
   `extraRedactedQueryParams` was spread into its characters and a number threw a `TypeError` out of the start.
   `startTelemetry` now rejects with an error whose `code` is `BYMAX_TELEMETRY_OPTION_INVALID` and whose `option`
-  names the option, before any SDK is started. The boolean options (`enabled`, `instrumentations.fs`,
-  `instrumentations.sendLogs`, the `unsafe` flags) must be booleans, `serviceName` and `serviceVersion` strings,
-  `ignoreIncomingRequest` a function, and `unsafe`, `instrumentations`, its `overrides` and `env` objects.
-  `extraRedactedQueryParams` must be an array of at most 1000 strings and `overrides` an object of at most 1000
-  entries that are each an object. `shutdownTimeoutMs` keeps its documented fallback.
-- **Each option of a call is read once.** `serviceName` was read by the warning about a missing name and again by
-  the resource, and `enabled` and `env` by the call and again by the "already running" warning, so a getter could
-  make a warning and the effect disagree. A call now reads each option once, checks its kind, and works from the
-  copy.
+  names the option, before any SDK is started. `shutdownTimeoutMs` keeps its documented fallback.
+- **Each option of a call is read once.** A getter could make a warning and the effect of the call disagree. A
+  call now reads each option once, checks its kind, and works from the copy.
 
 ### Documentation
 
