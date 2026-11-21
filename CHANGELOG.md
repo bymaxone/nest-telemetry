@@ -21,6 +21,10 @@ heading here.
   make a warning and the effect disagree: a first read of `{}` gave no warning while the host id, the process
   command line and the raw URL were exported. The start now copies both options into a plain object, reading each
   field once, and every step works from the copy. This replaces the per-step reads that 1.0.8 described.
+- **An option that throws when read can no longer leave a started SDK without a handle.** `shutdownTimeoutMs` was
+  read after the SDK had started, so a getter that threw there made the start reject while the SDK kept running
+  and nothing could stop it. It is read before the start now, with the other options, and every position at which
+  an operation on the options fails ends in that error with no SDK started.
 
 ### Documentation
 

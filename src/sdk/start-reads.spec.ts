@@ -4,7 +4,7 @@
  * packages replaced by doubles.
  * @layer sdk
  */
-import { clearHandle, clearPendingStart } from './handle'
+import { clearHandle, clearPendingStart, currentHandle } from './handle'
 import { startTelemetry } from './start'
 import type { TelemetryOptions } from './types'
 
@@ -222,6 +222,121 @@ describe('startTelemetry reads each option once', () => {
       })
       await startTelemetry(options as TelemetryOptions)
       expect(reads).toBe(1)
+    })
+  })
+
+  describe('an Nth-operation sweep', () => {
+    /** The most operations the options of a start are put through; the sweep ends well before it. */
+    const MOST_OPERATIONS = 60
+
+    type Behaviour = 'throw' | 'flip'
+
+    /**
+     * Wraps an object in a proxy whose `n`th operation, counted across every wrapped object of a run, throws
+     * or, for a property read, answers the opposite of the truth.
+     */
+    function sweep(
+      n: number,
+      behaviour: Behaviour
+    ): { wrap: <T extends object>(t: T) => T; count: () => number } {
+      let seen = 0
+      const hit = (): boolean => {
+        seen += 1
+        return seen === n
+      }
+      const fail = (): never => {
+        throw new Error(`operation ${n} failed`)
+      }
+      const wrap = <T extends object>(target: T): T =>
+        new Proxy(target, {
+          get(t, key, receiver) {
+            const value: unknown = Reflect.get(t, key, receiver)
+            if (!hit()) return value
+            if (behaviour === 'throw') return fail()
+            return typeof value === 'boolean' ? !value : value
+          },
+          has(t, key) {
+            if (hit() && behaviour === 'throw') fail()
+            return Reflect.has(t, key)
+          },
+          ownKeys(t) {
+            if (hit() && behaviour === 'throw') fail()
+            return Reflect.ownKeys(t)
+          },
+          getOwnPropertyDescriptor(t, key) {
+            if (hit() && behaviour === 'throw') fail()
+            return Reflect.getOwnPropertyDescriptor(t, key)
+          }
+        })
+      return { wrap, count: () => seen }
+    }
+
+    const optionsFor = (wrap: <T extends object>(t: T) => T): TelemetryOptions =>
+      wrap({
+        env: {},
+        unsafe: wrap({ exportHostId: true as const, disableUrlRedaction: true as const }),
+        instrumentations: wrap({ sendLogs: false })
+      }) as TelemetryOptions
+
+    it('ends a run whose nth operation throws in that error, with no half-started SDK', async () => {
+      // Scenario: the host passes options whose operations can fail (a getter that throws, a proxy). For
+      // every position of the failure the start rejects with the host's own error, leaves no handle and
+      // starts no SDK, so a later start is not blocked; the sweep ends when a position is never reached.
+      jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      let swept = 0
+      for (let n = 1; n <= MOST_OPERATIONS; n += 1) {
+        mockSdkInstance.start.mockClear()
+        const run = sweep(n, 'throw')
+        const outcome = await startTelemetry(optionsFor(run.wrap)).then(
+          () => 'started',
+          (error: unknown) => (error as Error).message
+        )
+        if (outcome === 'started') {
+          expect(run.count()).toBeLessThan(n)
+          break
+        }
+        swept += 1
+        expect(outcome).toBe(`operation ${n} failed`)
+        expect(currentHandle()).toBeUndefined()
+        expect(mockSdkInstance.start).not.toHaveBeenCalled()
+        clearHandle()
+        clearPendingStart()
+      }
+      expect(swept).toBeGreaterThan(10)
+      expect(swept).toBeLessThan(MOST_OPERATIONS)
+    })
+
+    it('warns about exactly the redactions it applies when the nth read answers the opposite', async () => {
+      // Scenario: the same proxies, but the nth property read answers the opposite instead of throwing.
+      // Whatever the position, the host-id and URL warnings are emitted exactly when the SDK exports the
+      // host id and leaves the URL redactor out.
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      const warned = (pattern: RegExp): boolean =>
+        emitWarning.mock.calls.some(([text]) => pattern.test(String(text)))
+      let swept = 0
+      for (let n = 1; n <= MOST_OPERATIONS; n += 1) {
+        mockNodeSdk.mockClear()
+        emitWarning.mockClear()
+        const run = sweep(n, 'flip')
+        await startTelemetry(optionsFor(run.wrap))
+        const [sdkOptions] = mockNodeSdk.mock.calls[0] as unknown as [
+          {
+            resourceDetectors: { detect: () => { attributes: Record<string, unknown> } }[]
+            spanProcessors: unknown[]
+          }
+        ]
+        const exportsHostId =
+          'host.id' in (sdkOptions.resourceDetectors[2]?.detect().attributes ?? {})
+        const redactorLeftOut = sdkOptions.spanProcessors.length === 1
+        expect(warned(/Host id redaction is disabled/)).toBe(exportsHostId)
+        expect(warned(/URL redaction is disabled/)).toBe(redactorLeftOut)
+        swept += 1
+        clearHandle()
+        clearPendingStart()
+        if (run.count() < n) break
+      }
+      expect(swept).toBeGreaterThan(5)
+      expect(swept).toBeLessThan(MOST_OPERATIONS)
     })
   })
 })

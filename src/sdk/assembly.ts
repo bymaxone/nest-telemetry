@@ -152,9 +152,12 @@ export type InstrumentationInputs = {
  * warning about a turned-off redaction and to the SDK that applies it.
  *
  * @param unsafe - The host's `unsafe` option.
- * @returns A flag per unsafe option, `true` only for an explicit `true`.
+ * @returns A flag per unsafe option, `true` only for an explicit `true`. The type requires every key of
+ *   `UnsafeOptions`, so an option added there without a line here does not compile.
  */
-export function settleUnsafe(unsafe: UnsafeOptions | undefined): UnsafeFlags {
+export function settleUnsafe(unsafe: UnsafeOptions | undefined): {
+  readonly [K in keyof UnsafeOptions]-?: boolean
+} {
   return {
     disableUrlRedaction: unsafe?.disableUrlRedaction === true,
     disableRedisArgumentRedaction: unsafe?.disableRedisArgumentRedaction === true,
@@ -168,11 +171,11 @@ export function settleUnsafe(unsafe: UnsafeOptions | undefined): UnsafeFlags {
  * as {@link settleUnsafe}.
  *
  * @param instrumentations - The host's `instrumentations` option, or one already read.
- * @returns The three options as they were read.
+ * @returns The options as they were read. The type requires every key of `InstrumentationOptions`.
  */
-export function settleInstrumentations(
-  instrumentations: SettledInstrumentations | undefined
-): SettledInstrumentations {
+export function settleInstrumentations(instrumentations: SettledInstrumentations | undefined): {
+  readonly [K in keyof InstrumentationOptions]-?: InstrumentationOptions[K] | undefined
+} {
   return {
     fs: instrumentations?.fs,
     sendLogs: instrumentations?.sendLogs,

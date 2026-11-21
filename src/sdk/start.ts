@@ -204,9 +204,12 @@ async function boot(options: TelemetryOptions, env: TelemetryEnvironment): Promi
   warnAboutSamplerName(readSamplerNearMiss())
   warnAboutSamplerRatio(readRatioSampler())
   warnAboutMissingWinstonTransport(instrumentations?.sendLogs ?? planSignals(env).sendLogs)
+  // Read before the SDK starts: an option that throws when read must not leave a started SDK that no
+  // handle can stop.
+  const shutdownTimeoutMs = options.shutdownTimeoutMs
   const sdk = buildSdk(await loadPackages(), options, env, { instrumentations, unsafe })
   sdk.start()
-  const handle = createHandle(() => sdk.shutdown(), options.shutdownTimeoutMs)
+  const handle = createHandle(() => sdk.shutdown(), shutdownTimeoutMs)
   registerHandle(handle)
   return handle
 }
