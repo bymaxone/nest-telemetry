@@ -22,6 +22,7 @@ import {
   warnAboutSamplerRatio,
   warnAboutUnsafeOptions
 } from './assembly'
+import type { InstrumentationInputs } from './assembly'
 import { readRatioSampler, readSamplerNearMiss, readTelemetryEnvironment } from './environment'
 import type { TelemetryEnvironment } from './environment'
 import { warnOnExportFailure } from './export-failure'
@@ -129,17 +130,18 @@ async function loadPackages(): Promise<LoadedPackages> {
  * @param packages - The loaded OpenTelemetry packages.
  * @param options - The host's policy.
  * @param env - The parsed environment.
+ * @param read - The two options that are read once for the whole start.
  * @returns The SDK.
  */
 function buildSdk(
   packages: LoadedPackages,
   options: TelemetryOptions,
-  env: TelemetryEnvironment
+  env: TelemetryEnvironment,
+  read: Pick<InstrumentationInputs, 'instrumentations' | 'unsafe'>
 ): SdkNode.NodeSDK {
   const { sdkNode, sdkTrace, autoInstrumentations, exporter, resources } = packages
   const signals = planSignals(env)
-  // Read once: a getter could answer differently each time, and the three opt-outs below must come from one object.
-  const unsafe = options.unsafe
+  const { instrumentations, unsafe } = read
   return new sdkNode.NodeSDK({
     ...signals.overrides,
     resource: resources.resourceFromAttributes(buildResourceAttributes(options, env)),
@@ -166,7 +168,17 @@ function buildSdk(
       })
     ],
     instrumentations: [
-      autoInstrumentations.getNodeAutoInstrumentations(buildInstrumentationConfig(options, signals))
+      autoInstrumentations.getNodeAutoInstrumentations(
+        buildInstrumentationConfig(
+          {
+            instrumentations,
+            unsafe,
+            extraRedactedQueryParams: options.extraRedactedQueryParams,
+            ignoreIncomingRequest: options.ignoreIncomingRequest
+          },
+          signals
+        )
+      )
     ]
   })
 }
@@ -179,13 +191,17 @@ function buildSdk(
  * @returns The handle of the started SDK.
  */
 async function boot(options: TelemetryOptions, env: TelemetryEnvironment): Promise<RunningHandle> {
-  warnAboutUnsafeOptions(options)
+  // Read once for the whole start: a getter could answer differently each time, and the warning about a
+  // turned-off redaction, the SDK build and the instrumentation config must all see the same object.
+  const unsafe = options.unsafe
+  const instrumentations = options.instrumentations
+  warnAboutUnsafeOptions({ unsafe })
   warnAboutMissingServiceName(options, env)
   warnAboutOversizedTimers(env)
   warnAboutSamplerName(readSamplerNearMiss())
   warnAboutSamplerRatio(readRatioSampler())
-  warnAboutMissingWinstonTransport(options.instrumentations?.sendLogs ?? planSignals(env).sendLogs)
-  const sdk = buildSdk(await loadPackages(), options, env)
+  warnAboutMissingWinstonTransport(instrumentations?.sendLogs ?? planSignals(env).sendLogs)
+  const sdk = buildSdk(await loadPackages(), options, env, { instrumentations, unsafe })
   sdk.start()
   const handle = createHandle(() => sdk.shutdown(), options.shutdownTimeoutMs)
   registerHandle(handle)

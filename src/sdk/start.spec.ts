@@ -16,9 +16,6 @@ import {
 import { startTelemetry } from './start'
 import type { TelemetryOptions } from './types'
 
-/** The steps of a start that read `options.unsafe`: the warnings, the instrumentation config and the SDK build. */
-const UNSAFE_READS = 3
-
 const mockSdkInstance = {
   start: jest.fn<void, []>(),
   shutdown: jest.fn<Promise<void>, []>()
@@ -296,10 +293,10 @@ describe('startTelemetry', () => {
       expect(reports[2]).not.toHaveProperty(['host.id'])
     })
 
-    it('reads the unsafe options once for each step that needs them, not once for each flag', async () => {
-      // Scenario: an options object whose `unsafe` is a getter answers a different object each time,
-      // as a computed or lazy option can; the three opt-outs of the SDK build must come from one read,
-      // so the redaction a warning announces and the redaction the SDK applies cannot disagree.
+    it('reads the unsafe options once in a start', async () => {
+      // Scenario: an options object whose `unsafe` is a getter answers a different object each time, as
+      // a computed or lazy option can. The warning about turned-off redactions, the SDK build and the
+      // instrumentation config share one read, so what a warning announces is what the SDK applies.
       jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
       let reads = 0
       const options: TelemetryOptions = {
@@ -310,7 +307,66 @@ describe('startTelemetry', () => {
         }
       }
       await startTelemetry(options)
-      expect(reads).toBe(UNSAFE_READS)
+      expect(reads).toBe(1)
+    })
+
+    it('warns about exactly the redactions it turns off when the unsafe getter answers differently each time', async () => {
+      // Scenario: the first read of `unsafe` is empty and later ones turn every redaction off. With one
+      // read the start sees the empty object: nothing is warned about and nothing is exported. Reading
+      // it per step would warn about nothing while the SDK exported the host id.
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      let reads = 0
+      const options: TelemetryOptions = {
+        env: {},
+        get unsafe() {
+          reads += 1
+          return reads === 1
+            ? {}
+            : {
+                exportHostId: true as const,
+                exportProcessCommandArgs: true as const,
+                disableUrlRedaction: true as const,
+                disableRedisArgumentRedaction: true as const
+              }
+        }
+      }
+      await startTelemetry(options)
+      const [sdkOptions] = mockNodeSdk.mock.calls[0] as unknown as [
+        {
+          resourceDetectors: { detect: () => { attributes: Record<string, unknown> } }[]
+          spanProcessors: unknown[]
+        }
+      ]
+      const redactionWarnings = emitWarning.mock.calls.filter(([text]) =>
+        /redaction is disabled/.test(String(text))
+      )
+      expect(redactionWarnings).toHaveLength(0)
+      expect(sdkOptions.resourceDetectors[2]?.detect().attributes).not.toHaveProperty(['host.id'])
+      // The URL redactor stays ahead of the batch processor.
+      expect(sdkOptions.spanProcessors).toHaveLength(2)
+      expect(reads).toBe(1)
+    })
+
+    it.each([
+      ['instrumentations', { sendLogs: false }],
+      ['extraRedactedQueryParams', ['sid']],
+      ['ignoreIncomingRequest', () => false]
+    ])('reads the %s option once in a start', async (key, value) => {
+      // Scenario: an option that is a getter answers differently on each read. The warning about a
+      // missing winston transport and the instrumentation config both need `instrumentations`, and the
+      // config reads the other two; each must come from one read, so the warning and the config agree.
+      jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      let reads = 0
+      const options = { env: {} }
+      Object.defineProperty(options, key, {
+        enumerable: true,
+        get: () => {
+          reads += 1
+          return value
+        }
+      })
+      await startTelemetry(options as TelemetryOptions)
+      expect(reads).toBe(1)
     })
 
     it('keeps the host id when the host exports it explicitly', async () => {

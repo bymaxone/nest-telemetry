@@ -10,14 +10,20 @@ heading here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The start reads `unsafe` and `instrumentations` once, and the other two instrumentation options once.** The
+  warning about turned-off redactions, the SDK build and the instrumentation config each read `unsafe`, the
+  winston transport warning and the config each read `instrumentations`, and the config read
+  `ignoreIncomingRequest` twice, so an option object with a getter could make a warning and the effect disagree:
+  a first read of `{}` gave no warning while the host id, the process command line and the raw URL were exported.
+  The start now reads each once and hands the value to the steps. This replaces the per-step reads that 1.0.8
+  described.
+
 ### Documentation
 
 - **The README says that the sampler ratio warning does not repeat a blank value.** It repeats the value only when
   it is not blank; a blank one is called blank.
-- **A clarification of 1.0.8's note on the unsafe options.** They are read three times in a start: by the
-  warning about turned-off redactions, by the instrumentation config (for the Redis opt-out) and by the SDK
-  build (for the other three opt-outs), once each. Each step reads them once, but the steps do not share one
-  read.
 
 ## [1.0.8] - 2026-11-20
 
