@@ -5,6 +5,7 @@
 import type { InstrumentationConfigMap } from '@opentelemetry/auto-instrumentations-node'
 
 import type { RatioSampler, TelemetryEnvironment } from './environment'
+import { requireBoolean, requireObject, settleOverrides } from './option-kinds'
 import { buildRedactedQueryParams, serializeRedisCommandName } from './redaction'
 import type { InstrumentationOptions, TelemetryOptions, UnsafeOptions } from './types'
 import { reportWarning } from './warning-sink'
@@ -74,7 +75,7 @@ function isPresent<T>(value: T | null | undefined): value is T {
  * @param options - The options of a call.
  * @returns Each option's value, or `undefined` for one that is absent.
  */
-function readEachOption(options: TelemetryOptions): Record<keyof TelemetryOptions, unknown> {
+export function readEachOption(options: TelemetryOptions): Record<keyof TelemetryOptions, unknown> {
   return {
     enabled: options.enabled,
     serviceName: options.serviceName,
@@ -89,17 +90,6 @@ function readEachOption(options: TelemetryOptions): Record<keyof TelemetryOption
 }
 
 /**
- * Copies the keys of an options object that hold a value, so a key set to `undefined` or `null`
- * cannot replace a default it is merged over.
- *
- * @param config - The options of one library.
- * @returns The same keys without the absent ones.
- */
-function definedEntries(config: object): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(config).filter(([, value]) => isPresent(value)))
-}
-
-/**
  * Reads an optional string option, treating a blank value as absent.
  *
  * @param value - The option value.
@@ -110,6 +100,23 @@ function nonBlank(value: string | undefined): string | undefined {
   return trimmed === '' ? undefined : trimmed
 }
 
+/** The identity of the service, as the host passed it. */
+export interface ServiceIdentity {
+  readonly serviceName?: string | undefined
+  readonly serviceVersion?: string | undefined
+}
+
+/**
+ * Reads the service name and version once, each field once, into a plain object, so the warning about
+ * a missing name and the resource work from the same read.
+ *
+ * @param options - The start options.
+ * @returns The name and version as they were read.
+ */
+export function settleService(options: ServiceIdentity): ServiceIdentity {
+  return { serviceName: options.serviceName, serviceVersion: options.serviceVersion }
+}
+
 /**
  * Builds the resource attributes.
  *
@@ -118,7 +125,7 @@ function nonBlank(value: string | undefined): string | undefined {
  * @returns The semantic-convention attributes.
  */
 export function buildResourceAttributes(
-  options: TelemetryOptions,
+  options: ServiceIdentity,
   env: TelemetryEnvironment
 ): Record<string, string> {
   const attributes: Record<string, string> = {}
@@ -154,15 +161,19 @@ export type InstrumentationInputs = {
  * @param unsafe - The host's `unsafe` option.
  * @returns A flag per unsafe option, `true` only for an explicit `true`. The type requires every key of
  *   `UnsafeOptions`, so an option added there without a line here does not compile.
+ * @throws {TelemetryOptionError} When `unsafe` is not an object or a flag is not a boolean.
  */
-export function settleUnsafe(unsafe: UnsafeOptions | undefined): {
+export function settleUnsafe(unsafe: unknown): {
   readonly [K in keyof UnsafeOptions]-?: boolean
 } {
+  const flags = requireObject('unsafe', unsafe) as Record<keyof UnsafeOptions, unknown> | undefined
+  const flag = (name: keyof UnsafeOptions): boolean =>
+    requireBoolean(`unsafe.${name}`, flags?.[name]) === true
   return {
-    disableUrlRedaction: unsafe?.disableUrlRedaction === true,
-    disableRedisArgumentRedaction: unsafe?.disableRedisArgumentRedaction === true,
-    exportProcessCommandArgs: unsafe?.exportProcessCommandArgs === true,
-    exportHostId: unsafe?.exportHostId === true
+    disableUrlRedaction: flag('disableUrlRedaction'),
+    disableRedisArgumentRedaction: flag('disableRedisArgumentRedaction'),
+    exportProcessCommandArgs: flag('exportProcessCommandArgs'),
+    exportHostId: flag('exportHostId')
   }
 }
 
@@ -172,14 +183,18 @@ export function settleUnsafe(unsafe: UnsafeOptions | undefined): {
  *
  * @param instrumentations - The host's `instrumentations` option, or one already read.
  * @returns The options as they were read. The type requires every key of `InstrumentationOptions`.
+ * @throws {TelemetryOptionError} When the option, a flag or an override is of the wrong kind.
  */
-export function settleInstrumentations(instrumentations: SettledInstrumentations | undefined): {
+export function settleInstrumentations(instrumentations: unknown): {
   readonly [K in keyof InstrumentationOptions]-?: InstrumentationOptions[K] | undefined
 } {
+  const read = requireObject('instrumentations', instrumentations) as
+    Record<keyof InstrumentationOptions, unknown> | undefined
   return {
-    fs: instrumentations?.fs,
-    sendLogs: instrumentations?.sendLogs,
-    overrides: instrumentations?.overrides
+    fs: requireBoolean('instrumentations.fs', read?.fs),
+    sendLogs: requireBoolean('instrumentations.sendLogs', read?.sendLogs),
+    overrides: settleOverrides('instrumentations.overrides', read?.overrides) as
+      InstrumentationConfigMap | undefined
   }
 }
 
@@ -202,7 +217,8 @@ export function buildInstrumentationConfig(
   const instrumentations = settleInstrumentations(options.instrumentations)
   const overrides: Record<string, Record<string, unknown>> = {}
   for (const [name, config] of Object.entries(instrumentations.overrides ?? {})) {
-    if (isPresent(config)) overrides[name] = definedEntries(config)
+    // `settleInstrumentations` copied the entry and dropped the settings that are absent.
+    overrides[name] = config as Record<string, unknown>
   }
   const redactRedis = options.unsafe?.disableRedisArgumentRedaction !== true
   const disableLogSending = !(instrumentations.sendLogs ?? signals.sendLogs)
@@ -244,7 +260,7 @@ export function buildInstrumentationConfig(
  * @param env - The parsed environment.
  */
 export function warnAboutMissingServiceName(
-  options: TelemetryOptions,
+  options: Pick<ServiceIdentity, 'serviceName'>,
   env: TelemetryEnvironment
 ): void {
   if (env.serviceName === undefined && nonBlank(options.serviceName) === undefined) {

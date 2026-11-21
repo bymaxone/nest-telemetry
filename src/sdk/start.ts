@@ -15,6 +15,7 @@ import {
   buildInstrumentationConfig,
   buildResourceAttributes,
   settleInstrumentations,
+  settleService,
   settleUnsafe,
   planSignals,
   warnAboutIgnoredOptions,
@@ -24,7 +25,7 @@ import {
   warnAboutSamplerRatio,
   warnAboutUnsafeOptions
 } from './assembly'
-import type { InstrumentationInputs } from './assembly'
+import type { InstrumentationInputs, ServiceIdentity } from './assembly'
 import { readRatioSampler, readSamplerNearMiss, readTelemetryEnvironment } from './environment'
 import type { TelemetryEnvironment } from './environment'
 import { warnOnExportFailure } from './export-failure'
@@ -40,6 +41,7 @@ import {
 import type { RunningHandle } from './handle'
 import { createUrlQueryRedactor } from './redaction'
 import { selectResourceDetectors } from './resource-detectors'
+import { settleOptions } from './settle-options'
 import type { TelemetryHandle, TelemetryOptions } from './types'
 import { warnAboutMissingWinstonTransport } from './winston-transport'
 
@@ -63,12 +65,14 @@ const DISABLED_HANDLE: TelemetryHandle = {
  * @returns The handle, which flushes and stops the SDK.
  */
 export async function startTelemetry(options: TelemetryOptions = {}): Promise<TelemetryHandle> {
-  // A null env is the same as none: the default parameter of the reader only covers undefined.
-  const env = readTelemetryEnvironment(options.env ?? undefined)
-  if (options.enabled === false || env.sdkDisabled) {
+  // Each option is read once and its kind checked, and the rest of the call works from the copy, so
+  // the warning text and the effect of the call cannot disagree.
+  const settled = settleOptions(options)
+  const env = readTelemetryEnvironment(settled.env)
+  if (settled.enabled === false || env.sdkDisabled) {
     // Turning telemetry off by a later call hands back a disabled handle and leaves a running SDK
     // running.
-    if (currentHandle()?.stopping === false || pendingStart()) warnAboutIgnoredOptions(options)
+    if (currentHandle()?.stopping === false || pendingStart()) warnAboutIgnoredOptions(settled)
     return DISABLED_HANDLE
   }
   let running = currentHandle()
@@ -79,14 +83,14 @@ export async function startTelemetry(options: TelemetryOptions = {}): Promise<Te
     running = currentHandle()
   }
   if (running !== undefined) {
-    warnAboutIgnoredOptions(options)
+    warnAboutIgnoredOptions(settled)
     return running
   }
   // A second caller that arrives while the first is still loading gets the same start, whichever
   // copy of the library it runs in, so two overlapping calls never build two SDKs.
   const joined = pendingStart()
   if (joined !== undefined) {
-    warnAboutIgnoredOptions(options)
+    warnAboutIgnoredOptions(settled)
     return joined
   }
   if (hasStopped()) {
@@ -96,7 +100,7 @@ export async function startTelemetry(options: TelemetryOptions = {}): Promise<Te
     })
     throw new Error(RESTART_MESSAGE)
   }
-  const start = boot(options, env).finally(clearPendingStart)
+  const start = boot(settled, env).finally(clearPendingStart)
   setPendingStart(start)
   return start
 }
@@ -126,27 +130,32 @@ async function loadPackages(): Promise<LoadedPackages> {
   return { sdkNode, sdkTrace, autoInstrumentations, exporter, resources }
 }
 
+/** The options that are read once for the whole start. */
+type ReadOnce = Pick<InstrumentationInputs, 'instrumentations' | 'unsafe'> & {
+  readonly service: ServiceIdentity
+}
+
 /**
  * Builds the SDK from the host's options and the environment, without starting it.
  *
  * @param packages - The loaded OpenTelemetry packages.
  * @param options - The host's policy.
  * @param env - The parsed environment.
- * @param read - The two options that are read once for the whole start.
+ * @param read - The options that are read once for the whole start.
  * @returns The SDK.
  */
 function buildSdk(
   packages: LoadedPackages,
   options: TelemetryOptions,
   env: TelemetryEnvironment,
-  read: Pick<InstrumentationInputs, 'instrumentations' | 'unsafe'>
+  read: ReadOnce
 ): SdkNode.NodeSDK {
   const { sdkNode, sdkTrace, autoInstrumentations, exporter, resources } = packages
   const signals = planSignals(env)
-  const { instrumentations, unsafe } = read
+  const { instrumentations, unsafe, service } = read
   return new sdkNode.NodeSDK({
     ...signals.overrides,
-    resource: resources.resourceFromAttributes(buildResourceAttributes(options, env)),
+    resource: resources.resourceFromAttributes(buildResourceAttributes(service, env)),
     resourceDetectors: selectResourceDetectors(
       env.resourceDetectors,
       {
@@ -198,8 +207,9 @@ async function boot(options: TelemetryOptions, env: TelemetryEnvironment): Promi
   // instrumentation config must all see the same values.
   const unsafe = settleUnsafe(options.unsafe)
   const instrumentations = settleInstrumentations(options.instrumentations)
+  const service = settleService(options)
   warnAboutUnsafeOptions({ unsafe })
-  warnAboutMissingServiceName(options, env)
+  warnAboutMissingServiceName(service, env)
   warnAboutOversizedTimers(env)
   warnAboutSamplerName(readSamplerNearMiss())
   warnAboutSamplerRatio(readRatioSampler())
@@ -207,7 +217,7 @@ async function boot(options: TelemetryOptions, env: TelemetryEnvironment): Promi
   // Read before the SDK starts: an option that throws when read must not leave a started SDK that no
   // handle can stop.
   const shutdownTimeoutMs = options.shutdownTimeoutMs
-  const sdk = buildSdk(await loadPackages(), options, env, { instrumentations, unsafe })
+  const sdk = buildSdk(await loadPackages(), options, env, { instrumentations, unsafe, service })
   sdk.start()
   const handle = createHandle(() => sdk.shutdown(), shutdownTimeoutMs)
   registerHandle(handle)

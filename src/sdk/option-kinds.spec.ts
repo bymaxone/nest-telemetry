@@ -1,0 +1,230 @@
+/**
+ * @fileoverview Tests the checks of the kind of an option: the error each one throws, word for word,
+ * and the copies of a list and of a map.
+ * @layer sdk
+ */
+import {
+  MAX_OPTION_ENTRIES,
+  TelemetryOptionError,
+  requireBoolean,
+  requireFunction,
+  requireObject,
+  requireString,
+  settleOverrides,
+  settleStringList
+} from './option-kinds'
+
+/** The error a call throws, or `undefined`. */
+function thrown(call: () => unknown): unknown {
+  try {
+    call()
+    return undefined
+  } catch (error) {
+    return error
+  }
+}
+
+describe('TelemetryOptionError', () => {
+  it('carries its name, its code, the option and a message that names what the option must be', () => {
+    // Scenario: the error a host catches; none of its fields holds a value the host passed.
+    const error = new TelemetryOptionError('unsafe.exportHostId', 'a boolean')
+    expect(error).toBeInstanceOf(Error)
+    expect(error.name).toBe('TelemetryOptionError')
+    expect(error.code).toBe('BYMAX_TELEMETRY_OPTION_INVALID')
+    expect(error.option).toBe('unsafe.exportHostId')
+    expect(error.message).toBe(
+      'The unsafe.exportHostId option must be a boolean, so the start was refused.'
+    )
+  })
+})
+
+describe('the checks of one option', () => {
+  it.each([
+    ['requireBoolean', (value: unknown) => requireBoolean('x', value), 'a boolean', 'yes'],
+    ['requireString', (value: unknown) => requireString('x', value), 'a string', 5],
+    ['requireFunction', (value: unknown) => requireFunction('x', value), 'a function', {}],
+    ['requireObject', (value: unknown) => requireObject('x', value), 'an object', []]
+  ])('%s refuses another kind with a message that names %s', (_name, check, expected, wrong) => {
+    // Scenario: each check refuses a value of another kind, and says what the option must be.
+    expect((thrown(() => check(wrong)) as Error).message).toBe(
+      `The x option must be ${expected}, so the start was refused.`
+    )
+  })
+
+  it.each([undefined, null])('treats %p as not given', (absent) => {
+    // Scenario: the control for the rows above: an absent value is not an error.
+    expect(requireBoolean('x', absent)).toBeUndefined()
+    expect(requireString('x', absent)).toBeUndefined()
+    expect(requireFunction('x', absent)).toBeUndefined()
+    expect(requireObject('x', absent)).toBeUndefined()
+    expect(settleStringList('x', absent)).toBeUndefined()
+    expect(settleOverrides('x', absent)).toBeUndefined()
+  })
+})
+
+describe('settleStringList', () => {
+  it('copies the strings in order, and an empty list stays empty', () => {
+    // Scenario: the copy is exactly the list that was given, not the list plus anything.
+    const given = ['a', 'b']
+    const copy = settleStringList('x', given)
+    expect(copy).toEqual(['a', 'b'])
+    expect(copy).not.toBe(given)
+    expect(settleStringList('x', [])).toEqual([])
+  })
+
+  it.each([
+    ['not an array', 'abc', 'an array of strings'],
+    ['an array with an item that is not a string', ['a', 1], 'an array of strings'],
+    [
+      'an array over the cap',
+      new Array<string>(MAX_OPTION_ENTRIES + 1).fill('a'),
+      `an array of at most ${MAX_OPTION_ENTRIES} strings`
+    ]
+  ])('refuses %s, saying %s', (_what, value, expected) => {
+    // Scenario: each way a list can be wrong has its own words.
+    expect((thrown(() => settleStringList('x', value)) as Error).message).toBe(
+      `The x option must be ${expected}, so the start was refused.`
+    )
+  })
+
+  it('refuses a length that is not a count, with the words for an array of strings', () => {
+    // Scenario: a stand-in for an array whose length reads as a fraction.
+    const list = new Proxy(['a'], {
+      get: (target, key, receiver): unknown =>
+        key === 'length' ? 1.5 : (Reflect.get(target, key, receiver) as unknown)
+    })
+    expect((thrown(() => settleStringList('x', list)) as Error).message).toBe(
+      'The x option must be an array of strings, so the start was refused.'
+    )
+  })
+
+  it('accepts a list of exactly the cap', () => {
+    // Scenario: the boundary of the cap: the cap itself is allowed.
+    const given = new Array<string>(MAX_OPTION_ENTRIES).fill('a')
+    expect(settleStringList('x', given)).toHaveLength(MAX_OPTION_ENTRIES)
+  })
+})
+
+describe('settleOverrides', () => {
+  it('copies the entries that are objects and drops the ones that are absent', () => {
+    // Scenario: an entry that is null or undefined is the same as no entry.
+    expect(settleOverrides('x', { a: { n: 1 }, b: null, c: undefined })).toEqual({ a: { n: 1 } })
+  })
+
+  it('accepts exactly the cap and refuses one more, in its own words', () => {
+    // Scenario: the boundary of the cap, and the message of the refusal.
+    const make = (count: number): Record<string, object> =>
+      Object.fromEntries(Array.from({ length: count }, (_, i) => [`k${i}`, {}]))
+    expect(Object.keys(settleOverrides('x', make(MAX_OPTION_ENTRIES)) ?? {})).toHaveLength(
+      MAX_OPTION_ENTRIES
+    )
+    expect(
+      (thrown(() => settleOverrides('x', make(MAX_OPTION_ENTRIES + 1))) as Error).message
+    ).toBe(
+      `The x option must be an object of at most ${MAX_OPTION_ENTRIES} entries, so the start was refused.`
+    )
+  })
+})
+
+describe('settleOverrides, for the settings of an entry', () => {
+  const settle = (entry: object): Record<string, Record<string, unknown>> | undefined =>
+    settleOverrides('x', { pino: entry })
+
+  it.each([
+    ['enabled', 0],
+    ['enabled', 'false'],
+    ['disableLogSending', 0],
+    ['disableLogSending', {}]
+  ])('refuses %s that is %p, naming the path and not the instrumentation', (key, value) => {
+    // Scenario: a switch that turns a signal on or off holds something that is not a boolean; a number
+    // 0 is refused because the instrumentation would read it as a switch that is off.
+    const error = thrown(() => settleOverrides('x', { secretName: { [key]: value } })) as Error
+    expect(error.message).toBe(
+      `The instrumentations.overrides[].${key} option must be a boolean, so the start was refused.`
+    )
+    expect(error.message).not.toContain('secretName')
+  })
+
+  it('refuses a redactedQueryParams that is not a list of strings', () => {
+    // Scenario: the list of names to redact is a string, which would be spread into characters.
+    expect(thrown(() => settle({ redactedQueryParams: 'abc' }))).toMatchObject({
+      option: 'instrumentations.overrides[].redactedQueryParams'
+    })
+  })
+
+  it('copies a list that is an Array subclass through its indexes, not through its iterator', () => {
+    // Scenario: a subclass of Array whose iterator yields other names than its items hold; the copy is a
+    // plain array of the items.
+    class Sneaky extends Array<string> {
+      override *[Symbol.iterator](): Generator<string> {
+        yield 'from-the-iterator'
+      }
+    }
+    const list = Sneaky.from(['a', 'b'])
+    const copy = settle({ redactedQueryParams: list })?.['pino']?.['redactedQueryParams']
+    expect(copy).toEqual(['a', 'b'])
+    expect(Object.getPrototypeOf(copy)).toBe(Array.prototype)
+  })
+
+  it.each(['requestHook', 'ignoreIncomingRequestHook', 'responseHook'])(
+    'refuses %s that is not a function, and keeps one that is',
+    (key) => {
+      // Scenario: a hook that runs host code is checked by its name ending in Hook.
+      expect(thrown(() => settle({ [key]: 'not a function' }))).toMatchObject({
+        option: 'instrumentations.overrides[].<a hook>'
+      })
+      const hook = (): boolean => true
+      expect(settle({ [key]: hook })?.['pino']?.[key]).toBe(hook)
+    }
+  )
+
+  it('keeps the settings of any other name, drops the absent ones, and reads each setting once', () => {
+    // Scenario: a setting that is not checked passes through; an entry is copied, so a getter on it runs
+    // once, at the copy, and never later.
+    let reads = 0
+    const entry = {
+      enabled: true,
+      other: { nested: 1 },
+      gone: undefined,
+      get disableLogSending() {
+        reads += 1
+        return false
+      }
+    }
+    const copy = settle(entry)?.['pino']
+    expect(copy).toEqual({ enabled: true, other: { nested: 1 }, disableLogSending: false })
+    expect(Object.keys(copy ?? {})).not.toContain('gone')
+    expect(copy).not.toBe(entry)
+    expect(reads).toBe(1)
+  })
+
+  it('refuses an entry of more settings than the cap, and accepts one of exactly the cap', () => {
+    // Scenario: the boundary of the cap on the settings of one entry.
+    const make = (count: number): Record<string, number> =>
+      Object.fromEntries(Array.from({ length: count }, (_, i) => [`s${i}`, i]))
+    expect(Object.keys(settle(make(MAX_OPTION_ENTRIES))?.['pino'] ?? {})).toHaveLength(
+      MAX_OPTION_ENTRIES
+    )
+    expect((thrown(() => settle(make(MAX_OPTION_ENTRIES + 1))) as Error).message).toBe(
+      `The instrumentations.overrides[] option must be an object of at most ${MAX_OPTION_ENTRIES} settings, so the start was refused.`
+    )
+  })
+})
+
+describe('settleOverrides, for a key named __proto__', () => {
+  it.each([
+    ['a setting of an entry', '{"pino":{"__proto__":{"enabled":true}}}'],
+    ['an entry of the map', '{"__proto__":{"enabled":true}}']
+  ])('refuses %s, so it never becomes the prototype of a copy', (_where, json) => {
+    // Scenario: JSON.parse makes `__proto__` an own key, which an assignment into a copy would turn
+    // into the prototype; the start is refused with a fixed path.
+    expect(() => settleOverrides('x', JSON.parse(json))).toThrow(
+      'The instrumentations.overrides[] option must be free of a __proto__ key, so the start was refused.'
+    )
+  })
+
+  it('does not refuse an ordinary key that merely contains the word', () => {
+    // Scenario: the control for the row above.
+    expect(settleOverrides('x', { proto: { __proto_: 1 } })).toEqual({ proto: { __proto_: 1 } })
+  })
+})

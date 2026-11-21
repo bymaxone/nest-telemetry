@@ -368,13 +368,19 @@ describe('buildInstrumentationConfig', () => {
       expect(config).not.toHaveProperty('@opentelemetry/instrumentation-mysql2')
     })
 
-    it('does not let a host list that is not an array break the merge', () => {
-      // Scenario: a malformed override value for the list cannot remove the library's names.
-      const config = buildInstrumentationConfig(
-        { instrumentations: { overrides: { [HTTP]: { redactedQueryParams: 'token' as never } } } },
-        noLogs
+    it('refuses a host list that is not an array, rather than ignoring it', () => {
+      // Scenario: a malformed override value for the list is refused at the copy of the options, so
+      // the merge never sees it and the library's names cannot be lost to it.
+      expect(() =>
+        buildInstrumentationConfig(
+          {
+            instrumentations: { overrides: { [HTTP]: { redactedQueryParams: 'token' as never } } }
+          },
+          noLogs
+        )
+      ).toThrow(
+        expect.objectContaining({ option: 'instrumentations.overrides[].redactedQueryParams' })
       )
-      expect(config[HTTP]).toEqual({ redactedQueryParams: [...DEFAULT_REDACTED_QUERY_PARAMS] })
     })
   })
 })

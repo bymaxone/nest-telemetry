@@ -8,21 +8,40 @@ The `release.yml` workflow extracts the section matching the pushed `vX.Y.Z` tag
 as the GitHub Release body, so each released version needs a matching `## [X.Y.Z]`
 heading here.
 
-## [Unreleased]
+## [1.0.10] - 2026-11-21
+
+### Fixed
+
+- **An option of the wrong kind is refused, and no longer read as something it is not.** The string `'false'`, a
+  number or an object for `instrumentations.sendLogs` was truthy and turned the export of log records on, which
+  sends data off the host; the string `'true'` for an `unsafe` flag was dropped without a word; a string for
+  `extraRedactedQueryParams` was spread into its characters and a number threw a `TypeError` out of the start.
+  `startTelemetry` now rejects with an error whose `code` is `BYMAX_TELEMETRY_OPTION_INVALID` and whose `option`
+  names the option, before any SDK is started. `shutdownTimeoutMs` keeps its documented fallback.
+- **The settings of an `instrumentations.overrides` entry that decide what leaves the host are checked too.** An
+  override was spread over the library's configuration unchecked, so `{ disableLogSending: 0 }` for the pino
+  instrumentation turned log sending on and a non-boolean `enabled` replaced the one the library forces. Each
+  entry is now copied once; `enabled` and `disableLogSending` must be booleans, `redactedQueryParams` an array
+  of strings, every setting named `...Hook` a function, an entry holds at most 1000 settings, and a `__proto__` key is refused. The error names
+  `instrumentations.overrides[]` and never the instrumentation or the value.
+- **Each option of a call is read once.** A getter could make a warning and the effect of the call disagree. A
+  call now reads each option once, checks its kind, and works from the copy.
 
 ### Documentation
 
-- **The README narrows what a failed start leaves behind.** "No SDK started and no handle left" holds for a first
-  start; a later call that finds an SDK already running can also reject, while it reads the options of the call, and the running SDK and its handle are not touched. It also says that the sampler ratio warning cuts
-  the value it repeats to 40 characters and writes control, separator and invisible characters as escapes.
-- **The README says what was run, and when, for the figures no script reproduces.** The one-laptop figures of the
-  Production section, the timings of the `ignorePaths` pattern, the attribute names of the out-of-scope list, the
-  `redis` versions, the restart run and the `nest-logger` run are marked as of 2026-11-13, with the ones that
-  have a proof in this repository told apart from the ones that do not.
-- **The README lists the ranges of the peers that are not OpenTelemetry packages.** The version table named only the
-  OpenTelemetry peers; the line after it now gives the ranges of `@bymax-one/nest-core`, `prom-client` and the
-  Nest peers, as `package.json` declares them. The CPU item of the Production section no longer says "that
-  handler", which the section had stopped naming.
+- **The README says a failed start starts no new SDK.** It said "no SDK started and no handle left", which is
+  wrong for a later call that finds an SDK already running; it now says that the failed start starts no new SDK
+  and that a first start leaves no handle.
+- **The README lists the ranges of the peers that are not OpenTelemetry packages**, as `package.json` declares
+  them, and its CPU item no longer says "that handler".
+
+### Apply to a derived backend
+
+A configuration that passed a value of the wrong kind used to be accepted and now fails at start with
+`BYMAX_TELEMETRY_OPTION_INVALID`. Look for a string such as `'false'` in `instrumentations.sendLogs` or an `unsafe`
+flag (read from an environment variable without converting it), a single string for `extraRedactedQueryParams`
+(pass `['name']`), a non-boolean `enabled` or `disableLogSending`, a non-array `redactedQueryParams` or a non-function `...Hook` inside an `overrides` entry, and a list, map or entry of more than 1000 items. Nothing else changes: a plain value of
+the documented kind behaves as before.
 
 ## [1.0.9] - 2026-11-20
 
@@ -425,6 +444,7 @@ First release.
 - Verification from the packed tarball: real `node --import` processes in a CommonJS and a native-ESM
   application, with planted secrets absent from the exported body and negative controls.
 
+[1.0.10]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.10
 [1.0.9]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.9
 [1.0.8]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.8
 [1.0.7]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.7
