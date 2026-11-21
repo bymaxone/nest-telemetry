@@ -23,7 +23,7 @@ heading here.
   instrumentation turned log sending on and a non-boolean `enabled` replaced the one the library forces. Each
   entry is now copied once; `enabled` and `disableLogSending` must be booleans, `redactedQueryParams` an array
   of strings, every setting named `...Hook` a function, and an entry holds at most 1000 settings. The error names
-  `instrumentations.overrides[].<setting>` and never the instrumentation or the value.
+  `instrumentations.overrides[]` and never the instrumentation or the value.
 - **Each option of a call is read once.** A getter could make a warning and the effect of the call disagree. A
   call now reads each option once, checks its kind, and works from the copy.
 
