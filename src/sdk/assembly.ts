@@ -5,6 +5,7 @@
 import type { InstrumentationConfigMap } from '@opentelemetry/auto-instrumentations-node'
 
 import type { RatioSampler, TelemetryEnvironment } from './environment'
+import { requireBoolean, requireObject, settleObjectMap } from './option-kinds'
 import { buildRedactedQueryParams, serializeRedisCommandName } from './redaction'
 import type { InstrumentationOptions, TelemetryOptions, UnsafeOptions } from './types'
 import { reportWarning } from './warning-sink'
@@ -74,7 +75,7 @@ function isPresent<T>(value: T | null | undefined): value is T {
  * @param options - The options of a call.
  * @returns Each option's value, or `undefined` for one that is absent.
  */
-function readEachOption(options: TelemetryOptions): Record<keyof TelemetryOptions, unknown> {
+export function readEachOption(options: TelemetryOptions): Record<keyof TelemetryOptions, unknown> {
   return {
     enabled: options.enabled,
     serviceName: options.serviceName,
@@ -171,15 +172,19 @@ export type InstrumentationInputs = {
  * @param unsafe - The host's `unsafe` option.
  * @returns A flag per unsafe option, `true` only for an explicit `true`. The type requires every key of
  *   `UnsafeOptions`, so an option added there without a line here does not compile.
+ * @throws {TelemetryOptionError} When `unsafe` is not an object or a flag is not a boolean.
  */
-export function settleUnsafe(unsafe: UnsafeOptions | undefined): {
+export function settleUnsafe(unsafe: unknown): {
   readonly [K in keyof UnsafeOptions]-?: boolean
 } {
+  const flags = requireObject('unsafe', unsafe) as Record<keyof UnsafeOptions, unknown> | undefined
+  const flag = (name: keyof UnsafeOptions): boolean =>
+    requireBoolean(`unsafe.${name}`, flags?.[name]) === true
   return {
-    disableUrlRedaction: unsafe?.disableUrlRedaction === true,
-    disableRedisArgumentRedaction: unsafe?.disableRedisArgumentRedaction === true,
-    exportProcessCommandArgs: unsafe?.exportProcessCommandArgs === true,
-    exportHostId: unsafe?.exportHostId === true
+    disableUrlRedaction: flag('disableUrlRedaction'),
+    disableRedisArgumentRedaction: flag('disableRedisArgumentRedaction'),
+    exportProcessCommandArgs: flag('exportProcessCommandArgs'),
+    exportHostId: flag('exportHostId')
   }
 }
 
@@ -189,14 +194,18 @@ export function settleUnsafe(unsafe: UnsafeOptions | undefined): {
  *
  * @param instrumentations - The host's `instrumentations` option, or one already read.
  * @returns The options as they were read. The type requires every key of `InstrumentationOptions`.
+ * @throws {TelemetryOptionError} When the option, a flag or an override is of the wrong kind.
  */
-export function settleInstrumentations(instrumentations: SettledInstrumentations | undefined): {
+export function settleInstrumentations(instrumentations: unknown): {
   readonly [K in keyof InstrumentationOptions]-?: InstrumentationOptions[K] | undefined
 } {
+  const read = requireObject('instrumentations', instrumentations) as
+    Record<keyof InstrumentationOptions, unknown> | undefined
   return {
-    fs: instrumentations?.fs,
-    sendLogs: instrumentations?.sendLogs,
-    overrides: instrumentations?.overrides
+    fs: requireBoolean('instrumentations.fs', read?.fs),
+    sendLogs: requireBoolean('instrumentations.sendLogs', read?.sendLogs),
+    overrides: settleObjectMap('instrumentations.overrides', read?.overrides) as
+      InstrumentationConfigMap | undefined
   }
 }
 
@@ -219,7 +228,8 @@ export function buildInstrumentationConfig(
   const instrumentations = settleInstrumentations(options.instrumentations)
   const overrides: Record<string, Record<string, unknown>> = {}
   for (const [name, config] of Object.entries(instrumentations.overrides ?? {})) {
-    if (isPresent(config)) overrides[name] = definedEntries(config)
+    // `settleInstrumentations` dropped the entries that are absent.
+    overrides[name] = definedEntries(config as object)
   }
   const redactRedis = options.unsafe?.disableRedisArgumentRedaction !== true
   const disableLogSending = !(instrumentations.sendLogs ?? signals.sendLogs)

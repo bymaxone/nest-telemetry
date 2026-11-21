@@ -41,6 +41,7 @@ import {
 import type { RunningHandle } from './handle'
 import { createUrlQueryRedactor } from './redaction'
 import { selectResourceDetectors } from './resource-detectors'
+import { settleOptions } from './settle-options'
 import type { TelemetryHandle, TelemetryOptions } from './types'
 import { warnAboutMissingWinstonTransport } from './winston-transport'
 
@@ -64,12 +65,14 @@ const DISABLED_HANDLE: TelemetryHandle = {
  * @returns The handle, which flushes and stops the SDK.
  */
 export async function startTelemetry(options: TelemetryOptions = {}): Promise<TelemetryHandle> {
-  // A null env is the same as none: the default parameter of the reader only covers undefined.
-  const env = readTelemetryEnvironment(options.env ?? undefined)
-  if (options.enabled === false || env.sdkDisabled) {
+  // Each option is read once and its kind checked, and the rest of the call works from the copy, so
+  // the warning text and the effect of the call cannot disagree.
+  const settled = settleOptions(options)
+  const env = readTelemetryEnvironment(settled.env)
+  if (settled.enabled === false || env.sdkDisabled) {
     // Turning telemetry off by a later call hands back a disabled handle and leaves a running SDK
     // running.
-    if (currentHandle()?.stopping === false || pendingStart()) warnAboutIgnoredOptions(options)
+    if (currentHandle()?.stopping === false || pendingStart()) warnAboutIgnoredOptions(settled)
     return DISABLED_HANDLE
   }
   let running = currentHandle()
@@ -80,14 +83,14 @@ export async function startTelemetry(options: TelemetryOptions = {}): Promise<Te
     running = currentHandle()
   }
   if (running !== undefined) {
-    warnAboutIgnoredOptions(options)
+    warnAboutIgnoredOptions(settled)
     return running
   }
   // A second caller that arrives while the first is still loading gets the same start, whichever
   // copy of the library it runs in, so two overlapping calls never build two SDKs.
   const joined = pendingStart()
   if (joined !== undefined) {
-    warnAboutIgnoredOptions(options)
+    warnAboutIgnoredOptions(settled)
     return joined
   }
   if (hasStopped()) {
@@ -97,7 +100,7 @@ export async function startTelemetry(options: TelemetryOptions = {}): Promise<Te
     })
     throw new Error(RESTART_MESSAGE)
   }
-  const start = boot(options, env).finally(clearPendingStart)
+  const start = boot(settled, env).finally(clearPendingStart)
   setPendingStart(start)
   return start
 }

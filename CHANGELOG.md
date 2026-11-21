@@ -8,31 +8,40 @@ The `release.yml` workflow extracts the section matching the pushed `vX.Y.Z` tag
 as the GitHub Release body, so each released version needs a matching `## [X.Y.Z]`
 heading here.
 
-## [Unreleased]
+## [1.0.10] - 2026-11-21
 
 ### Fixed
 
-- **The start reads `serviceName` and `serviceVersion` once.** The warning about a missing service name and the
-  resource each read `serviceName`, so an option object with a getter could make them disagree: a first read of
-  `''` and a later one of `'real'` warned that no name was set while the spans were exported as `real`. The
-  start now reads both fields once and the warning and the resource work from that read. Apply note: nothing to change; an option that is a plain value behaves as before.
+- **An option of the wrong kind is refused, and no longer read as something it is not.** The string `'false'`, a
+  number or an object for `instrumentations.sendLogs` was truthy and turned the export of log records on, which
+  sends data off the host; the string `'true'` for an `unsafe` flag was dropped without a word; a string for
+  `extraRedactedQueryParams` was spread into its characters and a number threw a `TypeError` out of the start.
+  `startTelemetry` now rejects with an error whose `code` is `BYMAX_TELEMETRY_OPTION_INVALID` and whose `option`
+  names the option, before any SDK is started. The boolean options (`enabled`, `instrumentations.fs`,
+  `instrumentations.sendLogs`, the `unsafe` flags) must be booleans, `serviceName` and `serviceVersion` strings,
+  `ignoreIncomingRequest` a function, and `unsafe`, `instrumentations`, its `overrides` and `env` objects.
+  `extraRedactedQueryParams` must be an array of at most 1000 strings and `overrides` an object of at most 1000
+  entries that are each an object. `shutdownTimeoutMs` keeps its documented fallback.
+- **Each option of a call is read once.** `serviceName` was read by the warning about a missing name and again by
+  the resource, and `enabled` and `env` by the call and again by the "already running" warning, so a getter could
+  make a warning and the effect disagree. A call now reads each option once, checks its kind, and works from the
+  copy.
 
 ### Documentation
 
 - **The README says a failed start starts no new SDK.** It said "no SDK started and no handle left", which is
   wrong for a later call that finds an SDK already running; it now says that the failed start starts no new SDK
   and that a first start leaves no handle.
-- **The README narrows what a failed start leaves behind.** "No SDK started and no handle left" holds for a first
-  start; a later call that finds an SDK already running can also reject, while it reads the options of the call, and the running SDK and its handle are not touched. It also says that the sampler ratio warning cuts
-  the value it repeats to 40 characters and writes control, separator and invisible characters as escapes.
-- **The README says what was run, and when, for the figures no script reproduces.** The one-laptop figures of the
-  Production section, the timings of the `ignorePaths` pattern, the attribute names of the out-of-scope list, the
-  `redis` versions, the restart run and the `nest-logger` run are marked as of 2026-11-13, with the ones that
-  have a proof in this repository told apart from the ones that do not.
-- **The README lists the ranges of the peers that are not OpenTelemetry packages.** The version table named only the
-  OpenTelemetry peers; the line after it now gives the ranges of `@bymax-one/nest-core`, `prom-client` and the
-  Nest peers, as `package.json` declares them. The CPU item of the Production section no longer says "that
-  handler", which the section had stopped naming.
+- **The README lists the ranges of the peers that are not OpenTelemetry packages**, as `package.json` declares
+  them, and its CPU item no longer says "that handler".
+
+### Apply to a derived backend
+
+A configuration that passed a value of the wrong kind used to be accepted and now fails at start with
+`BYMAX_TELEMETRY_OPTION_INVALID`. Look for a string such as `'false'` in `instrumentations.sendLogs` or an `unsafe`
+flag (read from an environment variable without converting it), a single string for `extraRedactedQueryParams`
+(pass `['name']`), and a list or `overrides` map of more than 1000 entries. Nothing else changes: a plain value of
+the documented kind behaves as before.
 
 ## [1.0.9] - 2026-11-20
 
