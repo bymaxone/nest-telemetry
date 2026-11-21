@@ -271,12 +271,18 @@ describe('startTelemetry reads each option once', () => {
       return { wrap, count: () => seen }
     }
 
+    /** Every option of a start, each object and the array wrapped (the function is stored and never called by a start). */
     const optionsFor = (wrap: <T extends object>(t: T) => T): TelemetryOptions =>
       wrap({
-        env: {},
+        env: wrap({}),
+        serviceName: 'sweep-service',
+        serviceVersion: '1.2.3',
+        extraRedactedQueryParams: wrap(['sid', 'token']),
+        ignoreIncomingRequest: () => false,
+        shutdownTimeoutMs: 1000,
         unsafe: wrap({ exportHostId: true as const, disableUrlRedaction: true as const }),
-        instrumentations: wrap({ sendLogs: false })
-      }) as TelemetryOptions
+        instrumentations: wrap({ sendLogs: false, overrides: wrap({}) })
+      }) as unknown as TelemetryOptions
 
     it('ends a run whose nth operation throws in that error, with no half-started SDK', async () => {
       // Scenario: the host passes options whose operations can fail (a getter that throws, a proxy). For
@@ -299,10 +305,13 @@ describe('startTelemetry reads each option once', () => {
         expect(outcome).toBe(`operation ${n} failed`)
         expect(currentHandle()).toBeUndefined()
         expect(mockSdkInstance.start).not.toHaveBeenCalled()
+        // Nothing is cleared by hand before this: a start after the failed one must not be blocked.
+        const later = await startTelemetry({ env: {} })
+        expect(later.enabled).toBe(true)
         clearHandle()
         clearPendingStart()
       }
-      expect(swept).toBeGreaterThan(10)
+      expect(swept).toBeGreaterThan(20)
       expect(swept).toBeLessThan(MOST_OPERATIONS)
     })
 

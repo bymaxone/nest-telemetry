@@ -10,6 +10,16 @@ heading here.
 
 ## [Unreleased]
 
+### Documentation
+
+- **The README narrows what a failed start leaves behind.** "No SDK started and no handle left" holds for a first
+  start; a later call that finds an SDK already running can also reject, while it reads the options of the call, and the running SDK and its handle are not touched. It also says that the sampler ratio warning cuts
+  the value it repeats to 40 characters and writes control, separator and invisible characters as escapes.
+- **The README says what was run, and when, for the figures no script reproduces.** The one-laptop figures of the
+  Production section, the timings of the `ignorePaths` pattern, the attribute names of the out-of-scope list, the
+  `redis` versions, the restart run and the `nest-logger` run are marked as of 2026-11-13, with the ones that
+  have a proof in this repository told apart from the ones that do not.
+
 ## [1.0.9] - 2026-11-20
 
 ### Fixed
