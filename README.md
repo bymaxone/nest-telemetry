@@ -310,7 +310,7 @@ Every `@opentelemetry/*` package is an optional peer. The `0.x` packages break b
 | `@opentelemetry/resources`                  | `^3.1.0`   |
 | `@opentelemetry/auto-instrumentations-node` | `^0.83.0`  |
 
-The optional peers that are not OpenTelemetry packages, for `./nest` and `./observability`, are `@bymax-one/nest-core` `^1.1.0`, `prom-client` `^15.0.0`, `@nestjs/common` `^11.0.16`, `@nestjs/core` `^11.1.18`, `reflect-metadata` `^0.2.0` and `rxjs` `^7.8.0`.
+The optional peers that are not OpenTelemetry packages are `@bymax-one/nest-core` `^1.1.0`, `prom-client` `^15.0.0`, `@nestjs/common` `^11.0.16`, `@nestjs/core` `^11.1.18`, `reflect-metadata` `^0.2.0` and `rxjs` `^7.8.0`.
 
 A caret on a `0.x` version allows patch releases only, so each OpenTelemetry minor needs a release of this package to widen the range. That is a human decision: a weekly job runs the unit and end-to-end suites, the build and the tarball checks against the newest release of every OpenTelemetry package, ignoring the lockfile, and opens an issue when they fail. A range is widened in a pull request after the job passes against the new generation. Dependabot groups the OpenTelemetry packages, so they move as one set.
 
