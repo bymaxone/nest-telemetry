@@ -19,6 +19,10 @@ heading here.
   Production section, the timings of the `ignorePaths` pattern, the attribute names of the out-of-scope list, the
   `redis` versions, the restart run and the `nest-logger` run are marked as of 2026-11-13, with the ones that
   have a proof in this repository told apart from the ones that do not.
+- **The README lists the ranges of the peers that are not OpenTelemetry packages.** The version table named only the
+  OpenTelemetry peers; the line after it now gives the ranges of `@bymax-one/nest-core`, `prom-client` and the
+  Nest peers, as `package.json` declares them. The CPU item of the Production section no longer says "that
+  handler", which the section had stopped naming.
 
 ## [1.0.9] - 2026-11-20
 
