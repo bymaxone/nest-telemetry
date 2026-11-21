@@ -70,8 +70,10 @@ describe('ignorePaths', () => {
       'must be an array of regular expressions'
     )
     expect(() => ignorePaths('abc' as never)).toThrow('must be an array of regular expressions')
-    expect(() => ignorePaths(undefined as never)).toThrow('must be an array of regular expressions')
-    expect(() => ignorePaths(null as never)).toThrow('must be an array of regular expressions')
+    const absent =
+      'The ignorePaths patterns option must be an array of regular expressions, so the start was refused.'
+    expect(() => ignorePaths(undefined as never)).toThrow(absent)
+    expect(() => ignorePaths(null as never)).toThrow(absent)
   })
 
   it('keeps every pattern of an array subclass whose methods return nothing', () => {

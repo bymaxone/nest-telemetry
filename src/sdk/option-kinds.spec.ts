@@ -36,6 +36,9 @@ describe('TelemetryOptionError', () => {
     expect(error.message).toBe(
       'The unsafe.exportHostId option must be a boolean, so the start was refused.'
     )
+    expect(Object.hasOwn(error, 'cause')).toBe(false)
+    const cause = new SyntaxError('inner')
+    expect(new TelemetryOptionError('x', 'a boolean', cause).cause).toBe(cause)
   })
 })
 
