@@ -267,19 +267,27 @@ describe('requireObject, for a value of a kind that is not a plain object', () =
 describe('settleRegExpList', () => {
   it('copies each expression, reading its source and its flags once', () => {
     // Scenario: the copy is a new expression with the same source and flags, and the host's own getters run once.
-    let reads = 0
+    let sourceReads = 0
+    let flagsReads = 0
     const given = /^\/a$/gi
     Object.defineProperty(given, 'source', {
       get: () => {
-        reads += 1
+        sourceReads += 1
         return '^\\/a$'
+      }
+    })
+    Object.defineProperty(given, 'flags', {
+      get: () => {
+        flagsReads += 1
+        return 'gi'
       }
     })
     const copy = settleRegExpList('x', [given])
     expect(copy?.[0]).not.toBe(given)
     expect(copy?.[0]?.source).toBe('^\\/a$')
     expect(copy?.[0]?.flags).toBe('gi')
-    expect(reads).toBe(1)
+    expect(sourceReads).toBe(1)
+    expect(flagsReads).toBe(1)
   })
 
   it('copies by index, not through the iterator or the methods of an array subclass', () => {

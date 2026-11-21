@@ -35,14 +35,10 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //
 // Calibration history (newest first):
 //   - 2026-11-21 (sdk and register, PM-granted): sdk 7,599 B measured, 7.44 KiB budget (7,619 B, 20 B of
-//     headroom); register 7,764 B measured, 7.60 KiB budget (7,782 B, 18 B). The growth over the previous
-//     entry, about 0.2 KiB in each, is the copy of a list by index for strings and for regular expressions,
-//     the check of the kinds that are not a plain object, and the guard that turns an error raised by the
-//     host's own list into the library's error with the original as its cause.
-//   - 2026-11-21 (sdk and register, PM-granted): sdk 7,455 B measured, 7.30 KiB budget (7,475 B, 20 B of
-//     headroom); register 7,666 B measured, 7.51 KiB budget (7,690 B, 24 B). The growth, about 0.18 KiB in sdk and
-//     0.10 KiB in register, is the copy of a list by index for strings and for regular expressions, and the check
-//     of the kinds that are not a plain object.
+//     headroom); register 7,764 B measured, 7.60 KiB budget (7,782 B, 18 B). The growth over the entry
+//     below, 358 B in sdk and 230 B in register, is the copy of a list by index for strings and for regular
+//     expressions, the check of the kinds that are not a plain object, and the guard that turns an error
+//     raised by the host's own list into the library's error with the original as its cause.
 //   - 2026-11-21 (sdk and register, PM-granted): sdk 7,241 B measured, 7.10 KiB budget (7,270 B,
 //     29 B of headroom); register 7,534 B measured, 7.39 KiB budget (7,567 B, 33 B). The growth, about 0.05 KiB
 //     in each, is the refusal of a `__proto__` key in an override.
