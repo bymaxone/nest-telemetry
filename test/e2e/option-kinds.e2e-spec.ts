@@ -140,6 +140,14 @@ describe('startTelemetry in the real library, for an option of the wrong kind', 
       'must be an array of regular expressions'
     )
     expect(() => ignorePaths(null as never)).toThrow('must be an array of regular expressions')
+    const bad = /a/
+    Object.defineProperty(bad, 'flags', { get: () => 'zz' })
+    expect(() => ignorePaths([bad])).toThrow(
+      expect.objectContaining({
+        code: 'BYMAX_TELEMETRY_OPTION_INVALID',
+        cause: expect.any(SyntaxError)
+      })
+    )
     const hidden = new Proxy([/^\/health$/], {
       get: (target, key, receiver): unknown =>
         key === 'length' ? 0 : (Reflect.get(target, key, receiver) as unknown)

@@ -325,6 +325,19 @@ describe('settleRegExpList', () => {
     )
   })
 
+  it('refuses an expression whose flags cannot be built, with the library code and the original as the cause', () => {
+    // Scenario: a RegExp whose own flags getter answers a string no expression accepts never surfaces a raw error.
+    const bad = /a/
+    Object.defineProperty(bad, 'flags', { get: () => 'zz' })
+    const error = thrown(() => settleRegExpList('x', [bad])) as TelemetryOptionError
+    expect(error).toBeInstanceOf(TelemetryOptionError)
+    expect(error.code).toBe('BYMAX_TELEMETRY_OPTION_INVALID')
+    expect(error.message).toBe(
+      'The x option must be an array of regular expressions, so the start was refused.'
+    )
+    expect(error.cause).toBeInstanceOf(SyntaxError)
+  })
+
   it('keeps an empty list empty', () => {
     // Scenario: the control: an empty list is a valid list that matches nothing.
     expect(settleRegExpList('x', [])).toEqual([])

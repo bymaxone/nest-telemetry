@@ -15,7 +15,7 @@ heading here.
 - **`ignorePaths` copies its patterns by index and refuses what is not a list of regular expressions.** It copied
   with `patterns.map`, so an array subclass whose `map` returns nothing ignored no path, and an object with a
   `source` and `flags` was accepted as an expression. It now reads the length once (at most 1000), each index once
-  and each entry through `util.types.isRegExp`, and throws `BYMAX_TELEMETRY_OPTION_INVALID` for anything else.
+  and each entry through `util.types.isRegExp`, and throws `BYMAX_TELEMETRY_OPTION_INVALID` for anything else, an expression whose own `flags` cannot be built included (its error is the `cause`).
 - **An option that must be an object refuses a `Map`, a `Set`, a `Date`, a `RegExp`, a `Promise` and a boxed
   primitive.** They were accepted and read as an empty object; they are refused as the wrong kind, by the kind
   Node reports and not by the prototype, so a class instance and a `Proxy` of a plain object are still read.

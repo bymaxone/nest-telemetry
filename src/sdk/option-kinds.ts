@@ -19,9 +19,13 @@ export class TelemetryOptionError extends Error {
   /**
    * @param option - The option that was refused.
    * @param expected - What the option must be.
+   * @param cause - The error of the host's own value that made the option unusable.
    */
-  constructor(option: string, expected: string) {
-    super(`The ${option} option must be ${expected}, so the start was refused.`)
+  constructor(option: string, expected: string, cause?: unknown) {
+    super(
+      `The ${option} option must be ${expected}, so the start was refused.`,
+      cause === undefined ? undefined : { cause }
+    )
     this.name = 'TelemetryOptionError'
     this.option = option
   }
@@ -176,8 +180,12 @@ export function settleStringList(option: string, value: unknown): readonly strin
 export function settleRegExpList(option: string, value: unknown): readonly RegExp[] | undefined {
   return copyByIndex(option, value, 'regular expressions', (entry) => {
     if (!types.isRegExp(entry)) return undefined
-    const { source, flags } = entry
-    return new RegExp(source, flags)
+    try {
+      const { source, flags } = entry
+      return new RegExp(source, flags)
+    } catch (cause) {
+      throw new TelemetryOptionError(option, 'an array of regular expressions', cause)
+    }
   })
 }
 
