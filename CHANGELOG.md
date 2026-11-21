@@ -33,6 +33,9 @@ heading here.
 - **A pointer from 1.0.7's note.** It says a rejection of a `TELEMETRY_LOGGER` promise is dropped silently; 1.0.8
   superseded that, and the README's logger paragraph says where the report goes now. The README also says that
   starting twice returns the running handle unless `enabled: false`, which returns a disabled one.
+- **The README says what `startTelemetry` rejects with.** The error that was thrown, as it was thrown: there is no
+  library error class for a start. When an option cannot be read, the start ends with that error, with no SDK
+  started and no handle left.
 
 ### Apply to a derived backend
 
