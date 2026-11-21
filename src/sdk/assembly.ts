@@ -130,6 +130,13 @@ export function buildResourceAttributes(
   return attributes
 }
 
+/** The start options the instrumentation config reads; a key may hold `undefined` for an option that was not set. */
+export type InstrumentationInputs = {
+  readonly [
+    K in 'instrumentations' | 'unsafe' | 'extraRedactedQueryParams' | 'ignoreIncomingRequest'
+  ]?: TelemetryOptions[K] | undefined
+}
+
 /**
  * Builds the auto-instrumentation configuration.
  *
@@ -138,12 +145,12 @@ export function buildResourceAttributes(
  * `dbStatementSerializer` cannot silently undo them: a host list is added to the library's, and the
  * serializer stays the library's unless the host opted out through `unsafe`.
  *
- * @param options - The start options.
+ * @param options - The start options this reads, each read once by the caller.
  * @param signals - The signal plan.
  * @returns The configuration map.
  */
 export function buildInstrumentationConfig(
-  options: TelemetryOptions,
+  options: InstrumentationInputs,
   signals: SignalPlan
 ): InstrumentationConfigMap {
   const instrumentations = options.instrumentations ?? {}
@@ -172,8 +179,9 @@ export function buildInstrumentationConfig(
       ...(options.extraRedactedQueryParams ?? [])
     ])
   }
-  if (isPresent(options.ignoreIncomingRequest)) {
-    merged[HTTP_INSTRUMENTATION]['ignoreIncomingRequestHook'] = options.ignoreIncomingRequest
+  const ignoreIncomingRequest = options.ignoreIncomingRequest
+  if (isPresent(ignoreIncomingRequest)) {
+    merged[HTTP_INSTRUMENTATION]['ignoreIncomingRequestHook'] = ignoreIncomingRequest
   }
   if (redactRedis) {
     for (const name of [IOREDIS_INSTRUMENTATION, REDIS_INSTRUMENTATION]) {
@@ -206,7 +214,9 @@ export function warnAboutMissingServiceName(
  *
  * @param options - The start options.
  */
-export function warnAboutUnsafeOptions(options: TelemetryOptions): void {
+export function warnAboutUnsafeOptions(options: {
+  readonly unsafe?: TelemetryOptions['unsafe'] | undefined
+}): void {
   const unsafe = options.unsafe
   if (unsafe?.disableUrlRedaction === true) {
     process.emitWarning(
