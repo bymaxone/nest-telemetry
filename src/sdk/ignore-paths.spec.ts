@@ -64,6 +64,28 @@ describe('ignorePaths', () => {
     expect(predicate({ url: '/a' })).toBe(true)
   })
 
+  it('refuses patterns that are not a list of regular expressions', () => {
+    // Scenario: a stand-in for a list, or an entry that only looks like an expression, is not accepted.
+    expect(() => ignorePaths([{ source: '.*', flags: '' }] as never)).toThrow(
+      'must be an array of regular expressions'
+    )
+    expect(() => ignorePaths('abc' as never)).toThrow('must be an array of regular expressions')
+    expect(() => ignorePaths(undefined as never)).toThrow('must be an array of regular expressions')
+    expect(() => ignorePaths(null as never)).toThrow('must be an array of regular expressions')
+  })
+
+  it('keeps every pattern of an array subclass whose methods return nothing', () => {
+    // Scenario: the copy is by index, so a subclass that hides its entries still ignores its paths.
+    class Hollow extends Array<RegExp> {
+      override map(): never[] {
+        return []
+      }
+    }
+    const given = new Hollow()
+    given.push(/^\/health$/)
+    expect(ignorePaths(given)({ url: '/health' })).toBe(true)
+  })
+
   describe('the length cap', () => {
     const MAX = 2048
     const pad = (length: number): string => '/' + 'a'.repeat(length - 1)

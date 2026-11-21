@@ -11,6 +11,7 @@ import {
   requireObject,
   requireString,
   settleOverrides,
+  settleRegExpList,
   settleStringList
 } from './option-kinds'
 
@@ -226,5 +227,106 @@ describe('settleOverrides, for a key named __proto__', () => {
   it('does not refuse an ordinary key that merely contains the word', () => {
     // Scenario: the control for the row above.
     expect(settleOverrides('x', { proto: { __proto_: 1 } })).toEqual({ proto: { __proto_: 1 } })
+  })
+})
+
+describe('requireObject, for a value of a kind that is not a plain object', () => {
+  class Config {
+    readonly enabled = true
+  }
+
+  it.each([
+    ['a Map', new Map([['a', true]])],
+    ['a Set', new Set(['a'])],
+    ['a Date', new Date(0)],
+    ['a RegExp', /a/],
+    ['a Promise', Promise.resolve({})],
+    ['a boxed boolean', new Boolean(false)]
+  ])('refuses %s as the wrong kind, saying only that it must be an object', (_what, value) => {
+    // Scenario: a stand-in that looks like an object but is not one reaches an option that must be one.
+    expect((thrown(() => requireObject('x', value)) as Error).message).toBe(
+      'The x option must be an object, so the start was refused.'
+    )
+  })
+
+  it.each([
+    ['a plain object', { a: 1 }],
+    ['an object with no prototype', Object.create(null) as object],
+    ['an object with a prototype of its own', Object.create({ inherited: true }) as object],
+    ['an instance of a class', new Config()],
+    ['a Proxy of a plain object', new Proxy({}, {})]
+  ])('accepts %s', (_what, value) => {
+    // Scenario: the control for the rows above: the kinds a host really passes are kept.
+    expect(requireObject('x', value)).toBe(value)
+  })
+})
+
+describe('settleRegExpList', () => {
+  it('copies each expression, reading its source and its flags once', () => {
+    // Scenario: the copy is a new expression with the same source and flags, and the host's own getters run once.
+    let reads = 0
+    const given = /^\/a$/gi
+    Object.defineProperty(given, 'source', {
+      get: () => {
+        reads += 1
+        return '^\\/a$'
+      }
+    })
+    const copy = settleRegExpList('x', [given])
+    expect(copy?.[0]).not.toBe(given)
+    expect(copy?.[0]?.source).toBe('^\\/a$')
+    expect(copy?.[0]?.flags).toBe('gi')
+    expect(reads).toBe(1)
+  })
+
+  it('copies by index, not through the iterator or the methods of an array subclass', () => {
+    // Scenario: a subclass with an empty iterator and a map that returns nothing still yields what it holds.
+    class Hollow extends Array<RegExp> {
+      override map(): never[] {
+        return []
+      }
+      override *[Symbol.iterator](): Generator<never> {
+        // yields nothing
+      }
+    }
+    const given = new Hollow()
+    given.push(/^\/a$/)
+    expect(settleRegExpList('x', given)).toHaveLength(1)
+  })
+
+  it.each([
+    ['not an array', /a/, 'an array of regular expressions'],
+    ['an entry that is not a RegExp', ['a'], 'an array of regular expressions'],
+    [
+      'an entry that only looks like one',
+      [{ source: '.*', flags: '' }],
+      'an array of regular expressions'
+    ],
+    [
+      'an array over the cap',
+      new Array<RegExp>(MAX_OPTION_ENTRIES + 1).fill(/a/),
+      `an array of at most ${MAX_OPTION_ENTRIES} regular expressions`
+    ]
+  ])('refuses %s, saying %s', (_what, value, expected) => {
+    // Scenario: each way the list can be wrong has its own words.
+    expect((thrown(() => settleRegExpList('x', value)) as Error).message).toBe(
+      `The x option must be ${expected}, so the start was refused.`
+    )
+  })
+
+  it('refuses an empty copy of an input that holds entries', () => {
+    // Scenario: a stand-in whose length reads 0 while it holds an expression is not read as an empty list.
+    const list = new Proxy([/a/], {
+      get: (target, key, receiver): unknown =>
+        key === 'length' ? 0 : (Reflect.get(target, key, receiver) as unknown)
+    })
+    expect((thrown(() => settleRegExpList('x', list)) as Error).message).toBe(
+      'The x option must be an array of regular expressions, so the start was refused.'
+    )
+  })
+
+  it('keeps an empty list empty', () => {
+    // Scenario: the control: an empty list is a valid list that matches nothing.
+    expect(settleRegExpList('x', [])).toEqual([])
   })
 })

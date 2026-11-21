@@ -3,7 +3,7 @@
  * anything, names the option, and never repeats the value it was given.
  * @layer e2e
  */
-import { shutdownTelemetry, startTelemetry } from '@bymax-one/nest-telemetry'
+import { ignorePaths, shutdownTelemetry, startTelemetry } from '@bymax-one/nest-telemetry'
 import type { TelemetryOptions } from '@bymax-one/nest-telemetry'
 
 import { allowRestart } from './fixtures/restart'
@@ -34,6 +34,8 @@ describe('startTelemetry in the real library, for an option of the wrong kind', 
     ['ignoreIncomingRequest', { ignoreIncomingRequest: SECRET }, 'a function'],
     ['unsafe', { unsafe: true }, 'an object'],
     ['env', { env: [] }, 'an object'],
+    ['unsafe', { unsafe: new Map([['exportHostId', true]]) }, 'an object'],
+    ['instrumentations', { instrumentations: new Date(0) }, 'an object'],
     [
       'instrumentations.overrides',
       { instrumentations: { overrides: { http: SECRET } } },
@@ -122,5 +124,26 @@ describe('startTelemetry in the real library, for an option of the wrong kind', 
     } finally {
       delete process.env['OTEL_EXPORTER_OTLP_ENDPOINT']
     }
+  })
+
+  it('keeps the patterns of ignorePaths whole, and refuses ones that only look like expressions', () => {
+    // Scenario: an array subclass that hides its entries still ignores its paths, and a stand-in is refused.
+    class Hollow extends Array<RegExp> {
+      override map(): never[] {
+        return []
+      }
+    }
+    const given = new Hollow()
+    given.push(/^\/health$/)
+    expect(ignorePaths(given)({ url: '/health' })).toBe(true)
+    expect(() => ignorePaths([{ source: '.*', flags: '' }] as never)).toThrow(
+      'must be an array of regular expressions'
+    )
+    expect(() => ignorePaths(null as never)).toThrow('must be an array of regular expressions')
+    const hidden = new Proxy([/^\/health$/], {
+      get: (target, key, receiver): unknown =>
+        key === 'length' ? 0 : (Reflect.get(target, key, receiver) as unknown)
+    })
+    expect(() => ignorePaths(hidden)).toThrow('must be an array of regular expressions')
   })
 })

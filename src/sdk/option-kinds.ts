@@ -4,6 +4,8 @@
  * @layer sdk
  */
 
+import { types } from 'node:util'
+
 /** The most entries a list or a map option may hold. */
 export const MAX_OPTION_ENTRIES = 1000
 
@@ -82,14 +84,73 @@ export function requireFunction<F extends (...args: never[]) => unknown>(
  */
 export function requireObject(option: string, value: unknown): object | undefined {
   if (value === undefined || value === null) return undefined
-  if (typeof value !== 'object' || Array.isArray(value)) {
+  if (typeof value !== 'object' || Array.isArray(value) || isOtherKind(value)) {
     throw new TelemetryOptionError(option, 'an object')
   }
   return value
 }
 
 /**
- * Copies a list of strings, reading its length once and each index once.
+ * Whether an object is a stand-in of a kind that holds no settings, told by the kind Node reports
+ * and not by its prototype: the environment object and an instance of a host class have prototypes of
+ * their own and are objects of settings.
+ *
+ * @param value - An object that is not an array.
+ * @returns `true` for a boxed primitive, a Map, a Set, a Date, a RegExp or a Promise.
+ */
+function isOtherKind(value: object): boolean {
+  return (
+    types.isBoxedPrimitive(value) ||
+    types.isMap(value) ||
+    types.isSet(value) ||
+    types.isDate(value) ||
+    types.isRegExp(value) ||
+    types.isPromise(value)
+  )
+}
+
+/**
+ * Copies a list by index, reading its length once as a bounded integer and each index once, never
+ * through the iterator or a method of the host's array.
+ *
+ * @param option - The option name, for the error.
+ * @param value - The option value.
+ * @param noun - What the entries are, in the plural, for the words of the error.
+ * @param take - Returns the copy of an entry, or `undefined` when the entry has the wrong kind.
+ * @returns The copies, or `undefined` when the option is absent.
+ * @throws {TelemetryOptionError} When the value is not an array of at most {@link MAX_OPTION_ENTRIES}
+ *   entries of the right kind, or its length reads empty while it holds entries.
+ */
+function copyByIndex<T>(
+  option: string,
+  value: unknown,
+  noun: string,
+  take: (entry: unknown) => T | undefined
+): readonly T[] | undefined {
+  if (!isGiven(value)) return undefined
+  const expected = `an array of ${noun}`
+  if (!Array.isArray(value)) throw new TelemetryOptionError(option, expected)
+  const length: unknown = value.length
+  if (typeof length !== 'number' || !Number.isInteger(length) || length < 0) {
+    throw new TelemetryOptionError(option, expected)
+  }
+  if (length > MAX_OPTION_ENTRIES) {
+    throw new TelemetryOptionError(option, `an array of at most ${MAX_OPTION_ENTRIES} ${noun}`)
+  }
+  if (length === 0 && Object.keys(value).length > 0) {
+    throw new TelemetryOptionError(option, expected)
+  }
+  const copy: T[] = []
+  for (let index = 0; index < length; index++) {
+    const taken = take(value[index])
+    if (taken === undefined) throw new TelemetryOptionError(option, expected)
+    copy.push(taken)
+  }
+  return copy
+}
+
+/**
+ * Copies a list of strings.
  *
  * @param option - The option name, for the error.
  * @param value - The option value.
@@ -98,22 +159,26 @@ export function requireObject(option: string, value: unknown): object | undefine
  *   {@link MAX_OPTION_ENTRIES} strings.
  */
 export function settleStringList(option: string, value: unknown): readonly string[] | undefined {
-  if (!isGiven(value)) return undefined
-  if (!Array.isArray(value)) throw new TelemetryOptionError(option, 'an array of strings')
-  const length: unknown = value.length
-  if (typeof length !== 'number' || !Number.isInteger(length) || length < 0) {
-    throw new TelemetryOptionError(option, 'an array of strings')
-  }
-  if (length > MAX_OPTION_ENTRIES) {
-    throw new TelemetryOptionError(option, `an array of at most ${MAX_OPTION_ENTRIES} strings`)
-  }
-  const copy: string[] = []
-  for (let index = 0; index < length; index++) {
-    const item: unknown = value[index]
-    if (typeof item !== 'string') throw new TelemetryOptionError(option, 'an array of strings')
-    copy.push(item)
-  }
-  return copy
+  return copyByIndex(option, value, 'strings', (entry) =>
+    typeof entry === 'string' ? entry : undefined
+  )
+}
+
+/**
+ * Copies a list of regular expressions, reading the source and the flags of each once.
+ *
+ * @param option - The option name, for the error.
+ * @param value - The option value.
+ * @returns A new expression for each entry, or `undefined` when the option is absent.
+ * @throws {TelemetryOptionError} When the value is not an array of at most
+ *   {@link MAX_OPTION_ENTRIES} regular expressions.
+ */
+export function settleRegExpList(option: string, value: unknown): readonly RegExp[] | undefined {
+  return copyByIndex(option, value, 'regular expressions', (entry) => {
+    if (!types.isRegExp(entry)) return undefined
+    const { source, flags } = entry
+    return new RegExp(source, flags)
+  })
 }
 
 /** The path an error names for a setting of an override, so the host's own keys never reach it. */
