@@ -10,6 +10,15 @@ heading here.
 
 ## [Unreleased]
 
+### Documentation
+
+- **The README says that the sampler ratio warning does not repeat a blank value.** It repeats the value only when
+  it is not blank; a blank one is called blank.
+- **A clarification of 1.0.8's note on the unsafe options.** They are read three times in a start: by the
+  warning about turned-off redactions, by the instrumentation config (for the Redis opt-out) and by the SDK
+  build (for the other three opt-outs), once each. Each step reads them once, but the steps do not share one
+  read.
+
 ## [1.0.8] - 2026-11-20
 
 ### Fixed

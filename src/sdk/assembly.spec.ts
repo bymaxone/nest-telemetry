@@ -668,6 +668,23 @@ describe('warnAboutSamplerRatio', () => {
     expect(text).toContain(`"1${escape}5%"`)
   })
 
+  it.each([
+    ['a lone high surrogate in the value', `1${String.fromCharCode(0xd800)}5%`, '\\ud800'],
+    [
+      'an emoji that the cut of 40 characters splits in half',
+      `${'a'.repeat(39)}\u{1f600}`,
+      '\\ud83d'
+    ]
+  ])('writes %s as an escape, never as a lone surrogate', (_what, arg, escape) => {
+    // Scenario: a lone surrogate is not valid text and would be replaced in the log line, or break
+    // the line in a consumer that decodes strictly; `JSON.stringify` writes it as an escape, and the
+    // category class after it must keep it that way.
+    warnAboutSamplerRatio(ratio('traceidratio', arg))
+    const text = String(emitWarning.mock.calls[0]?.[0])
+    expect(text).toContain(escape)
+    expect(/[\ud800-\udfff]/.test(text)).toBe(false)
+  })
+
   it('keeps a character it must escape out of the 40 that are shown, never splitting its escape', () => {
     // Scenario: the cut is made before the escape, so a value of 39 letters and a format character
     // shows the whole escape, and a 41st character is not shown.
