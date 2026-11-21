@@ -10,6 +10,8 @@ heading here.
 
 ## [Unreleased]
 
+## [1.0.8] - 2026-11-20
+
 ### Fixed
 
 - **The sampler ratio warning escapes direction and invisible characters in the value it repeats.** It quoted the
@@ -34,6 +36,8 @@ heading here.
 - **The README `env` option row says where the two sampler variables come from.** `OTEL_TRACES_SAMPLER` and
   `OTEL_TRACES_SAMPLER_ARG` are always read from the process environment, whatever the `env` option holds, as the
   SDK reads them.
+
+**Apply note.** No action is needed. A sampler ratio warning now shows a direction or invisible character in the value as an escape, so a log match on that text sees the escape. If a `TELEMETRY_LOGGER` method returns a promise that rejects, you now also get the Nest logger entry `TRACING_FLUSH_FAILED` or a process warning, where 1.0.7 wrote nothing.
 
 ## [1.0.7] - 2026-11-20
 
@@ -363,6 +367,7 @@ First release.
 - Verification from the packed tarball: real `node --import` processes in a CommonJS and a native-ESM
   application, with planted secrets absent from the exported body and negative controls.
 
+[1.0.8]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.8
 [1.0.7]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.7
 [1.0.6]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.6
 [1.0.5]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.5
