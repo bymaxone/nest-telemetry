@@ -110,6 +110,23 @@ function nonBlank(value: string | undefined): string | undefined {
   return trimmed === '' ? undefined : trimmed
 }
 
+/** The identity of the service, as the host passed it. */
+export interface ServiceIdentity {
+  readonly serviceName?: string | undefined
+  readonly serviceVersion?: string | undefined
+}
+
+/**
+ * Reads the service name and version once, each field once, into a plain object, so the warning about
+ * a missing name and the resource work from the same read.
+ *
+ * @param options - The start options.
+ * @returns The name and version as they were read.
+ */
+export function settleService(options: ServiceIdentity): ServiceIdentity {
+  return { serviceName: options.serviceName, serviceVersion: options.serviceVersion }
+}
+
 /**
  * Builds the resource attributes.
  *
@@ -118,7 +135,7 @@ function nonBlank(value: string | undefined): string | undefined {
  * @returns The semantic-convention attributes.
  */
 export function buildResourceAttributes(
-  options: TelemetryOptions,
+  options: ServiceIdentity,
   env: TelemetryEnvironment
 ): Record<string, string> {
   const attributes: Record<string, string> = {}
@@ -244,7 +261,7 @@ export function buildInstrumentationConfig(
  * @param env - The parsed environment.
  */
 export function warnAboutMissingServiceName(
-  options: TelemetryOptions,
+  options: Pick<ServiceIdentity, 'serviceName'>,
   env: TelemetryEnvironment
 ): void {
   if (env.serviceName === undefined && nonBlank(options.serviceName) === undefined) {

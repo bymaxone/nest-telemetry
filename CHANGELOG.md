@@ -10,8 +10,19 @@ heading here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The start reads `serviceName` and `serviceVersion` once.** The warning about a missing service name and the
+  resource each read `serviceName`, so an option object with a getter could make them disagree: a first read of
+  `''` and a later one of `'real'` warned that no name was set while the spans were exported as `real`. The
+  start now reads both fields once and the warning and the resource work from that read, as 1.0.9 already did
+  for `unsafe` and `instrumentations`. Apply note: nothing to change; an option that is a plain value behaves as before.
+
 ### Documentation
 
+- **The README says a failed start starts no new SDK.** It said "no SDK started and no handle left", which is
+  wrong for a later call that finds an SDK already running; it now says that the failed start starts no new SDK
+  and that a first start leaves no handle.
 - **The README narrows what a failed start leaves behind.** "No SDK started and no handle left" holds for a first
   start; a later call that finds an SDK already running can also reject, while it reads the options of the call, and the running SDK and its handle are not touched. It also says that the sampler ratio warning cuts
   the value it repeats to 40 characters and writes control, separator and invisible characters as escapes.

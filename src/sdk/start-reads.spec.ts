@@ -93,6 +93,48 @@ describe('startTelemetry reads each option once', () => {
       expect(reads).toBe(1)
     })
 
+    it.each(['serviceName', 'serviceVersion'])('reads %s once in a start', async (field) => {
+      // Scenario: the identity of the service is a getter that answers differently on each read. The
+      // warning about a missing name and the resource each used to read it, so they could disagree.
+      jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      let reads = 0
+      const options = { env: {} } as TelemetryOptions
+      Object.defineProperty(options, field, {
+        enumerable: true,
+        get: () => {
+          reads += 1
+          return 'real'
+        }
+      })
+      await startTelemetry(options)
+      expect(reads).toBe(1)
+    })
+
+    it('warns about a missing service name exactly when the resource has none, for a name that changes', async () => {
+      // Scenario: the first read of `serviceName` is blank and later ones are 'real'. With one read the
+      // start sees the blank name: it warns and exports unknown_service:node. Reading it per step warned
+      // about the missing name while the resource carried 'real'.
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      let reads = 0
+      const options: TelemetryOptions = {
+        env: {},
+        get serviceName() {
+          reads += 1
+          return reads === 1 ? '' : 'real'
+        }
+      }
+      await startTelemetry(options)
+      const [attributes] = mockResourceFromAttributes.mock.calls[0] as unknown as [
+        Record<string, string>
+      ]
+      const warned = emitWarning.mock.calls.some(
+        ([, details]) =>
+          (details as { code?: string }).code === 'BYMAX_TELEMETRY_SERVICE_NAME_MISSING'
+      )
+      expect(warned).toBe(true)
+      expect(attributes['service.name']).toBe('unknown_service:node')
+    })
+
     it.each([
       ['unsafe', 'disableUrlRedaction', true],
       ['unsafe', 'disableRedisArgumentRedaction', true],

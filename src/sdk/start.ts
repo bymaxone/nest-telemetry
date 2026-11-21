@@ -15,6 +15,7 @@ import {
   buildInstrumentationConfig,
   buildResourceAttributes,
   settleInstrumentations,
+  settleService,
   settleUnsafe,
   planSignals,
   warnAboutIgnoredOptions,
@@ -24,7 +25,7 @@ import {
   warnAboutSamplerRatio,
   warnAboutUnsafeOptions
 } from './assembly'
-import type { InstrumentationInputs } from './assembly'
+import type { InstrumentationInputs, ServiceIdentity } from './assembly'
 import { readRatioSampler, readSamplerNearMiss, readTelemetryEnvironment } from './environment'
 import type { TelemetryEnvironment } from './environment'
 import { warnOnExportFailure } from './export-failure'
@@ -126,27 +127,32 @@ async function loadPackages(): Promise<LoadedPackages> {
   return { sdkNode, sdkTrace, autoInstrumentations, exporter, resources }
 }
 
+/** The options that are read once for the whole start. */
+type ReadOnce = Pick<InstrumentationInputs, 'instrumentations' | 'unsafe'> & {
+  readonly service: ServiceIdentity
+}
+
 /**
  * Builds the SDK from the host's options and the environment, without starting it.
  *
  * @param packages - The loaded OpenTelemetry packages.
  * @param options - The host's policy.
  * @param env - The parsed environment.
- * @param read - The two options that are read once for the whole start.
+ * @param read - The options that are read once for the whole start.
  * @returns The SDK.
  */
 function buildSdk(
   packages: LoadedPackages,
   options: TelemetryOptions,
   env: TelemetryEnvironment,
-  read: Pick<InstrumentationInputs, 'instrumentations' | 'unsafe'>
+  read: ReadOnce
 ): SdkNode.NodeSDK {
   const { sdkNode, sdkTrace, autoInstrumentations, exporter, resources } = packages
   const signals = planSignals(env)
-  const { instrumentations, unsafe } = read
+  const { instrumentations, unsafe, service } = read
   return new sdkNode.NodeSDK({
     ...signals.overrides,
-    resource: resources.resourceFromAttributes(buildResourceAttributes(options, env)),
+    resource: resources.resourceFromAttributes(buildResourceAttributes(service, env)),
     resourceDetectors: selectResourceDetectors(
       env.resourceDetectors,
       {
@@ -198,8 +204,9 @@ async function boot(options: TelemetryOptions, env: TelemetryEnvironment): Promi
   // instrumentation config must all see the same values.
   const unsafe = settleUnsafe(options.unsafe)
   const instrumentations = settleInstrumentations(options.instrumentations)
+  const service = settleService(options)
   warnAboutUnsafeOptions({ unsafe })
-  warnAboutMissingServiceName(options, env)
+  warnAboutMissingServiceName(service, env)
   warnAboutOversizedTimers(env)
   warnAboutSamplerName(readSamplerNearMiss())
   warnAboutSamplerRatio(readRatioSampler())
@@ -207,7 +214,7 @@ async function boot(options: TelemetryOptions, env: TelemetryEnvironment): Promi
   // Read before the SDK starts: an option that throws when read must not leave a started SDK that no
   // handle can stop.
   const shutdownTimeoutMs = options.shutdownTimeoutMs
-  const sdk = buildSdk(await loadPackages(), options, env, { instrumentations, unsafe })
+  const sdk = buildSdk(await loadPackages(), options, env, { instrumentations, unsafe, service })
   sdk.start()
   const handle = createHandle(() => sdk.shutdown(), shutdownTimeoutMs)
   registerHandle(handle)
