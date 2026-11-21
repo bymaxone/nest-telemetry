@@ -102,9 +102,9 @@ describe('startTelemetry reads each option once', () => {
       ['instrumentations', 'sendLogs', true],
       ['instrumentations', 'overrides', {}]
     ])('reads %s.%s once in a start', async (option, field, value) => {
-      // Scenario: a field of the option is a getter that answers differently on each read. Each step of
-      // a start (the warning, the SDK build, the instrumentation config) used to read the field itself;
-      // they now share one read, so the warning and the effect cannot disagree.
+      // Scenario: a field of the option is a getter that answers differently on each read. Every step of
+      // a start (the warning, the SDK build, the instrumentation config) must work from one read of the
+      // field, so the warning and the effect cannot disagree, even for a getter that has state.
       jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
       let reads = 0
       const inner = {}
