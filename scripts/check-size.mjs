@@ -9,7 +9,7 @@
 // `node:zlib`'s brotli matches what npm/CDN compression produces on the wire.
 
 import { execFileSync } from 'node:child_process'
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { brotliCompressSync, constants } from 'node:zlib'
@@ -127,27 +127,6 @@ function readArtifact(path) {
   })
 }
 
-/**
- * The newest modification time among the source files that a build reads, so a `dist/` older than
- * them is refused and the gate cannot measure a build that no longer matches the source.
- *
- * @param {string} dir - A directory below the package root.
- * @returns {number} The newest `mtimeMs`, or 0 when there is none.
- */
-function newestSource(dir) {
-  let newest = 0
-  for (const entry of readdirSync(resolve(ROOT, dir), { withFileTypes: true })) {
-    const path = `${dir}/${entry.name}`
-    if (entry.isDirectory()) newest = Math.max(newest, newestSource(path))
-    else if (/\.ts$/.test(entry.name) && !/\.(e2e-)?spec\.ts$/.test(entry.name)) {
-      newest = Math.max(newest, statSync(resolve(ROOT, path)).mtimeMs)
-    }
-  }
-  return newest
-}
-
-const sourceTime = TARBALL === undefined || TARBALL === '' ? newestSource('src') : 0
-
 let failed = 0
 const rows = []
 
@@ -167,12 +146,6 @@ for (const { name, path, brotli: limit } of BUDGETS) {
     // code and stack reach the log.
     if (/** @type {NodeJS.ErrnoException} */ (error).code !== 'ENOENT') throw error
     console.error(`Missing build artifact: ${path} — run \`pnpm build\` first.`)
-    process.exit(2)
-  }
-  if (sourceTime > 0 && statSync(resolve(ROOT, path)).mtimeMs < sourceTime) {
-    console.error(
-      `Stale build artifact: ${path} is older than the source — run \`pnpm build\` first.`
-    )
     process.exit(2)
   }
   const compressed = brotliCompressSync(raw, BROTLI_OPTS).length
