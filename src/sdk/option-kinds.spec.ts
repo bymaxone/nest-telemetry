@@ -137,7 +137,7 @@ describe('settleOverrides, for the settings of an entry', () => {
     ['disableLogSending', {}]
   ])('refuses %s that is %p, naming the path and not the instrumentation', (key, value) => {
     // Scenario: a switch that turns a signal on or off holds something that is not a boolean; a number
-    // 0 is refused because the instrumentation would read it as a signal that is on.
+    // 0 is refused because the instrumentation would read it as a switch that is off.
     const error = thrown(() => settleOverrides('x', { secretName: { [key]: value } })) as Error
     expect(error.message).toBe(
       `The instrumentations.overrides[].${key} option must be a boolean, so the start was refused.`
