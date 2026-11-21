@@ -34,11 +34,11 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
-//   - 2026-11-21 (sdk and register, PM-granted): sdk 7,573 B measured, 7.42 KiB budget (7,598 B, 25 B of
-//     headroom); register 7,717 B measured, 7.56 KiB budget (7,741 B, 24 B). The growth over the previous
-//     entry, about 0.2 KiB in sdk and 0.2 KiB in register, is the copy of a list by index for strings and for
-//     regular expressions, the check of the kinds that are not a plain object, and the guard that turns an
-//     error of the host's own list into the library's error with the original as its cause.
+//   - 2026-11-21 (sdk and register, PM-granted): sdk 7,599 B measured, 7.44 KiB budget (7,619 B, 20 B of
+//     headroom); register 7,764 B measured, 7.60 KiB budget (7,782 B, 18 B). The growth over the previous
+//     entry, about 0.2 KiB in each, is the copy of a list by index for strings and for regular expressions,
+//     the check of the kinds that are not a plain object, and the guard that turns an error raised by the
+//     host's own list into the library's error with the original as its cause.
 //   - 2026-11-21 (sdk and register, PM-granted): sdk 7,455 B measured, 7.30 KiB budget (7,475 B, 20 B of
 //     headroom); register 7,666 B measured, 7.51 KiB budget (7,690 B, 24 B). The growth, about 0.18 KiB in sdk and
 //     0.10 KiB in register, is the copy of a list by index for strings and for regular expressions, and the check
@@ -84,8 +84,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
 //   met by shortening the text of a warning.
 const BUDGETS = [
-  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 7.42 * 1024 },
-  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 7.56 * 1024 },
+  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 7.44 * 1024 },
+  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 7.6 * 1024 },
   { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.04 * 1024 },
   { name: 'observability (metrics)', path: 'dist/observability/index.mjs', brotli: 0.69 * 1024 }
 ]

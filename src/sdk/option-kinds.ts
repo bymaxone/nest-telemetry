@@ -121,6 +121,7 @@ function isOtherKind(value: object): boolean {
  * @param value - The option value.
  * @param noun - What the entries are, in the plural, for the words of the error.
  * @param take - Returns the copy of an entry, or `undefined` when the entry has the wrong kind.
+ * @param guarded - Whether an error the host's own list raises becomes the cause of the library's error.
  * @returns The copies, or `undefined` when the option is absent.
  * @throws {TelemetryOptionError} When the value is not an array of at most {@link MAX_OPTION_ENTRIES}
  *   entries of the right kind, or its length reads empty while it holds entries.
@@ -129,24 +130,36 @@ function copyByIndex<T>(
   option: string,
   value: unknown,
   noun: string,
-  take: (entry: unknown) => T | undefined
+  take: (entry: unknown) => T | undefined,
+  guarded: boolean
 ): readonly T[] | undefined {
   if (!isGiven(value)) return undefined
   const expected = `an array of ${noun}`
-  if (!Array.isArray(value)) throw new TelemetryOptionError(option, expected)
-  const length: unknown = value.length
+  // An error raised by the host's own list is a host error: it is the cause of the library's error
+  // when the caller asks for that, and it reaches the caller as it was thrown otherwise.
+  const host = <R>(read: () => R): R => {
+    if (!guarded) return read()
+    try {
+      return read()
+    } catch (cause) {
+      throw new TelemetryOptionError(option, expected, cause)
+    }
+  }
+  if (!host(() => Array.isArray(value))) throw new TelemetryOptionError(option, expected)
+  const list = value as unknown[]
+  const length: unknown = host(() => list.length)
   if (typeof length !== 'number' || !Number.isInteger(length) || length < 0) {
     throw new TelemetryOptionError(option, expected)
   }
   if (length > MAX_OPTION_ENTRIES) {
     throw new TelemetryOptionError(option, `an array of at most ${MAX_OPTION_ENTRIES} ${noun}`)
   }
-  if (length === 0 && Object.keys(value).length > 0) {
+  if (length === 0 && host(() => Object.keys(list).length) > 0) {
     throw new TelemetryOptionError(option, expected)
   }
   const copy: T[] = []
   for (let index = 0; index < length; index++) {
-    const taken = take(value[index])
+    const taken = take(host(() => list[index]))
     if (taken === undefined) throw new TelemetryOptionError(option, expected)
     copy.push(taken)
   }
@@ -163,13 +176,18 @@ function copyByIndex<T>(
  *   {@link MAX_OPTION_ENTRIES} strings.
  */
 export function settleStringList(option: string, value: unknown): readonly string[] | undefined {
-  return copyByIndex(option, value, 'strings', (entry) =>
-    typeof entry === 'string' ? entry : undefined
+  return copyByIndex(
+    option,
+    value,
+    'strings',
+    (entry) => (typeof entry === 'string' ? entry : undefined),
+    false
   )
 }
 
 /**
- * Copies a list of regular expressions, reading the source and the flags of each once.
+ * Copies a list of regular expressions, reading the source and the flags of each once. An error the
+ * host's own list raises is the cause of the library's error.
  *
  * @param option - The option name, for the error.
  * @param value - The option value.
@@ -178,15 +196,21 @@ export function settleStringList(option: string, value: unknown): readonly strin
  *   {@link MAX_OPTION_ENTRIES} regular expressions.
  */
 export function settleRegExpList(option: string, value: unknown): readonly RegExp[] | undefined {
-  return copyByIndex(option, value, 'regular expressions', (entry) => {
-    if (!types.isRegExp(entry)) return undefined
-    try {
-      const { source, flags } = entry
-      return new RegExp(source, flags)
-    } catch (cause) {
-      throw new TelemetryOptionError(option, 'an array of regular expressions', cause)
-    }
-  })
+  return copyByIndex(
+    option,
+    value,
+    'regular expressions',
+    (entry) => {
+      if (!types.isRegExp(entry)) return undefined
+      try {
+        const { source, flags } = entry
+        return new RegExp(source, flags)
+      } catch (cause) {
+        throw new TelemetryOptionError(option, 'an array of regular expressions', cause)
+      }
+    },
+    true
+  )
 }
 
 /** The path an error names for a setting of an override, so the host's own keys never reach it. */

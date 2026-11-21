@@ -13,22 +13,6 @@ const PATTERNS = 'ignorePaths patterns'
 const EXPECTED = 'an array of regular expressions'
 
 /**
- * Copies the patterns, so that no error a host's own list raises reaches the caller as it was thrown.
- *
- * @param patterns - What the host passed.
- * @returns The copied expressions, or `undefined` when nothing was passed.
- * @throws {TelemetryOptionError} With the error of the host's list as its cause.
- */
-function copyPatterns(patterns: unknown): readonly RegExp[] | undefined {
-  try {
-    return settleRegExpList(PATTERNS, patterns)
-  } catch (cause) {
-    if (cause instanceof TelemetryOptionError) throw cause
-    throw new TelemetryOptionError(PATTERNS, EXPECTED, cause)
-  }
-}
-
-/**
  * Builds a predicate that matches the path of an incoming request against the patterns.
  *
  * Only the path is compared: the query string is cut first, so an exclusion cannot be switched off
@@ -49,7 +33,7 @@ export function ignorePaths(
 ): (request: IncomingRequestTarget) => boolean {
   // Copied without the global and sticky flags: those keep `lastIndex` between tests, so the same
   // path would match on one call and not the next.
-  const copied = copyPatterns(patterns)
+  const copied = settleRegExpList(PATTERNS, patterns)
   if (copied === undefined) {
     throw new TelemetryOptionError(PATTERNS, EXPECTED)
   }

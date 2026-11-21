@@ -126,6 +126,61 @@ describe('ignorePaths', () => {
       }
     )
 
+    it('ignorePaths refuses a library error replayed from the keys of the list, as a host error', () => {
+      // Scenario: the keys are read when the length answers 0, and a replayed library error is a host error.
+      const replayed = new TelemetryOptionError('their.option', 'their words')
+      const list = new Proxy([/^\/a$/], {
+        get: (target, key, receiver): unknown =>
+          key === 'length' ? 0 : (Reflect.get(target, key, receiver) as unknown),
+        ownKeys: (): never => {
+          throw replayed
+        }
+      })
+      let error: unknown
+      try {
+        ignorePaths(list)
+      } catch (caught) {
+        error = caught
+      }
+      expect(error).toMatchObject({ option: 'ignorePaths patterns', cause: replayed })
+      expect((error as Error).message).not.toContain('their')
+    })
+
+    it('ignorePaths refuses a list whose kind cannot be read, with the TypeError as the cause', () => {
+      // Scenario: a revoked Proxy throws when it is asked whether it is an array.
+      const { proxy, revoke } = Proxy.revocable([], {})
+      revoke()
+      let error: unknown
+      try {
+        ignorePaths(proxy)
+      } catch (caught) {
+        error = caught
+      }
+      expect(error).toMatchObject({ option: 'ignorePaths patterns', cause: expect.any(TypeError) })
+    })
+
+    it.each(['length', 'index'] as const)(
+      'ignorePaths refuses a library error thrown by the list itself, as a host error, for the %s',
+      (operation) => {
+        // Scenario: a host replays an error of this library from its own list; it is a host error all the same.
+        const replayed = new TelemetryOptionError('their.option', 'their words')
+        const list = new Proxy([/^\/a$/], {
+          get: (target, key, receiver): unknown => {
+            if (key === (operation === 'length' ? 'length' : '0')) throw replayed
+            return Reflect.get(target, key, receiver) as unknown
+          }
+        })
+        let error: unknown
+        try {
+          ignorePaths(list)
+        } catch (caught) {
+          error = caught
+        }
+        expect(error).toMatchObject({ option: 'ignorePaths patterns', cause: replayed })
+        expect((error as Error).message).not.toContain('their')
+      }
+    )
+
     it.each(['length', 'index', 'keys'] as const)(
       'a start-time list keeps the error as it was thrown, for the %s, as the README says',
       (operation) => {
