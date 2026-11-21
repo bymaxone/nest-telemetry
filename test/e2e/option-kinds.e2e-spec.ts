@@ -95,6 +95,16 @@ describe('startTelemetry in the real library, for an option of the wrong kind', 
     expect(error?.message).toContain('an object of at most 1000 settings')
   })
 
+  it('refuses a __proto__ key in an override, from JSON.parse', async () => {
+    // Scenario: configuration read from JSON carries `__proto__` as an own key; it is refused and never
+    // becomes the prototype of a copy.
+    const overrides = JSON.parse(
+      '{"@opentelemetry/instrumentation-pino":{"__proto__":{"enabled":true}}}'
+    )
+    const error = await refusal({ instrumentations: { overrides } })
+    expect(error?.message).toContain('free of a __proto__ key')
+  })
+
   it('refuses overrides over the cap', async () => {
     // Scenario: a map with more entries than the cap.
     const overrides = Object.fromEntries(Array.from({ length: 1001 }, (_, i) => [`i${i}`, {}]))

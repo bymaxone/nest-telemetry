@@ -210,3 +210,21 @@ describe('settleOverrides, for the settings of an entry', () => {
     )
   })
 })
+
+describe('settleOverrides, for a key named __proto__', () => {
+  it.each([
+    ['a setting of an entry', '{"pino":{"__proto__":{"enabled":true}}}'],
+    ['an entry of the map', '{"__proto__":{"enabled":true}}']
+  ])('refuses %s, so it never becomes the prototype of a copy', (_where, json) => {
+    // Scenario: JSON.parse makes `__proto__` an own key, which an assignment into a copy would turn
+    // into the prototype; the start is refused with a fixed path.
+    expect(() => settleOverrides('x', JSON.parse(json))).toThrow(
+      'The instrumentations.overrides[] option must be free of a __proto__ key, so the start was refused.'
+    )
+  })
+
+  it('does not refuse an ordinary key that merely contains the word', () => {
+    // Scenario: the control for the row above.
+    expect(settleOverrides('x', { proto: { __proto_: 1 } })).toEqual({ proto: { __proto_: 1 } })
+  })
+})

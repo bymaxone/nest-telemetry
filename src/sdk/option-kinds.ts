@@ -120,6 +120,17 @@ export function settleStringList(option: string, value: unknown): readonly strin
 const OVERRIDE_PATH = 'instrumentations.overrides[]'
 
 /**
+ * Refuses an own key named `__proto__`, which `JSON.parse` can produce and which an assignment would
+ * turn into the prototype of the copy instead of a setting.
+ *
+ * @param key - A key of the map or of an entry.
+ * @throws {TelemetryOptionError} When the key is `__proto__`.
+ */
+function refuseProtoKey(key: string): void {
+  if (key === '__proto__') throw new TelemetryOptionError(OVERRIDE_PATH, 'free of a __proto__ key')
+}
+
+/**
  * Copies one entry of `overrides` into a plain object, reading each own key once. The settings that
  * decide what leaves the host, and the ones that run host code, are checked by kind: the boolean
  * switches `enabled` and `disableLogSending`, the list `redactedQueryParams`, and every hook.
@@ -139,6 +150,7 @@ function settleOverrideEntry(entry: object): Record<string, unknown> {
   }
   const copy: Record<string, unknown> = {}
   for (const [key, setting] of settings) {
+    refuseProtoKey(key)
     let settled: unknown = setting
     if (key === 'enabled' || key === 'disableLogSending') {
       settled = requireBoolean(`${OVERRIDE_PATH}.${key}`, setting)
@@ -173,6 +185,7 @@ export function settleOverrides(
   }
   const copy: Record<string, Record<string, unknown>> = {}
   for (const [name, entry] of entries) {
+    refuseProtoKey(name)
     const config = requireObject(option, entry)
     if (config !== undefined) copy[name] = settleOverrideEntry(config)
   }
