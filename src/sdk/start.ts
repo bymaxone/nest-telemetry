@@ -14,6 +14,8 @@ import type * as SdkTrace from '@opentelemetry/sdk-trace'
 import {
   buildInstrumentationConfig,
   buildResourceAttributes,
+  settleInstrumentations,
+  settleUnsafe,
   planSignals,
   warnAboutIgnoredOptions,
   warnAboutMissingServiceName,
@@ -191,10 +193,11 @@ function buildSdk(
  * @returns The handle of the started SDK.
  */
 async function boot(options: TelemetryOptions, env: TelemetryEnvironment): Promise<RunningHandle> {
-  // Read once for the whole start: a getter could answer differently each time, and the warning about a
-  // turned-off redaction, the SDK build and the instrumentation config must all see the same object.
-  const unsafe = options.unsafe
-  const instrumentations = options.instrumentations
+  // Read once for the whole start, each field once: a getter, on the option or on a field of it, could
+  // answer differently each time, and the warning about a turned-off redaction, the SDK build and the
+  // instrumentation config must all see the same values.
+  const unsafe = settleUnsafe(options.unsafe)
+  const instrumentations = settleInstrumentations(options.instrumentations)
   warnAboutUnsafeOptions({ unsafe })
   warnAboutMissingServiceName(options, env)
   warnAboutOversizedTimers(env)

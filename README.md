@@ -156,7 +156,7 @@ const telemetry = await startTelemetry({
 await telemetry.shutdown()
 ```
 
-This package installs no signal handler and shows none, because handling signals belongs to the application: a `SIGTERM` listener replaces Node's default termination, so it has to end the process itself once its work is done. `startTelemetry` resolves to a handle with `enabled` and `shutdown()`. Starting twice returns the handle already running, including across two copies of the module (an ES-module preload and a CommonJS application share the handle through `globalThis`). A later call that passes options is told they were ignored, and `enabled: false` against a running SDK is told it does not stop it: `shutdownTelemetry()` does.
+This package installs no signal handler and shows none, because handling signals belongs to the application: a `SIGTERM` listener replaces Node's default termination, so it has to end the process itself once its work is done. `startTelemetry` resolves to a handle with `enabled` and `shutdown()`. Starting twice returns the handle already running (unless `enabled: false`, which returns a disabled handle), including across two copies of the module (an ES-module preload and a CommonJS application share the handle through `globalThis`). A later call that passes options is told they were ignored, and `enabled: false` against a running SDK is told it does not stop it: `shutdownTelemetry()` does.
 
 ---
 

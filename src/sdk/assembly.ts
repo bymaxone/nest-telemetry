@@ -6,7 +6,7 @@ import type { InstrumentationConfigMap } from '@opentelemetry/auto-instrumentati
 
 import type { RatioSampler, TelemetryEnvironment } from './environment'
 import { buildRedactedQueryParams, serializeRedisCommandName } from './redaction'
-import type { TelemetryOptions } from './types'
+import type { InstrumentationOptions, TelemetryOptions, UnsafeOptions } from './types'
 import { reportWarning } from './warning-sink'
 
 const FS_INSTRUMENTATION = '@opentelemetry/instrumentation-fs'
@@ -130,11 +130,54 @@ export function buildResourceAttributes(
   return attributes
 }
 
+/** The unsafe options as plain flags: each is `true` only for an explicit `true`. */
+export type UnsafeFlags = { readonly [K in keyof UnsafeOptions]?: boolean | undefined }
+
+/** The instrumentation options as a plain object, each key read once. */
+export type SettledInstrumentations = {
+  readonly [K in keyof InstrumentationOptions]?: InstrumentationOptions[K] | undefined
+}
+
 /** The start options the instrumentation config reads; a key may hold `undefined` for an option that was not set. */
 export type InstrumentationInputs = {
-  readonly [
-    K in 'instrumentations' | 'unsafe' | 'extraRedactedQueryParams' | 'ignoreIncomingRequest'
-  ]?: TelemetryOptions[K] | undefined
+  readonly instrumentations?: SettledInstrumentations | undefined
+  readonly unsafe?: UnsafeFlags | undefined
+  readonly extraRedactedQueryParams?: TelemetryOptions['extraRedactedQueryParams'] | undefined
+  readonly ignoreIncomingRequest?: TelemetryOptions['ignoreIncomingRequest'] | undefined
+}
+
+/**
+ * Reads the unsafe options once, each field once, into a plain object. Every step of a start then
+ * works from this copy, so a getter, on the object or on a field, cannot answer differently to the
+ * warning about a turned-off redaction and to the SDK that applies it.
+ *
+ * @param unsafe - The host's `unsafe` option.
+ * @returns A flag per unsafe option, `true` only for an explicit `true`.
+ */
+export function settleUnsafe(unsafe: UnsafeOptions | undefined): UnsafeFlags {
+  return {
+    disableUrlRedaction: unsafe?.disableUrlRedaction === true,
+    disableRedisArgumentRedaction: unsafe?.disableRedisArgumentRedaction === true,
+    exportProcessCommandArgs: unsafe?.exportProcessCommandArgs === true,
+    exportHostId: unsafe?.exportHostId === true
+  }
+}
+
+/**
+ * Reads the instrumentation options once, each field once, into a plain object, for the same reason
+ * as {@link settleUnsafe}.
+ *
+ * @param instrumentations - The host's `instrumentations` option, or one already read.
+ * @returns The three options as they were read.
+ */
+export function settleInstrumentations(
+  instrumentations: SettledInstrumentations | undefined
+): SettledInstrumentations {
+  return {
+    fs: instrumentations?.fs,
+    sendLogs: instrumentations?.sendLogs,
+    overrides: instrumentations?.overrides
+  }
 }
 
 /**
@@ -153,7 +196,7 @@ export function buildInstrumentationConfig(
   options: InstrumentationInputs,
   signals: SignalPlan
 ): InstrumentationConfigMap {
-  const instrumentations = options.instrumentations ?? {}
+  const instrumentations = settleInstrumentations(options.instrumentations)
   const overrides: Record<string, Record<string, unknown>> = {}
   for (const [name, config] of Object.entries(instrumentations.overrides ?? {})) {
     if (isPresent(config)) overrides[name] = definedEntries(config)
@@ -215,7 +258,7 @@ export function warnAboutMissingServiceName(
  * @param options - The start options.
  */
 export function warnAboutUnsafeOptions(options: {
-  readonly unsafe?: TelemetryOptions['unsafe'] | undefined
+  readonly unsafe?: UnsafeFlags | undefined
 }): void {
   const unsafe = options.unsafe
   if (unsafe?.disableUrlRedaction === true) {
