@@ -34,6 +34,10 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
+//   - 2026-11-21 (sdk and register, PM-granted): sdk 7,028 B measured, 6.90 KiB budget (7,066 B, 38 B of
+//     headroom); register 7,308 B measured, 7.17 KiB budget (7,342 B, 34 B). The growth, about 0.7 KiB in each,
+//     is the check of the kind of every option, with its error and the caps on lists and maps, and the single
+//     read of each option of a call.
 //   - observability: 673 B measured, 0.69 KiB budget (706 B, 33 B of headroom): the metrics contributor and
 //     its one counter; `prom-client` and `@bymax-one/nest-core` stay external.
 //   - sdk: 6,265 B measured, 6.15 KiB budget (6,297 B, 32 B of headroom), the whole subpath: redaction, the
@@ -65,8 +69,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
 //   met by shortening the text of a warning.
 const BUDGETS = [
-  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 6.15 * 1024 },
-  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 6.44 * 1024 },
+  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 6.9 * 1024 },
+  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 7.17 * 1024 },
   { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.04 * 1024 },
   { name: 'observability (metrics)', path: 'dist/observability/index.mjs', brotli: 0.69 * 1024 }
 ]
