@@ -18,6 +18,12 @@ heading here.
   `extraRedactedQueryParams` was spread into its characters and a number threw a `TypeError` out of the start.
   `startTelemetry` now rejects with an error whose `code` is `BYMAX_TELEMETRY_OPTION_INVALID` and whose `option`
   names the option, before any SDK is started. `shutdownTimeoutMs` keeps its documented fallback.
+- **The settings of an `instrumentations.overrides` entry that decide what leaves the host are checked too.** An
+  override was spread over the library's configuration unchecked, so `{ disableLogSending: 0 }` for the pino
+  instrumentation turned log sending on and a non-boolean `enabled` replaced the one the library forces. Each
+  entry is now copied once; `enabled` and `disableLogSending` must be booleans, `redactedQueryParams` an array
+  of strings, every setting named `...Hook` a function, and an entry holds at most 1000 settings. The error names
+  `instrumentations.overrides[].<setting>` and never the instrumentation or the value.
 - **Each option of a call is read once.** A getter could make a warning and the effect of the call disagree. A
   call now reads each option once, checks its kind, and works from the copy.
 
@@ -34,7 +40,7 @@ heading here.
 A configuration that passed a value of the wrong kind used to be accepted and now fails at start with
 `BYMAX_TELEMETRY_OPTION_INVALID`. Look for a string such as `'false'` in `instrumentations.sendLogs` or an `unsafe`
 flag (read from an environment variable without converting it), a single string for `extraRedactedQueryParams`
-(pass `['name']`), and a list or `overrides` map of more than 1000 entries. Nothing else changes: a plain value of
+(pass `['name']`), a non-boolean `enabled` or `disableLogSending`, a non-array `redactedQueryParams` or a non-function `...Hook` inside an `overrides` entry, and a list, map or entry of more than 1000 items. Nothing else changes: a plain value of
 the documented kind behaves as before.
 
 ## [1.0.9] - 2026-11-20

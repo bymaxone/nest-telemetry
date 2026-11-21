@@ -5,7 +5,7 @@
 import type { InstrumentationConfigMap } from '@opentelemetry/auto-instrumentations-node'
 
 import type { RatioSampler, TelemetryEnvironment } from './environment'
-import { requireBoolean, requireObject, settleObjectMap } from './option-kinds'
+import { requireBoolean, requireObject, settleOverrides } from './option-kinds'
 import { buildRedactedQueryParams, serializeRedisCommandName } from './redaction'
 import type { InstrumentationOptions, TelemetryOptions, UnsafeOptions } from './types'
 import { reportWarning } from './warning-sink'
@@ -87,17 +87,6 @@ export function readEachOption(options: TelemetryOptions): Record<keyof Telemetr
     shutdownTimeoutMs: options.shutdownTimeoutMs,
     env: options.env
   }
-}
-
-/**
- * Copies the keys of an options object that hold a value, so a key set to `undefined` or `null`
- * cannot replace a default it is merged over.
- *
- * @param config - The options of one library.
- * @returns The same keys without the absent ones.
- */
-function definedEntries(config: object): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(config).filter(([, value]) => isPresent(value)))
 }
 
 /**
@@ -204,7 +193,7 @@ export function settleInstrumentations(instrumentations: unknown): {
   return {
     fs: requireBoolean('instrumentations.fs', read?.fs),
     sendLogs: requireBoolean('instrumentations.sendLogs', read?.sendLogs),
-    overrides: settleObjectMap('instrumentations.overrides', read?.overrides) as
+    overrides: settleOverrides('instrumentations.overrides', read?.overrides) as
       InstrumentationConfigMap | undefined
   }
 }
@@ -228,8 +217,8 @@ export function buildInstrumentationConfig(
   const instrumentations = settleInstrumentations(options.instrumentations)
   const overrides: Record<string, Record<string, unknown>> = {}
   for (const [name, config] of Object.entries(instrumentations.overrides ?? {})) {
-    // `settleInstrumentations` dropped the entries that are absent.
-    overrides[name] = definedEntries(config as object)
+    // `settleInstrumentations` copied the entry and dropped the settings that are absent.
+    overrides[name] = config as Record<string, unknown>
   }
   const redactRedis = options.unsafe?.disableRedisArgumentRedaction !== true
   const disableLogSending = !(instrumentations.sendLogs ?? signals.sendLogs)

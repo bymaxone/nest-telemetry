@@ -10,7 +10,7 @@ import {
   requireFunction,
   requireObject,
   requireString,
-  settleObjectMap,
+  settleOverrides,
   settleStringList
 } from './option-kinds'
 
@@ -58,7 +58,7 @@ describe('the checks of one option', () => {
     expect(requireFunction('x', absent)).toBeUndefined()
     expect(requireObject('x', absent)).toBeUndefined()
     expect(settleStringList('x', absent)).toBeUndefined()
-    expect(settleObjectMap('x', absent)).toBeUndefined()
+    expect(settleOverrides('x', absent)).toBeUndefined()
   })
 })
 
@@ -105,23 +105,108 @@ describe('settleStringList', () => {
   })
 })
 
-describe('settleObjectMap', () => {
+describe('settleOverrides', () => {
   it('copies the entries that are objects and drops the ones that are absent', () => {
     // Scenario: an entry that is null or undefined is the same as no entry.
-    expect(settleObjectMap('x', { a: { n: 1 }, b: null, c: undefined })).toEqual({ a: { n: 1 } })
+    expect(settleOverrides('x', { a: { n: 1 }, b: null, c: undefined })).toEqual({ a: { n: 1 } })
   })
 
   it('accepts exactly the cap and refuses one more, in its own words', () => {
     // Scenario: the boundary of the cap, and the message of the refusal.
     const make = (count: number): Record<string, object> =>
       Object.fromEntries(Array.from({ length: count }, (_, i) => [`k${i}`, {}]))
-    expect(Object.keys(settleObjectMap('x', make(MAX_OPTION_ENTRIES)) ?? {})).toHaveLength(
+    expect(Object.keys(settleOverrides('x', make(MAX_OPTION_ENTRIES)) ?? {})).toHaveLength(
       MAX_OPTION_ENTRIES
     )
     expect(
-      (thrown(() => settleObjectMap('x', make(MAX_OPTION_ENTRIES + 1))) as Error).message
+      (thrown(() => settleOverrides('x', make(MAX_OPTION_ENTRIES + 1))) as Error).message
     ).toBe(
       `The x option must be an object of at most ${MAX_OPTION_ENTRIES} entries, so the start was refused.`
+    )
+  })
+})
+
+describe('settleOverrides, for the settings of an entry', () => {
+  const settle = (entry: object): Record<string, Record<string, unknown>> | undefined =>
+    settleOverrides('x', { pino: entry })
+
+  it.each([
+    ['enabled', 0],
+    ['enabled', 'false'],
+    ['disableLogSending', 0],
+    ['disableLogSending', {}]
+  ])('refuses %s that is %p, naming the path and not the instrumentation', (key, value) => {
+    // Scenario: a switch that turns a signal on or off holds something that is not a boolean; a number
+    // 0 for disableLogSending used to be read as "send logs" by the instrumentation.
+    const error = thrown(() => settleOverrides('x', { secretName: { [key]: value } })) as Error
+    expect(error.message).toBe(
+      `The instrumentations.overrides[].${key} option must be a boolean, so the start was refused.`
+    )
+    expect(error.message).not.toContain('secretName')
+  })
+
+  it('refuses a redactedQueryParams that is not a list of strings', () => {
+    // Scenario: the list of names to redact is a string, which would be spread into characters.
+    expect(thrown(() => settle({ redactedQueryParams: 'abc' }))).toMatchObject({
+      option: 'instrumentations.overrides[].redactedQueryParams'
+    })
+  })
+
+  it('copies a list that is an Array subclass through its indexes, not through its iterator', () => {
+    // Scenario: a subclass of Array whose iterator yields other names than its items hold; the copy is a
+    // plain array of the items.
+    class Sneaky extends Array<string> {
+      override *[Symbol.iterator](): Generator<string> {
+        yield 'from-the-iterator'
+      }
+    }
+    const list = Sneaky.from(['a', 'b'])
+    const copy = settle({ redactedQueryParams: list })?.['pino']?.['redactedQueryParams']
+    expect(copy).toEqual(['a', 'b'])
+    expect(Object.getPrototypeOf(copy)).toBe(Array.prototype)
+  })
+
+  it.each(['requestHook', 'ignoreIncomingRequestHook', 'responseHook'])(
+    'refuses %s that is not a function, and keeps one that is',
+    (key) => {
+      // Scenario: a hook that runs host code is checked by its name ending in Hook.
+      expect(thrown(() => settle({ [key]: 'not a function' }))).toMatchObject({
+        option: 'instrumentations.overrides[].<a hook>'
+      })
+      const hook = (): boolean => true
+      expect(settle({ [key]: hook })?.['pino']?.[key]).toBe(hook)
+    }
+  )
+
+  it('keeps the settings of any other name, drops the absent ones, and reads each setting once', () => {
+    // Scenario: a setting that is not checked passes through; an entry is copied, so a getter on it runs
+    // once, at the copy, and never later.
+    let reads = 0
+    const entry = {
+      enabled: true,
+      other: { nested: 1 },
+      gone: undefined,
+      get disableLogSending() {
+        reads += 1
+        return false
+      }
+    }
+    const copy = settle(entry)?.['pino']
+    expect(copy).toEqual({ enabled: true, other: { nested: 1 }, disableLogSending: false })
+    expect(Object.keys(copy ?? {})).not.toContain('gone')
+    expect(copy).not.toBe(entry)
+    expect(reads).toBe(1)
+  })
+
+  it('refuses an entry of more settings than the cap, and accepts one of exactly the cap', () => {
+    // Scenario: the boundary of the cap on the settings of one entry.
+    const make = (count: number): Record<string, number> =>
+      Object.fromEntries(Array.from({ length: count }, (_, i) => [`s${i}`, i]))
+    expect(Object.keys(settle(make(MAX_OPTION_ENTRIES))?.['pino'] ?? {})).toHaveLength(
+      MAX_OPTION_ENTRIES
+    )
+    expect((thrown(() => settle(make(MAX_OPTION_ENTRIES + 1))) as Error).message).toBe(
+      `The instrumentations.overrides[] option must be an object of at most ${MAX_OPTION_ENTRIES} settings, so the start was refused.`
     )
   })
 })

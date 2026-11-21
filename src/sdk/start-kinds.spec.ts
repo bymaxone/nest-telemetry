@@ -125,7 +125,21 @@ describe('startTelemetry refuses an option of the wrong kind', () => {
     ['env', { env: 'production' }],
     ['instrumentations.overrides', { instrumentations: { overrides: [] } }],
     ['instrumentations.overrides', { instrumentations: { overrides: { http: 'on' } } }],
-    ['instrumentations.overrides', { instrumentations: { overrides: { http: [] } } }]
+    ['instrumentations.overrides', { instrumentations: { overrides: { http: [] } } }],
+    [
+      'instrumentations.overrides[].disableLogSending',
+      {
+        instrumentations: {
+          overrides: { '@opentelemetry/instrumentation-pino': { disableLogSending: 0 } }
+        }
+      }
+    ],
+    [
+      'instrumentations.overrides[].enabled',
+      {
+        instrumentations: { overrides: { '@opentelemetry/instrumentation-fs': { enabled: 'yes' } } }
+      }
+    ]
   ])('rejects a %s of the wrong kind', async (name, options) => {
     // Scenario: an option that is a string, a function or an object holds a value of another kind.
     const error = await refusal({ env: {}, ...options })

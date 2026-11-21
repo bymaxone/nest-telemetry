@@ -63,6 +63,38 @@ describe('startTelemetry in the real library, for an option of the wrong kind', 
     })
   })
 
+  it.each([
+    ['instrumentations.overrides[].disableLogSending', { disableLogSending: 0 }, 'a boolean'],
+    ['instrumentations.overrides[].enabled', { enabled: SECRET }, 'a boolean'],
+    [
+      'instrumentations.overrides[].redactedQueryParams',
+      { redactedQueryParams: SECRET },
+      'an array'
+    ],
+    ['instrumentations.overrides[].<a hook>', { requestHook: SECRET }, 'a function']
+  ])(
+    'refuses the setting %s of an override, and leaves the value out',
+    async (name, entry, expected) => {
+      // Scenario: a setting of an override that decides what leaves the host, or runs host code, has the
+      // wrong kind; the start is refused with a fixed path that holds none of the host's own words.
+      const error = await refusal({
+        instrumentations: { overrides: { '@opentelemetry/instrumentation-pino': entry } }
+      })
+      expect(error).toMatchObject({ code: 'BYMAX_TELEMETRY_OPTION_INVALID', option: name })
+      expect(error?.message).toContain(expected)
+      expect(error?.message).not.toContain(SECRET)
+    }
+  )
+
+  it('refuses an override of more settings than the cap', async () => {
+    // Scenario: one entry with more settings than the cap.
+    const entry = Object.fromEntries(Array.from({ length: 1001 }, (_, i) => [`s${i}`, i]))
+    const error = await refusal({
+      instrumentations: { overrides: { '@opentelemetry/instrumentation-pino': entry } }
+    })
+    expect(error?.message).toContain('an object of at most 1000 settings')
+  })
+
   it('refuses overrides over the cap', async () => {
     // Scenario: a map with more entries than the cap.
     const overrides = Object.fromEntries(Array.from({ length: 1001 }, (_, i) => [`i${i}`, {}]))

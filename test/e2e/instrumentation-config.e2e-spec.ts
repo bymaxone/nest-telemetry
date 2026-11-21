@@ -126,13 +126,35 @@ describe('the configuration handed to the real auto-instrumentations', () => {
     expect(serializer('eval')).toBe('eval')
   })
 
-  it('ignores a redaction list that is not an array', async () => {
-    // Scenario: a malformed override value cannot remove the library's names.
+  it('refuses a redaction list that is not an array, rather than ignoring it', async () => {
+    // Scenario: a malformed override value is refused before the SDK starts, so it cannot reach the merge.
+    await expect(
+      configFor({
+        env: {},
+        instrumentations: { overrides: { [HTTP]: { redactedQueryParams: 'token' as never } } }
+      })
+    ).rejects.toMatchObject({ option: 'instrumentations.overrides[].redactedQueryParams' })
+  })
+
+  it('merges the settings of an override that are checked, and drops the ones that are absent', async () => {
+    // Scenario: the control for the case above: a hook, a list and a setting that is undefined.
+    const hook = (): boolean => false
     const config = await configFor({
       env: {},
-      instrumentations: { overrides: { [HTTP]: { redactedQueryParams: 'token' as never } } }
+      instrumentations: {
+        overrides: {
+          [HTTP]: {
+            ignoreIncomingRequestHook: hook,
+            redactedQueryParams: ['sid'],
+            gone: undefined
+          } as never
+        }
+      }
     })
-    expect(config[HTTP]).toEqual({ redactedQueryParams: [...DEFAULT_REDACTED_QUERY_PARAMS] })
+    expect(config[HTTP]).toEqual({
+      ignoreIncomingRequestHook: hook,
+      redactedQueryParams: [...DEFAULT_REDACTED_QUERY_PARAMS, 'sid']
+    })
   })
 
   it('honours the host Redis serializer only after the explicit opt-out', async () => {
