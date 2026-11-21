@@ -266,23 +266,19 @@ describe('startTelemetry reads each option once', () => {
           getOwnPropertyDescriptor(t, key) {
             if (hit() && behaviour === 'throw') fail()
             return Reflect.getOwnPropertyDescriptor(t, key)
-          },
-          apply(t, thisArg, args) {
-            if (hit() && behaviour === 'throw') fail()
-            return Reflect.apply(t as unknown as () => unknown, thisArg, args) as unknown
           }
         })
       return { wrap, count: () => seen }
     }
 
-    /** Every option of a start, each object, array and function wrapped, so no read escapes the sweep. */
+    /** Every option of a start, each object and the array wrapped (the function is stored and never called by a start). */
     const optionsFor = (wrap: <T extends object>(t: T) => T): TelemetryOptions =>
       wrap({
-        env: {},
+        env: wrap({}),
         serviceName: 'sweep-service',
         serviceVersion: '1.2.3',
         extraRedactedQueryParams: wrap(['sid', 'token']),
-        ignoreIncomingRequest: wrap(() => false),
+        ignoreIncomingRequest: () => false,
         shutdownTimeoutMs: 1000,
         unsafe: wrap({ exportHostId: true as const, disableUrlRedaction: true as const }),
         instrumentations: wrap({ sendLogs: false, overrides: wrap({}) })
@@ -309,6 +305,9 @@ describe('startTelemetry reads each option once', () => {
         expect(outcome).toBe(`operation ${n} failed`)
         expect(currentHandle()).toBeUndefined()
         expect(mockSdkInstance.start).not.toHaveBeenCalled()
+        // Nothing is cleared by hand before this: a start after the failed one must not be blocked.
+        const later = await startTelemetry({ env: {} })
+        expect(later.enabled).toBe(true)
         clearHandle()
         clearPendingStart()
       }
