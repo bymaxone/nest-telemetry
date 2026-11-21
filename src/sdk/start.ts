@@ -203,7 +203,7 @@ async function boot(options: TelemetryOptions, env: TelemetryEnvironment): Promi
   warnAboutOversizedTimers(env)
   warnAboutSamplerName(readSamplerNearMiss())
   warnAboutSamplerRatio(readRatioSampler())
-  warnAboutMissingWinstonTransport(instrumentations?.sendLogs ?? planSignals(env).sendLogs)
+  warnAboutMissingWinstonTransport(instrumentations.sendLogs ?? planSignals(env).sendLogs)
   // Read before the SDK starts: an option that throws when read must not leave a started SDK that no
   // handle can stop.
   const shutdownTimeoutMs = options.shutdownTimeoutMs
