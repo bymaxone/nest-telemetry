@@ -10,6 +10,8 @@ heading here.
 
 ## [Unreleased]
 
+## [1.0.9] - 2026-11-20
+
 ### Fixed
 
 - **The start reads `unsafe` and `instrumentations` once, and the other two instrumentation options once.** The
@@ -24,6 +26,14 @@ heading here.
 
 - **The README says that the sampler ratio warning does not repeat a blank value.** It repeats the value only when
   it is not blank; a blank one is called blank.
+
+### Apply to a derived backend
+
+The public declarations did not change. A derived backend acts on this behaviour:
+
+1. An options object whose `unsafe` or `instrumentations` is a getter (a computed or lazy option) is now read once
+   for the whole start, so the redaction warning and the redaction the SDK applies come from the same object. An
+   option that answers differently on each read no longer splits them.
 
 ## [1.0.8] - 2026-11-20
 
@@ -390,6 +400,7 @@ First release.
 - Verification from the packed tarball: real `node --import` processes in a CommonJS and a native-ESM
   application, with planted secrets absent from the exported body and negative controls.
 
+[1.0.9]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.9
 [1.0.8]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.8
 [1.0.7]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.7
 [1.0.6]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.6
