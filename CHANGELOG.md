@@ -30,9 +30,10 @@ heading here.
 
 - **The README says that the sampler ratio warning does not repeat a blank value.** It repeats the value only when
   it is not blank; a blank one is called blank.
-- **A pointer from 1.0.7's note.** It says a rejection of a `TELEMETRY_LOGGER` promise is dropped silently; 1.0.8
-  superseded that, and the README's logger paragraph says where the report goes now. The README also says that
-  starting twice returns the running handle unless `enabled: false`, which returns a disabled one.
+- **1.0.7's note on a rejecting `TELEMETRY_LOGGER` is superseded.** It says a rejection is dropped silently; since
+  1.0.8 the report goes to the Nest logger (a failed flush) or to a process warning (a shutdown timeout, a failed
+  export), and the README's logger paragraph says so. The README also says that starting twice returns the running
+  handle unless `enabled: false`, which returns a disabled one.
 - **The README says what `startTelemetry` rejects with.** The error that was thrown, as it was thrown: there is no
   library error class for a start. When an option cannot be read, the start ends with that error, with no SDK
   started and no handle left.
