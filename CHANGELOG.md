@@ -15,8 +15,7 @@ heading here.
 - **The start reads `serviceName` and `serviceVersion` once.** The warning about a missing service name and the
   resource each read `serviceName`, so an option object with a getter could make them disagree: a first read of
   `''` and a later one of `'real'` warned that no name was set while the spans were exported as `real`. The
-  start now reads both fields once and the warning and the resource work from that read, as 1.0.9 already did
-  for `unsafe` and `instrumentations`. Apply note: nothing to change; an option that is a plain value behaves as before.
+  start now reads both fields once and the warning and the resource work from that read. Apply note: nothing to change; an option that is a plain value behaves as before.
 
 ### Documentation
 
