@@ -444,6 +444,7 @@ First release.
 - Verification from the packed tarball: real `node --import` processes in a CommonJS and a native-ESM
   application, with planted secrets absent from the exported body and negative controls.
 
+[1.0.10]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.10
 [1.0.9]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.9
 [1.0.8]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.8
 [1.0.7]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.7

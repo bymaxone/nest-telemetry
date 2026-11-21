@@ -34,10 +34,10 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
-//   - 2026-11-21 (sdk and register, PM-granted, third step): sdk 7,241 B measured, 7.10 KiB budget (7,270 B,
-//     29 B of headroom); register 7,534 B measured, 7.39 KiB budget (7,567 B, 33 B). The growth, about 0.02 KiB
+//   - 2026-11-21 (sdk and register, PM-granted): sdk 7,241 B measured, 7.10 KiB budget (7,270 B,
+//     29 B of headroom); register 7,534 B measured, 7.39 KiB budget (7,567 B, 33 B). The growth, about 0.05 KiB
 //     in each, is the refusal of a `__proto__` key in an override.
-//   - 2026-11-21 (sdk and register, PM-granted, second step): sdk 7,187 B measured, 7.05 KiB budget (7,219 B,
+//   - 2026-11-21 (sdk and register, PM-granted): sdk 7,187 B measured, 7.05 KiB budget (7,219 B,
 //     32 B of headroom); register 7,488 B measured, 7.35 KiB budget (7,526 B, 38 B). The growth, about 0.16 KiB
 //     in each, is the copy of each `overrides` entry and the kind check of its switches, list and hooks.
 //   - 2026-11-21 (sdk and register, PM-granted): sdk 7,028 B measured, 6.90 KiB budget (7,066 B, 38 B of
