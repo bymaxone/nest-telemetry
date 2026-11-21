@@ -9,7 +9,7 @@
 // `node:zlib`'s brotli matches what npm/CDN compression produces on the wire.
 
 import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { brotliCompressSync, constants } from 'node:zlib'
@@ -34,6 +34,11 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
+//   - 2026-11-21 (sdk and register, PM-granted): sdk 7,573 B measured, 7.42 KiB budget (7,598 B, 25 B of
+//     headroom); register 7,717 B measured, 7.56 KiB budget (7,741 B, 24 B). The growth over the previous
+//     entry, about 0.2 KiB in sdk and 0.2 KiB in register, is the copy of a list by index for strings and for
+//     regular expressions, the check of the kinds that are not a plain object, and the guard that turns an
+//     error of the host's own list into the library's error with the original as its cause.
 //   - 2026-11-21 (sdk and register, PM-granted): sdk 7,455 B measured, 7.30 KiB budget (7,475 B, 20 B of
 //     headroom); register 7,666 B measured, 7.51 KiB budget (7,690 B, 24 B). The growth, about 0.18 KiB in sdk and
 //     0.10 KiB in register, is the copy of a list by index for strings and for regular expressions, and the check
@@ -79,8 +84,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
 //   met by shortening the text of a warning.
 const BUDGETS = [
-  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 7.3 * 1024 },
-  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 7.51 * 1024 },
+  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 7.42 * 1024 },
+  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 7.56 * 1024 },
   { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.04 * 1024 },
   { name: 'observability (metrics)', path: 'dist/observability/index.mjs', brotli: 0.69 * 1024 }
 ]
@@ -122,6 +127,27 @@ function readArtifact(path) {
   })
 }
 
+/**
+ * The newest modification time among the source files that a build reads, so a `dist/` older than
+ * them is refused and the gate cannot measure a build that no longer matches the source.
+ *
+ * @param {string} dir - A directory below the package root.
+ * @returns {number} The newest `mtimeMs`, or 0 when there is none.
+ */
+function newestSource(dir) {
+  let newest = 0
+  for (const entry of readdirSync(resolve(ROOT, dir), { withFileTypes: true })) {
+    const path = `${dir}/${entry.name}`
+    if (entry.isDirectory()) newest = Math.max(newest, newestSource(path))
+    else if (/\.ts$/.test(entry.name) && !/\.(e2e-)?spec\.ts$/.test(entry.name)) {
+      newest = Math.max(newest, statSync(resolve(ROOT, path)).mtimeMs)
+    }
+  }
+  return newest
+}
+
+const sourceTime = TARBALL === undefined || TARBALL === '' ? newestSource('src') : 0
+
 let failed = 0
 const rows = []
 
@@ -141,6 +167,12 @@ for (const { name, path, brotli: limit } of BUDGETS) {
     // code and stack reach the log.
     if (/** @type {NodeJS.ErrnoException} */ (error).code !== 'ENOENT') throw error
     console.error(`Missing build artifact: ${path} — run \`pnpm build\` first.`)
+    process.exit(2)
+  }
+  if (sourceTime > 0 && statSync(resolve(ROOT, path)).mtimeMs < sourceTime) {
+    console.error(
+      `Stale build artifact: ${path} is older than the source — run \`pnpm build\` first.`
+    )
     process.exit(2)
   }
   const compressed = brotliCompressSync(raw, BROTLI_OPTS).length

@@ -4,6 +4,7 @@
  * @layer sdk
  */
 import { ignorePaths } from './ignore-paths'
+import { TelemetryOptionError, settleStringList } from './option-kinds'
 
 describe('ignorePaths', () => {
   const probe = ignorePaths([/^\/health\/(live|ready)\/?$/, /^\/metrics\/?$/])
@@ -86,6 +87,52 @@ describe('ignorePaths', () => {
     const given = new Hollow()
     given.push(/^\/health$/)
     expect(ignorePaths(given)({ url: '/health' })).toBe(true)
+  })
+
+  describe('a list whose own operation throws', () => {
+    const boom = new Error('host trap failed')
+
+    /** A list whose one operation throws; `length` answers 0 when the operation is the keys. */
+    function failing(operation: 'length' | 'index' | 'keys'): RegExp[] {
+      return new Proxy([/^\/a$/], {
+        get: (target, key, receiver): unknown => {
+          if (operation === 'length' && key === 'length') throw boom
+          if (operation === 'index' && key === '0') throw boom
+          if (operation === 'keys' && key === 'length') return 0
+          return Reflect.get(target, key, receiver) as unknown
+        },
+        ownKeys: (target): ArrayLike<string | symbol> => {
+          if (operation === 'keys') throw boom
+          return Reflect.ownKeys(target)
+        }
+      })
+    }
+
+    it.each(['length', 'index', 'keys'] as const)(
+      'ignorePaths refuses it with the library code and the error as the cause, for the %s',
+      (operation) => {
+        // Scenario: a host value must never surface a raw error from ignorePaths; the original is the cause.
+        let error: unknown
+        try {
+          ignorePaths(failing(operation))
+        } catch (caught) {
+          error = caught
+        }
+        expect(error).toBeInstanceOf(TelemetryOptionError)
+        expect(error).toMatchObject({ code: 'BYMAX_TELEMETRY_OPTION_INVALID', cause: boom })
+        expect((error as Error).message).toBe(
+          'The ignorePaths patterns option must be an array of regular expressions, so the start was refused.'
+        )
+      }
+    )
+
+    it.each(['length', 'index', 'keys'] as const)(
+      'a start-time list keeps the error as it was thrown, for the %s, as the README says',
+      (operation) => {
+        // Scenario: the control: the options of a start rethrow what the host's own list threw.
+        expect(() => settleStringList('x', failing(operation))).toThrow(boom)
+      }
+    )
   })
 
   describe('the length cap', () => {

@@ -140,6 +140,16 @@ describe('startTelemetry in the real library, for an option of the wrong kind', 
       'must be an array of regular expressions'
     )
     expect(() => ignorePaths(null as never)).toThrow('must be an array of regular expressions')
+    const boom = new Error('host trap failed')
+    const throwing = new Proxy([/^\/a$/], {
+      get: (target, key, receiver): unknown => {
+        if (key === 'length') throw boom
+        return Reflect.get(target, key, receiver) as unknown
+      }
+    })
+    expect(() => ignorePaths(throwing)).toThrow(
+      expect.objectContaining({ code: 'BYMAX_TELEMETRY_OPTION_INVALID', cause: boom })
+    )
     const bad = /a/
     Object.defineProperty(bad, 'flags', { get: () => 'zz' })
     expect(() => ignorePaths([bad])).toThrow(
