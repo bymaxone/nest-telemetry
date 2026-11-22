@@ -25,8 +25,7 @@ function read(source: NodeJS.ProcessEnv, name: string): string | undefined {
 /**
  * Runs a synchronous step while every `OTEL_*` name that only the root prototype of the realm holds
  * reads as empty on the process environment, so a name a polluted realm planted cannot decide what
- * OpenTelemetry reads there while it builds and starts the SDK (the exporters, the sampler, the
- * resource, the batch processor). OpenTelemetry treats an empty value as unset. Each placeholder is an
+ * OpenTelemetry reads there while it builds and starts the SDK. OpenTelemetry treats an empty value as unset. Each placeholder is an
  * own variable for the length of the step and is deleted when it ends; a variable the process
  * environment really has is never touched.
  *

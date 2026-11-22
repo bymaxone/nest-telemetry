@@ -227,8 +227,7 @@ export function buildInstrumentationConfig(
   const disableLogSending = !(instrumentations.sendLogs ?? signals.sendLogs)
   const library = Object.assign(Object.create(null), {
     [FS_INSTRUMENTATION]: { enabled: instrumentations.fs === true },
-    // The HTTP instrumentation builds its header capture when it is constructed, so the option is
-    // an own key that is undefined: a value the root prototype holds is then never found.
+    // An own key that is undefined, so a value the root prototype holds is never found.
     [HTTP_INSTRUMENTATION]: { headersToSpanAttributes: undefined },
     [PINO_INSTRUMENTATION]: { disableLogSending },
     [WINSTON_INSTRUMENTATION]: { disableLogSending },
