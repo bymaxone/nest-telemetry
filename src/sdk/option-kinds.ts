@@ -291,8 +291,8 @@ const MAX_VALUES = 10_000
 
 /**
  * Copies a setting that the host nests in an override, so an instrumentation that reads a key of it
- * finds only what the host wrote: a plain object becomes an object with no prototype and a list is
- * copied by `Array.prototype.map`, each member the same way. Anything else (a function, a class
+ * finds only what the host wrote: a plain object of any realm becomes an object with no prototype and a list
+ * is copied by own index, each member the same way. Anything else (a function, a class
  * instance, a `Map`, a `Proxy`) is the host's and is passed on as it is.
  *
  * @param value - A setting, or a value inside one.
@@ -305,13 +305,10 @@ const MAX_VALUES = 10_000
 function detach(value: unknown, seen: { count: number }, depth: number): unknown {
   if (typeof value !== 'object' || value === null || types.isProxy(value)) return value
   const list = Array.isArray(value)
-  if (
-    !list &&
-    Object.getPrototypeOf(value) !== Object.prototype &&
-    Object.getPrototypeOf(value) !== null
-  ) {
-    return value
-  }
+  // A plain object is one whose prototype is the end of a chain, the root of whatever realm made it,
+  // or that has none; no property of the prototype is read to tell.
+  const prototype = Object.getPrototypeOf(value) as object | null
+  if (!list && prototype !== null && Object.getPrototypeOf(prototype) !== null) return value
   seen.count += 1
   if (depth > MAX_NESTING || seen.count > MAX_VALUES) {
     throw new TelemetryOptionError(OVERRIDE_PATH, 'nested at most 16 levels deep')
@@ -323,7 +320,10 @@ function detach(value: unknown, seen: { count: number }, depth: number): unknown
         `a list of at most ${MAX_OPTION_ENTRIES} entries`
       )
     }
-    return Array.prototype.map.call(value, (member: unknown) => detach(member, seen, depth + 1))
+    // By own index: a hole is a missing member, not whatever a prototype holds at that index.
+    return Array.from({ length: value.length }, (_member, index) =>
+      detach(Object.hasOwn(value, index) ? value[index] : undefined, seen, depth + 1)
+    )
   }
   const members = Object.entries(value)
   if (members.length > MAX_OPTION_ENTRIES) {

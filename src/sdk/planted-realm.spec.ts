@@ -5,6 +5,8 @@
  * options object that is not an object of settings.
  * @layer sdk
  */
+import { runInNewContext } from 'node:vm'
+
 import { buildInstrumentationConfig, severFromRootPrototype } from './assembly'
 import type { InstrumentationInputs } from './assembly'
 import { withoutPlantedVariables } from './environment'
@@ -120,6 +122,27 @@ describe('the configuration handed to the instrumentations', () => {
     expect(JSON.parse(JSON.stringify(config))).toHaveProperty([FS])
   })
 
+  it.each([
+    [HTTP, ['headersToSpanAttributes']],
+    ['@opentelemetry/instrumentation-grpc', ['metadataToSpanAttributes']],
+    ['@opentelemetry/instrumentation-aws-lambda', ['lambdaHandler']],
+    [
+      '@opentelemetry/instrumentation-redis',
+      ['dbStatementSerializer', 'responseHook', 'requireParentSpan']
+    ]
+  ])('gives %s an own, undefined, value for what it reads while it is built', (name, keys) => {
+    // Scenario: an instrumentation reads these settings in its constructor, before the configuration is
+    // cut from the root prototype, so each is an own key that is undefined and a planted one is not found.
+    const entry = buildInstrumentationConfig(
+      { unsafe: { disableRedisArgumentRedaction: true } } as never,
+      signals
+    )[name as keyof ReturnType<typeof buildInstrumentationConfig>] as Record<string, unknown>
+    for (const key of keys) {
+      expect(Object.hasOwn(entry, key)).toBe(true)
+      expect(entry[key]).toBeUndefined()
+    }
+  })
+
   it('gives the HTTP instrumentation its own, undefined, header capture, unless the host set one', () => {
     // Scenario: the HTTP instrumentation reads the option when it is built, so an own key shadows a planted one.
     const own = buildInstrumentationConfig(inputs, signals)[HTTP] as Record<string, unknown>
@@ -232,6 +255,26 @@ describe('a setting that the host nests in an override', () => {
     const [first, second] = nested.headersToSpanAttributes.rules
     expect(Object.getPrototypeOf(first)).toBeNull()
     expect(Object.getPrototypeOf((second as Record<string, number>[])[0])).toBeNull()
+  })
+
+  it('copies a plain object of another realm too, and fills no hole of a list from a prototype', () => {
+    // Scenario: an object made in a vm context has the root prototype of that context, which can hold a
+    // planted key; and a hole in a sparse list is a missing member, not whatever the root holds at its index.
+    const foreign = runInNewContext(
+      'Object.prototype.requestHeaders = ["authorization"]; ({ server: {}, client: {} })'
+    ) as object
+    const copy = settle(foreign) as {
+      headersToSpanAttributes: { server: Record<string, unknown> }
+    }
+    expect(Object.getPrototypeOf(copy.headersToSpanAttributes.server)).toBeNull()
+    expect(copy.headersToSpanAttributes.server['requestHeaders']).toBeUndefined()
+    planted('0', 'PLANTED', () => {
+      const sparse: unknown[] = []
+      sparse[1] = 'host'
+      const list = (settle({ list: sparse }) as { headersToSpanAttributes: { list: unknown[] } })
+        .headersToSpanAttributes.list
+      expect(list).toEqual([undefined, 'host'])
+    })
   })
 
   it('passes a function, a class instance, a Date, a Map and a Proxy through as the host wrote them', () => {

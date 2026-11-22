@@ -14,6 +14,19 @@ const FS_INSTRUMENTATION = '@opentelemetry/instrumentation-fs'
 const HTTP_INSTRUMENTATION = '@opentelemetry/instrumentation-http'
 const IOREDIS_INSTRUMENTATION = '@opentelemetry/instrumentation-ioredis'
 const REDIS_INSTRUMENTATION = '@opentelemetry/instrumentation-redis'
+
+/**
+ * The settings an instrumentation reads while it is built, before its configuration can be cut from the
+ * root prototype: what each decides is which headers or metadata become attributes, which handler is
+ * wrapped, and the Redis serializer and hooks that its two clients read from a copy of the
+ * configuration. Each is an own key that is undefined, so a value the root prototype holds is never found.
+ */
+const READ_WHEN_BUILT = Object.assign(Object.create(null), {
+  [HTTP_INSTRUMENTATION]: ['headersToSpanAttributes'],
+  '@opentelemetry/instrumentation-grpc': ['metadataToSpanAttributes'],
+  '@opentelemetry/instrumentation-aws-lambda': ['lambdaHandler'],
+  [REDIS_INSTRUMENTATION]: ['dbStatementSerializer', 'responseHook', 'requireParentSpan']
+}) as Readonly<Record<string, readonly string[]>>
 const PINO_INSTRUMENTATION = '@opentelemetry/instrumentation-pino'
 const WINSTON_INSTRUMENTATION = '@opentelemetry/instrumentation-winston'
 const BUNYAN_INSTRUMENTATION = '@opentelemetry/instrumentation-bunyan'
@@ -221,6 +234,31 @@ function answerEveryName(map: Record<string, Record<string, unknown>>): Instrume
 }
 
 /**
+ * Merges, by instrumentation name, what each instrumentation reads while it is built, the library's
+ * settings and the host's overrides, into entries with no prototype.
+ *
+ * @param library - The library's settings by name.
+ * @param overrides - The host's overrides by name.
+ * @returns The entries, by name.
+ */
+function mergeEntries(
+  library: Record<string, Record<string, unknown>>,
+  overrides: Record<string, Record<string, unknown>>
+): Record<string, Record<string, unknown>> {
+  const merged = Object.create(null) as Record<string, Record<string, unknown>>
+  const names = [
+    ...Object.keys(library),
+    ...Object.keys(overrides),
+    ...Object.keys(READ_WHEN_BUILT)
+  ]
+  for (const name of new Set(names)) {
+    const shadows = Object.fromEntries((READ_WHEN_BUILT[name] ?? []).map((key) => [key, undefined]))
+    merged[name] = Object.assign(Object.create(null), shadows, library[name], overrides[name])
+  }
+  return merged
+}
+
+/**
  * Builds the auto-instrumentation configuration.
  *
  * The library's settings are merged under the host's `overrides`, and the redaction settings are
@@ -248,16 +286,12 @@ export function buildInstrumentationConfig(
   const disableLogSending = !(instrumentations.sendLogs ?? signals.sendLogs)
   const library = Object.assign(Object.create(null), {
     [FS_INSTRUMENTATION]: { enabled: instrumentations.fs === true },
-    // An own key that is undefined, so a value the root prototype holds is never found.
-    [HTTP_INSTRUMENTATION]: { headersToSpanAttributes: undefined },
+    [HTTP_INSTRUMENTATION]: {},
     [PINO_INSTRUMENTATION]: { disableLogSending },
     [WINSTON_INSTRUMENTATION]: { disableLogSending },
     [BUNYAN_INSTRUMENTATION]: { disableLogSending }
   }) as Record<string, Record<string, unknown>>
-  const merged = Object.create(null) as Record<string, Record<string, unknown>>
-  for (const name of new Set([...Object.keys(library), ...Object.keys(overrides)])) {
-    merged[name] = Object.assign(Object.create(null), library[name], overrides[name])
-  }
+  const merged = mergeEntries(library, overrides)
   const hostParams = merged[HTTP_INSTRUMENTATION]?.['redactedQueryParams']
   merged[HTTP_INSTRUMENTATION] = Object.assign(Object.create(null), merged[HTTP_INSTRUMENTATION], {
     redactedQueryParams: buildRedactedQueryParams([

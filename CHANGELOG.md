@@ -46,6 +46,10 @@ heading here.
   instrumentations off or override `OTEL_NODE_DISABLED_INSTRUMENTATIONS`. The one limit: the credentials of a gRPC
   OTLP exporter that `NodeSDK` builds for metrics or logs are read from the environment when it first sends, after the
   start, so only the HTTP exporters are covered by this.
+  The settings an instrumentation reads while it is built (the HTTP header capture, the gRPC metadata capture, the
+  AWS Lambda handler name, and the Redis serializer and hooks that its two clients copy) are own keys that are
+  undefined, because the configuration the instrumentation copies into an ordinary object cannot be cut from the
+  root prototype until it is built.
   The same holds one level down: a plain object that the host nests inside an override setting (for
   example `headersToSpanAttributes: { server: {} }`) is copied with no prototype, so a planted `requestHeaders` is not
   found under it, and a list is copied member by member; the copy is refused beyond 16 levels, 10,000 objects and lists or 1000 entries to a list or an object.

@@ -217,6 +217,55 @@ describe('the configuration handed to the real auto-instrumentations', () => {
     }
   })
 
+  it('builds the instrumentations that read a setting in their constructor without a planted value', async () => {
+    // Scenario: the real instrumentations copy the configuration into an ordinary object while they are
+    // built and read some settings then; a planted message-capture switch, Redis serializer, hook or handler
+    // name is not found, because each is an own key that is undefined.
+    const planted = {
+      captureMessageContent: true,
+      dbStatementSerializer: (): string => 'planted',
+      responseHook: (): void => undefined,
+      lambdaHandler: 'planted.handler',
+      metadataToSpanAttributes: { client: { requestMetadata: ['authorization'] } }
+    }
+    for (const [name, value] of Object.entries(planted)) {
+      Object.defineProperty(Object.prototype, name, { value, configurable: true, writable: true })
+    }
+    try {
+      await configFor({ env: {}, unsafe: { disableRedisArgumentRedaction: true } })
+      const results = jest.mocked(getNodeAutoInstrumentations).mock.results
+      const built = (results[results.length - 1]?.value ?? []) as {
+        instrumentationName: string
+        getConfig(): Record<string, unknown>
+      }[]
+      const instance = (name: string): Record<string, unknown> =>
+        built.find((candidate) => candidate.instrumentationName === name) as unknown as Record<
+          string,
+          unknown
+        >
+      type Capture = { client: { captureRequestMetadata(span: object, metadata: object): void } }
+      const grpc = instance('@opentelemetry/instrumentation-grpc')['_metadataCapture'] as Capture
+      // The metadata capture is built from the configuration while the instrumentation is built.
+      const attributes: string[] = []
+      grpc.client.captureRequestMetadata(
+        { setAttribute: (key: string) => attributes.push(key) },
+        { get: () => ['secret'] }
+      )
+      expect(attributes).toEqual([])
+      for (const key of ['instrumentationV2_V3', 'instrumentationV4_V5']) {
+        const client = instance('@opentelemetry/instrumentation-redis')[key] as {
+          getConfig(): Record<string, unknown>
+        }
+        expect(client.getConfig()['dbStatementSerializer']).toBeUndefined()
+        expect(client.getConfig()['responseHook']).toBeUndefined()
+      }
+    } finally {
+      for (const name of Object.keys(planted)) {
+        delete (Object.prototype as unknown as Record<string, unknown>)[name]
+      }
+    }
+  })
+
   it('still reads a flag that a class of the host holds, and refuses a stand-in that never ends', async () => {
     // Scenario: a class instance is the host's; a Proxy that answers itself as its prototype is refused and does not hang.
     class Options {

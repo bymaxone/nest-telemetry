@@ -116,10 +116,20 @@ describe('buildInstrumentationConfig', () => {
     expect(buildInstrumentationConfig({}, noLogs)).toEqual({
       [BUNYAN]: { disableLogSending: true },
       [FS]: { enabled: false },
-      [HTTP]: { redactedQueryParams: [...DEFAULT_REDACTED_QUERY_PARAMS] },
+      // The settings an instrumentation reads while it is built are own keys that are undefined.
+      '@opentelemetry/instrumentation-aws-lambda': { lambdaHandler: undefined },
+      '@opentelemetry/instrumentation-grpc': { metadataToSpanAttributes: undefined },
+      [HTTP]: {
+        headersToSpanAttributes: undefined,
+        redactedQueryParams: [...DEFAULT_REDACTED_QUERY_PARAMS]
+      },
       [IOREDIS]: { dbStatementSerializer: serializeRedisCommandName },
       [PINO]: { disableLogSending: true },
-      [REDIS]: { dbStatementSerializer: serializeRedisCommandName },
+      [REDIS]: {
+        dbStatementSerializer: serializeRedisCommandName,
+        requireParentSpan: undefined,
+        responseHook: undefined
+      },
       [WINSTON]: { disableLogSending: true }
     })
   })
@@ -223,7 +233,7 @@ describe('buildInstrumentationConfig', () => {
     )
     // Own keys: every other name answers with an empty entry with no prototype.
     expect(Object.keys(config)).not.toContain(IOREDIS)
-    expect(Object.keys(config)).not.toContain(REDIS)
+    expect(config[REDIS]?.['dbStatementSerializer']).toBeUndefined()
   })
 
   describe('host overrides', () => {
