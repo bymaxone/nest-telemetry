@@ -62,7 +62,7 @@ const DISABLED_HANDLE: TelemetryHandle = {
  * Refuses to start beside a polluted `Object.prototype`: telemetry that cannot be trusted starts nothing and
  * says so with a count, and never throws at the host.
  *
- * @returns `true` when the prototype is polluted and a warning was emitted.
+ * @returns `true` when the prototype is polluted, after the warning was attempted: it may not be built.
  */
 function refusesPollution(): boolean {
   const polluted = pollutedNames()
