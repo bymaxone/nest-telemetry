@@ -173,6 +173,50 @@ describe('the configuration handed to the real auto-instrumentations', () => {
     }
   })
 
+  it.each([
+    ['unsafe', { disableUrlRedaction: true, disableRedisArgumentRedaction: true }],
+    [
+      'instrumentations',
+      { sendLogs: true, overrides: { [HTTP]: { ignoreIncomingRequestHook: () => true } } }
+    ]
+  ])(
+    'ignores the group %s when only the root prototype of the realm carries it',
+    async (name, group) => {
+      // Scenario: a polluted realm cannot switch the redaction off, send log records or run a hook of its
+      // own for a host that passed no such group; the configuration is the safe one and a span that
+      // carries a token reaches the collector without it.
+      Object.defineProperty(Object.prototype, name, { value: group, configurable: true })
+      try {
+        const config = await configFor({ env: {} })
+        expect(config[HTTP]).toEqual({ redactedQueryParams: [...DEFAULT_REDACTED_QUERY_PARAMS] })
+        expect(config[PINO]).toEqual({ disableLogSending: true })
+        expect(typeof config[IOREDIS]?.['dbStatementSerializer']).toBe('function')
+        trace
+          .getTracer('e2e')
+          .startSpan('server', { attributes: { 'url.full': '/reset?token=S3CR3T-9f2c' } })
+          .end()
+        await shutdownTelemetry()
+        expect(collector.bodies.join('\n')).not.toContain('S3CR3T-9f2c')
+      } finally {
+        delete (Object.prototype as unknown as Record<string, unknown>)[name]
+      }
+    }
+  )
+
+  it('does not let a variable that only the root prototype of the realm carries switch the SDK off', async () => {
+    // Scenario: a polluted realm cannot disable the SDK through the environment object the host passed.
+    Object.defineProperty(Object.prototype, 'OTEL_SDK_DISABLED', {
+      value: 'true',
+      configurable: true
+    })
+    try {
+      const handle = await startTelemetry({ env: {} })
+      expect(handle.enabled).toBe(true)
+    } finally {
+      delete (Object.prototype as unknown as Record<string, unknown>)['OTEL_SDK_DISABLED']
+    }
+  })
+
   it('still reads a flag that a class of the host holds, and refuses a stand-in that never ends', async () => {
     // Scenario: a class instance is the host's; a Proxy that answers itself as its prototype is refused and does not hang.
     class Options {

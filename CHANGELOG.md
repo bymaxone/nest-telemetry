@@ -24,6 +24,13 @@ heading here.
   `Object.prototype` could switch a redaction off or the export of log records on without the host asking. Those
   keys are now read from the object, a class instance or a class prototype, and never from the root prototype alone.
 
+- **A group of options that only the root prototype of the realm holds is no longer read either.** The options of the
+  call were read by property access, so a polluted `Object.prototype.unsafe` switched the redaction off, and
+  `Object.prototype.instrumentations` ran a hook of its own, for a host that passed no such group. Every option of the
+  call (`unsafe`, `instrumentations`, `env` and the rest) is now read with the same rule, and so is each `OTEL_*` variable
+  of an environment (so a polluted `Object.prototype.OTEL_SDK_DISABLED` no longer switches the SDK off), and the copy of
+  the call that the start works from has no prototype, so a key the call did not give stays absent.
+
 - **An option that must be an object is refused when it has a brand Node tells apart, or a chain of prototypes that
   is longer than 100 or never ends.** The list of refused kinds is now a set of brand predicates of `util.types`
   (so a `WeakMap`, a typed array, an `Error` and a generator object are refused too), and only a plain object, an
@@ -40,8 +47,8 @@ heading here.
 
 ### Apply to a derived backend
 
-Nothing to change for options written as an object literal or as a class. A configuration that relied on a flag
-set on `Object.prototype` (a pollution, not an option) now reads that flag as unset. An object option of a kind
+Nothing to change for options written as an object literal or as a class. A configuration that relied on an option
+or a flag set on `Object.prototype` (a pollution, not an option) now reads it as unset. An object option of a kind
 that `util.types` reports (a `WeakMap`, a typed array, an `Error`, a generator object), or whose chain of prototypes
 is longer than 100 or does not end at the root of its realm, now fails at start with `BYMAX_TELEMETRY_OPTION_INVALID`.
 

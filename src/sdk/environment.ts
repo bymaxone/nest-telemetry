@@ -8,6 +8,19 @@
  * ignore the ratio, and reads them from the process environment because that is where the SDK does,
  * whatever environment the host hands to `startTelemetry`.
  */
+import { readOwnOrClass } from './option-kinds'
+
+/**
+ * Reads one variable of an environment, as the host wrote it: a key that only the root prototype of the
+ * realm holds is not a variable, so a polluted `Object.prototype` cannot set one.
+ *
+ * @param source - The environment.
+ * @param name - The variable name.
+ * @returns The value, or `undefined` when the environment has no such variable of its own.
+ */
+function read(source: NodeJS.ProcessEnv, name: string): string | undefined {
+  return readOwnOrClass(source, name) as string | undefined
+}
 
 /** Batch-span-processor tuning, present only for the variables that hold a usable value. */
 export interface BatchSpanProcessorTuning {
@@ -120,30 +133,30 @@ export function readTelemetryEnvironment(
   source: NodeJS.ProcessEnv = process.env
 ): TelemetryEnvironment {
   const tuning: BatchSpanProcessorTuning = {}
-  const maxQueueSize = readPositiveNumber(source['OTEL_BSP_MAX_QUEUE_SIZE'])
+  const maxQueueSize = readPositiveNumber(read(source, 'OTEL_BSP_MAX_QUEUE_SIZE'))
   if (maxQueueSize !== undefined) tuning.maxQueueSize = maxQueueSize
   const oversizedTimers: string[] = []
   const scheduledDelayMillis = readTimerMillis(
     'OTEL_BSP_SCHEDULE_DELAY',
-    source['OTEL_BSP_SCHEDULE_DELAY'],
+    read(source, 'OTEL_BSP_SCHEDULE_DELAY'),
     oversizedTimers
   )
   if (scheduledDelayMillis !== undefined) tuning.scheduledDelayMillis = scheduledDelayMillis
   const exportTimeoutMillis = readTimerMillis(
     'OTEL_BSP_EXPORT_TIMEOUT',
-    source['OTEL_BSP_EXPORT_TIMEOUT'],
+    read(source, 'OTEL_BSP_EXPORT_TIMEOUT'),
     oversizedTimers
   )
   if (exportTimeoutMillis !== undefined) tuning.exportTimeoutMillis = exportTimeoutMillis
-  const maxExportBatchSize = readPositiveNumber(source['OTEL_BSP_MAX_EXPORT_BATCH_SIZE'])
+  const maxExportBatchSize = readPositiveNumber(read(source, 'OTEL_BSP_MAX_EXPORT_BATCH_SIZE'))
   if (maxExportBatchSize !== undefined) tuning.maxExportBatchSize = maxExportBatchSize
-  const serviceName = source['OTEL_SERVICE_NAME']?.trim()
-  const detectors = source['OTEL_NODE_RESOURCE_DETECTORS']
+  const serviceName = read(source, 'OTEL_SERVICE_NAME')?.trim()
+  const detectors = read(source, 'OTEL_NODE_RESOURCE_DETECTORS')
   return {
-    sdkDisabled: source['OTEL_SDK_DISABLED']?.trim().toLowerCase() === 'true',
+    sdkDisabled: read(source, 'OTEL_SDK_DISABLED')?.trim().toLowerCase() === 'true',
     serviceName: serviceName === '' ? undefined : serviceName,
-    metricsExporters: readExporterList(source['OTEL_METRICS_EXPORTER']),
-    logsExporters: readExporterList(source['OTEL_LOGS_EXPORTER']),
+    metricsExporters: readExporterList(read(source, 'OTEL_METRICS_EXPORTER')),
+    logsExporters: readExporterList(read(source, 'OTEL_LOGS_EXPORTER')),
     batchSpanProcessor: tuning,
     oversizedTimers,
     resourceDetectors:
@@ -161,8 +174,8 @@ export function readTelemetryEnvironment(
 export function readRatioSampler(
   source: NodeJS.ProcessEnv = process.env
 ): RatioSampler | undefined {
-  const name = source['OTEL_TRACES_SAMPLER']
-  const arg = source['OTEL_TRACES_SAMPLER_ARG']
+  const name = read(source, 'OTEL_TRACES_SAMPLER')
+  const arg = read(source, 'OTEL_TRACES_SAMPLER_ARG')
   // The SDK compares the name exactly, so a different spelling selects no ratio sampler.
   return name !== undefined && RATIO_SAMPLERS.includes(name) ? { name, arg } : undefined
 }
@@ -176,7 +189,7 @@ export function readRatioSampler(
  * to any sampler name.
  */
 export function readSamplerNearMiss(source: NodeJS.ProcessEnv = process.env): string | undefined {
-  const name = source['OTEL_TRACES_SAMPLER']
+  const name = read(source, 'OTEL_TRACES_SAMPLER')
   if (name === undefined || SAMPLER_NAMES.includes(name)) return undefined
   const folded = name.trim().toLowerCase()
   return SAMPLER_NAMES.find((known) => known === folded)

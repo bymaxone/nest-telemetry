@@ -3,8 +3,11 @@
  * the host's, while a field of the options object, of a class instance or of a class prototype still is.
  * @layer sdk
  */
-import { settleInstrumentations, settleUnsafe } from './assembly'
+import { readRatioSampler, readSamplerNearMiss, readTelemetryEnvironment } from './environment'
+import { readEachOption, settleInstrumentations, settleUnsafe } from './assembly'
 import { readOwnOrClass } from './option-kinds'
+import { settleOptions } from './settle-options'
+import type { TelemetryOptions } from './types'
 
 /** Runs `run` while `Object.prototype` carries `name`, as a polluted realm does, and then removes it. */
 function polluted<T>(name: string, value: unknown, run: () => T): T {
@@ -102,5 +105,82 @@ describe('readOwnOrClass', () => {
     const data = Object.create(null) as Record<string, unknown>
     data['flag'] = true
     expect(readOwnOrClass(Object.create(data) as object, 'flag')).toBe(true)
+  })
+})
+
+/** Every option a call can carry, taken from the reader, so an option added later is covered too. */
+const OPTION_KEYS = Object.keys(readEachOption({}))
+
+describe('an option of the call found only on the root prototype', () => {
+  it.each(OPTION_KEYS)('is not read for %s', (name) => {
+    // Scenario: a polluted realm cannot hand a host that passed nothing a group of unsafe flags, of
+    // instrumentation overrides or of environment values, nor any other option of the call.
+    polluted(name, { disableUrlRedaction: true, overrides: {} }, () => {
+      expect(readEachOption({})[name as keyof TelemetryOptions]).toBeUndefined()
+      expect(Object.keys(settleOptions({}))).toEqual([])
+    })
+  })
+
+  it('is not read for a host that passed an options object with a null prototype', () => {
+    // Scenario: the control for a host that wrote its options with no prototype at all.
+    polluted('unsafe', { disableUrlRedaction: true }, () => {
+      expect(readEachOption(Object.create(null) as TelemetryOptions)['unsafe']).toBeUndefined()
+    })
+  })
+
+  it('still reads an own option, a field of a class and a getter of a class', () => {
+    // Scenario: the control: the host's own options are read whatever the root prototype carries.
+    class Fields {
+      serviceName = 'from-field'
+    }
+    class Getter {
+      get serviceVersion(): string {
+        return '1.2.3'
+      }
+    }
+    polluted('serviceName', 'polluted', () => {
+      expect(readEachOption({ serviceName: 'own' }).serviceName).toBe('own')
+      expect(readEachOption(new Fields()).serviceName).toBe('from-field')
+    })
+    expect(readEachOption(new Getter()).serviceVersion).toBe('1.2.3')
+  })
+
+  it('leaves the copy of the call with no prototype, so a later read cannot inherit one', () => {
+    // Scenario: the settled options are read key by key by the start; an absent key must stay absent.
+    const settled = settleOptions({ serviceName: 'api' })
+    expect(Object.getPrototypeOf(settled)).toBeNull()
+    polluted('unsafe', { disableUrlRedaction: true }, () => {
+      expect((settled as Record<string, unknown>)['unsafe']).toBeUndefined()
+    })
+  })
+})
+
+describe('an environment variable found only on the root prototype', () => {
+  it.each([
+    ['OTEL_SDK_DISABLED', 'true'],
+    ['OTEL_SERVICE_NAME', 'planted'],
+    ['OTEL_BSP_MAX_QUEUE_SIZE', '7'],
+    ['OTEL_BSP_SCHEDULE_DELAY', '7'],
+    ['OTEL_BSP_EXPORT_TIMEOUT', '7'],
+    ['OTEL_BSP_MAX_EXPORT_BATCH_SIZE', '7'],
+    ['OTEL_NODE_RESOURCE_DETECTORS', 'none'],
+    ['OTEL_METRICS_EXPORTER', 'otlp'],
+    ['OTEL_LOGS_EXPORTER', 'otlp']
+  ])('is not read for %s, from the host env or from the process env', (name, value) => {
+    // Scenario: a polluted realm cannot switch the SDK off, rename the service or tune the exporter.
+    const clean = JSON.stringify(readTelemetryEnvironment({}))
+    polluted(name, value, () => {
+      expect(JSON.stringify(readTelemetryEnvironment({}))).toBe(clean)
+      expect(JSON.stringify(readTelemetryEnvironment(Object.create(null) as never))).toBe(clean)
+    })
+  })
+
+  it('is not read for a sampler variable, and an own variable is still read', () => {
+    // Scenario: the same rule for the two sampler readers, and the control for a variable the env owns.
+    polluted('OTEL_TRACES_SAMPLER', 'traceidratio', () => {
+      expect(readSamplerNearMiss({})).toBeUndefined()
+      expect(readRatioSampler({})).toBeUndefined()
+    })
+    expect(readTelemetryEnvironment({ OTEL_SDK_DISABLED: 'true' }).sdkDisabled).toBe(true)
   })
 })
