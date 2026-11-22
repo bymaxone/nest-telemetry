@@ -261,6 +261,8 @@ describe('the configuration handed to the real auto-instrumentations', () => {
     const agent = new Agent()
     const fn = (): void => undefined
     const proxy = new Proxy({}, {})
+    const sparse: unknown[] = []
+    sparse[1] = 'after the hole'
     const config = await configFor({
       env: {},
       instrumentations: {
@@ -269,7 +271,8 @@ describe('the configuration handed to the real auto-instrumentations', () => {
             headersToSpanAttributes: {
               server: { requestHeaders: ['x-id'] },
               list: [{ a: 1 }, 'text', 3, null],
-              keep: [agent, fn, proxy]
+              keep: [agent, fn, proxy],
+              holes: sparse
             } as never
           }
         }
@@ -279,8 +282,14 @@ describe('the configuration handed to the real auto-instrumentations', () => {
       server: { requestHeaders: string[] }
       list: unknown[]
       keep: unknown[]
+      holes: unknown[]
     }
     expect(Object.getPrototypeOf(copied)).toBeNull()
+    // A hole is a missing member, kept as an own undefined at its place.
+    expect(copied.holes).toHaveLength(2)
+    expect(Object.hasOwn(copied.holes, 0)).toBe(true)
+    expect(copied.holes[0]).toBeUndefined()
+    expect(copied.holes[1]).toBe('after the hole')
     expect(Object.getPrototypeOf(copied.server)).toBeNull()
     expect(copied.server.requestHeaders).toEqual(['x-id'])
     expect(Object.getPrototypeOf(copied.list[0])).toBeNull()
