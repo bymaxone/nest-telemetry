@@ -285,6 +285,42 @@ describe('a setting that the host nests in an override', () => {
     kept.forEach((value, index) => expect(copy.headersToSpanAttributes.kept[index]).toBe(value))
   })
 
+  it('copies an object with no prototype, a list subclass and a shared member, and reads a getter once', () => {
+    // Scenario: the rest of the cases of the copy: what is copied (every kind of plain object and list), how
+    // often a getter runs, that a shared member is copied for each place it sits, and what is not copied.
+    class Rows extends Array<number> {}
+    const bare = Object.assign(Object.create(null) as object, { a: 1 })
+    let reads = 0
+    const getter = {
+      get once(): number {
+        reads += 1
+        return 1
+      }
+    }
+    const shared = { x: 1 }
+    const symbol = Symbol('hidden')
+    const rows = Rows.from([1, 2])
+    const copy = settle({
+      bare,
+      rows,
+      getter,
+      twice: [shared, shared],
+      [symbol]: 'dropped'
+    }) as { headersToSpanAttributes: Record<string | symbol, unknown> }
+    const out = copy.headersToSpanAttributes
+    expect(Object.getPrototypeOf(out['bare'])).toBeNull()
+    expect(
+      Array.isArray(out['rows']) && Object.getPrototypeOf(out['rows']) === Array.prototype
+    ).toBe(true)
+    expect(reads).toBe(1)
+    const [first, second] = out['twice'] as object[]
+    expect(first).not.toBe(second)
+    expect(out[symbol]).toBeUndefined()
+    const kept = [new Uint8Array(1), new Set(), /x/, new Error('x'), Object(1)]
+    const same = settle({ kept }) as { headersToSpanAttributes: { kept: unknown[] } }
+    kept.forEach((value, index) => expect(same.headersToSpanAttributes.kept[index]).toBe(value))
+  })
+
   it('is refused when it nests too deep, holds too many values, has a long list or object or a __proto__ key', () => {
     // Scenario: the copy is bounded, and a cycle in the host's object ends in a refusal and not a hang.
     const deep: Record<string, unknown> = {}
