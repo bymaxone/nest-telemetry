@@ -95,6 +95,31 @@ describe('the configuration handed to the instrumentations', () => {
     })
   })
 
+  it('answers only for an instrumentation name, so nothing else sees an entry', () => {
+    // Scenario: a symbol, `then`, `toJSON` and any name that is not an instrumentation answer nothing, and
+    // asking never adds a name to the map: awaiting or serialising it behaves as a plain object does.
+    const config = buildInstrumentationConfig(inputs, signals) as unknown as Record<
+      string | symbol,
+      unknown
+    >
+    const before = Object.keys(config)
+    for (const name of [
+      Symbol.iterator,
+      Symbol.toPrimitive,
+      'then',
+      'toJSON',
+      'constructor',
+      'x'
+    ]) {
+      expect(config[name]).toBeUndefined()
+    }
+    expect(config['@opentelemetry/instrumentation-pg']).toEqual({})
+    expect('@opentelemetry/instrumentation-pg' in config).toBe(false)
+    expect(Object.keys(config)).toEqual(before)
+    expect(Object.entries(config)).toHaveLength(before.length)
+    expect(JSON.parse(JSON.stringify(config))).toHaveProperty([FS])
+  })
+
   it('gives the HTTP instrumentation its own, undefined, header capture, unless the host set one', () => {
     // Scenario: the HTTP instrumentation reads the option when it is built, so an own key shadows a planted one.
     const own = buildInstrumentationConfig(inputs, signals)[HTTP] as Record<string, unknown>

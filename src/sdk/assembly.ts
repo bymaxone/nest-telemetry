@@ -199,18 +199,24 @@ export function settleInstrumentations(instrumentations: unknown): {
   }
 }
 
+/** The start of the name of every instrumentation `getNodeAutoInstrumentations` configures. */
+const INSTRUMENTATION_PREFIX = '@opentelemetry/instrumentation-'
+
 /**
- * Wraps the instrumentation configuration so that every name answers with an entry that has no
- * prototype. `getNodeAutoInstrumentations` hands an instrumentation that has no entry an empty object of
- * its own, which would inherit a planted `enabled`; the keys of the map stay the ones that were set.
+ * Wraps the instrumentation configuration so that every instrumentation name answers with an entry that
+ * has no prototype. `getNodeAutoInstrumentations` hands an instrumentation that has no entry an empty
+ * object of its own, which would inherit a planted `enabled`. The keys of the map stay the ones that were
+ * set, and nothing that is not an instrumentation name (a symbol, `then`, `toJSON`) gets an answer.
  *
  * @param map - The configuration, by instrumentation name.
- * @returns The same map, answering with an empty entry for a name it does not hold.
+ * @returns The same map, answering with an empty entry for an instrumentation name it does not hold.
  */
 function answerEveryName(map: Record<string, Record<string, unknown>>): InstrumentationConfigMap {
   return new Proxy(map, {
-    get: (target, name) =>
-      typeof name === 'string' ? (target[name] ?? Object.create(null)) : undefined
+    get: (target, name): Record<string, unknown> | undefined =>
+      typeof name === 'string' && name.startsWith(INSTRUMENTATION_PREFIX)
+        ? (target[name] ?? Object.create(null))
+        : undefined
   }) as InstrumentationConfigMap
 }
 
