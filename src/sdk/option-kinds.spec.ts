@@ -242,6 +242,36 @@ describe('settleOverrides, for a key named __proto__', () => {
   })
 })
 
+/** An object with exactly `count` prototypes, the last of them the root of the realm. */
+function chainOf(count: number): object {
+  let proto: object = Object.prototype
+  for (let index = 1; index < count; index++) proto = Object.create(proto) as object
+  return Object.create(proto) as object
+}
+
+/** An object whose `flag` is held by its prototype number `position`, the root of the realm further up. */
+function flagHeldAt(position: number): object {
+  const holder = Object.create(Object.prototype) as object
+  Object.defineProperty(holder, 'flag', { value: true })
+  let upper: object = holder
+  for (let index = 1; index < position; index++) upper = Object.create(upper) as object
+  return Object.create(upper) as object
+}
+
+describe('the longest chain of prototypes', () => {
+  it('accepts 100 prototypes as the options and refuses 101', () => {
+    // Scenario: the bound is exact: the 100th prototype is the last one followed.
+    expect(requireObject('x', chainOf(100))).toBeDefined()
+    expect(thrown(() => requireObject('x', chainOf(101)))).toBeInstanceOf(TelemetryOptionError)
+  })
+
+  it('reads a key held by the 100th prototype and not one held by the 101st', () => {
+    // Scenario: the lookup stops at the same bound, and a key beyond it is not the host's.
+    expect(readOwnOrClass(flagHeldAt(100), 'flag')).toBe(true)
+    expect(readOwnOrClass(flagHeldAt(101), 'flag')).toBeUndefined()
+  })
+})
+
 describe('requireObject, for a value of a kind that is not a plain object', () => {
   class Config {
     readonly enabled = true
