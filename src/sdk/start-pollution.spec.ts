@@ -69,7 +69,8 @@ describe('startTelemetry beside a polluted Object.prototype', () => {
       expect(String(refused[0]?.[0])).toContain('holds 1 name(s)')
       expect(refused[0]?.[1]).toEqual({
         type: 'SecurityWarning',
-        code: 'BYMAX_TELEMETRY_REALM_POLLUTED'
+        code: 'BYMAX_TELEMETRY_REALM_POLLUTED',
+        detail: ''
       })
       // Refused before anything else runs: not even the warning about a service name that is not set.
       expect(emitWarning.mock.calls).toHaveLength(1)
@@ -79,7 +80,7 @@ describe('startTelemetry beside a polluted Object.prototype', () => {
     }
   })
 
-  it('hands the warning options that do not inherit a detail from the prototype', async () => {
+  it('hands the warning an own, empty detail, so a planted one is not shown', async () => {
     // Scenario: process.emitWarning reads detail from the options it is given, which would inherit a planted
     // one and show it; the options of the refusal have no such name, so the warning carries the count only.
     const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
@@ -93,7 +94,7 @@ describe('startTelemetry beside a polluted Object.prototype', () => {
       await startTelemetry({ env: {} })
       const options = emitWarning.mock.calls[0]?.[1] as { detail?: string; code?: string }
       expect(options.code).toBe('BYMAX_TELEMETRY_REALM_POLLUTED')
-      expect(options.detail).toBeUndefined()
+      expect(options.detail).toBe('')
       expect(String(emitWarning.mock.calls[0]?.[0])).not.toContain('SECRET-PLANTED')
     } finally {
       delete (Object.prototype as unknown as Record<string, unknown>)['detail']

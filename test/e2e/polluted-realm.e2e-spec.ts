@@ -41,7 +41,7 @@ const plant = (names) => {
 }
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 process.on('warning', (warning) => {
-  if (warning.code === 'BYMAX_TELEMETRY_REALM_POLLUTED') console.log(JSON.stringify({ warning: warning.message }))
+  if (warning.code === 'BYMAX_TELEMETRY_REALM_POLLUTED') console.log(JSON.stringify({ warning: warning.message, detail: warning.detail }))
 })
 // Hidden before the library loads: not enumerable, so the bundle's export helper still loads.
 for (const [name, value] of Object.entries(JSON.parse(process.env.PLANT_HIDDEN || '{}'))) {
@@ -79,9 +79,13 @@ plant(JSON.parse(process.env.PLANT || '{}'))
 `
 
 /** What the child printed, merged into one object, and how it ended. */
-async function runChild(
-  environment: Record<string, string>
-): Promise<{ enabled?: boolean; warning?: string; done?: boolean; code: number | null }> {
+async function runChild(environment: Record<string, string>): Promise<{
+  enabled?: boolean
+  warning?: string
+  detail?: string
+  done?: boolean
+  code: number | null
+}> {
   const result = await runInRealProcess(
     CHILD,
     { BUNDLE: bundle.file, OTEL_EXPORTER_OTLP_ENDPOINT: collector.endpoint, ...environment },
@@ -91,6 +95,7 @@ async function runChild(
   return Object.assign({ code: result.code }, ...answers) as {
     enabled?: boolean
     warning?: string
+    detail?: string
     done?: boolean
     code: number | null
   }
@@ -107,11 +112,14 @@ describe('a name that only the root prototype of the process holds, in a real pr
         http_proxy: 'http://127.0.0.1:1',
         OTEL_TRACES_SAMPLER: 'always_off',
         serviceName: 'planted-name',
-        requestHook: 'planted'
+        requestHook: 'planted',
+        detail: 'SECRET-DETAIL'
       })
     })
     expect(answer.enabled).toBe(false)
-    expect(answer.warning).toContain('holds 5 name(s)')
+    expect(answer.warning).toContain('holds 6 name(s)')
+    // The warning object reads a planted detail through the prototype unless it has an own one.
+    expect(answer.detail).toBe('')
     expect(answer.warning).not.toMatch(/http_proxy|serviceName|requestHook|OTEL_/)
     expect(answer.done).toBe(true)
     expect(answer.code).toBe(0)
