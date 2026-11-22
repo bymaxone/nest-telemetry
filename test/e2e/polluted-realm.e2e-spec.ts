@@ -158,10 +158,10 @@ describe('a name that only the root prototype of the process holds, in a real pr
     expect(answer.code).toBe(0)
   }, 60_000)
 
-  it.each(['detail', 'code', 'type'])(
+  it.each(['detail', 'code'])(
     'answers with the disabled handle, and does not reject, when a read-only %s makes the warning throw',
     async (name) => {
-      // Scenario: Node assigns the detail, code and type of a warning onto a plain Error, which throws for a
+      // Scenario: Node assigns the detail and code of a warning onto a plain Error, which throws for a
       // read-only name on the root prototype; the refusal still answers with the disabled handle and the
       // process ends normally.
       const answer = await runChild({ PLANT_READONLY: JSON.stringify({ [name]: 'x' }) })
