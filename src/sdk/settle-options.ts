@@ -20,7 +20,7 @@ import type { TelemetryOptions } from './types'
  * absent, `undefined` or `null` has no key in the copy.
  *
  * @param options - The options of a call.
- * @returns A plain copy: the nested options are copies too, and the list is an array of strings.
+ * @returns A copy with no prototype: the nested options are copies too, and the list is an array of strings.
  * @throws {TelemetryOptionError} When an option is of the wrong kind or a list or map is too long.
  */
 export function settleOptions(options: TelemetryOptions): TelemetryOptions {
@@ -41,5 +41,10 @@ export function settleOptions(options: TelemetryOptions): TelemetryOptions {
     shutdownTimeoutMs: read.shutdownTimeoutMs,
     env: requireObject('env', read.env)
   }
-  return Object.fromEntries(Object.entries(settled).filter(([, value]) => isGiven(value)))
+  // No prototype: a key the call did not give stays absent when the start reads it, whatever the root
+  // prototype of the realm carries.
+  return Object.assign(
+    Object.create(null) as TelemetryOptions,
+    Object.fromEntries(Object.entries(settled).filter(([, value]) => isGiven(value)))
+  )
 }
