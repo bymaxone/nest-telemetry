@@ -123,6 +123,40 @@ function isOtherKind(value: object): boolean {
 }
 
 /**
+ * Whether a prototype is the root of its realm: the end of every chain, whose own `constructor` has it
+ * as its `prototype`. A flag that only this object carries was put there by something other than the host.
+ *
+ * @param prototype - An object found on the chain of an options object.
+ * @returns `true` for the root prototype of a realm.
+ */
+function isRealmRoot(prototype: object): boolean {
+  return (
+    Object.getPrototypeOf(prototype) === null &&
+    (
+      Object.getOwnPropertyDescriptor(prototype, 'constructor')?.value as
+        { prototype?: unknown } | undefined
+    )?.prototype === prototype
+  )
+}
+
+/**
+ * Reads one option of a group from the object the host passed, as the host wrote it: an own field, or a
+ * field or getter of a class, but never a value that only the root prototype of the realm holds, which a
+ * polluted realm could have put there to switch a protection off.
+ *
+ * @param group - The object the host passed, or `undefined`.
+ * @param name - The option name.
+ * @returns The value, read once, or `undefined` when only the root prototype has it.
+ */
+export function readOwnOrClass(group: object | undefined, name: string): unknown {
+  if (group === undefined) return undefined
+  let holder: object | null = group
+  while (holder !== null && !Object.hasOwn(holder, name)) holder = Object.getPrototypeOf(holder)
+  if (holder === null || isRealmRoot(holder)) return undefined
+  return (group as Record<string, unknown>)[name]
+}
+
+/**
  * Copies a list by index, reading its length once as a bounded integer and each index once, never
  * through the iterator or a method of the host's array.
  *

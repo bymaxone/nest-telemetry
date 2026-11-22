@@ -157,6 +157,32 @@ describe('the configuration handed to the real auto-instrumentations', () => {
     })
   })
 
+  it('ignores a flag that only the root prototype of the realm carries', async () => {
+    // Scenario: a polluted realm cannot turn off the URL redaction or turn on the export of log records.
+    for (const name of ['disableUrlRedaction', 'sendLogs']) {
+      Object.defineProperty(Object.prototype, name, { value: true, configurable: true })
+    }
+    try {
+      const config = await configFor({ env: {} })
+      expect(config[HTTP]).toEqual({ redactedQueryParams: [...DEFAULT_REDACTED_QUERY_PARAMS] })
+      expect(config[PINO]).toEqual({ disableLogSending: true })
+    } finally {
+      for (const name of ['disableUrlRedaction', 'sendLogs']) {
+        delete (Object.prototype as unknown as Record<string, unknown>)[name]
+      }
+    }
+  })
+
+  it('still reads a flag that a prototype of the host holds, whatever it is', async () => {
+    // Scenario: the control: a prototype with no prototype and no constructor is the host's data, not the root.
+    const base = Object.assign(Object.create(null) as object, { sendLogs: true })
+    const config = await configFor({
+      env: {},
+      instrumentations: Object.create(base) as never
+    })
+    expect(config[PINO]).toEqual({ disableLogSending: false })
+  })
+
   it('honours the host Redis serializer only after the explicit opt-out', async () => {
     // Scenario: with disableRedisArgumentRedaction the override is the host's decision, and the
     // opt-out alone leaves no ioredis entry at all.

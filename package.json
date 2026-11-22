@@ -1,6 +1,6 @@
 {
   "name": "@bymax-one/nest-telemetry",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "description": "OpenTelemetry tracing for NestJS 11 and plain Node: starts the SDK before your app loads, redacts secrets from spans by default, and flushes on shutdown. Optional peers, zero cost when disabled.",
   "author": "Bymax One <support@bymax.one>",
   "license": "MIT",
@@ -99,7 +99,7 @@
     "prepare": "husky",
     "prepublishOnly": "pnpm clean && pnpm typecheck && pnpm lint && pnpm check:mutants && pnpm check:docs && pnpm test:cov && pnpm test:e2e && pnpm test:cov:all && pnpm build && pnpm check:published",
     "release": "npm publish --provenance --access public",
-    "size": "node scripts/check-dist-fresh.mjs && node scripts/check-size.mjs",
+    "size": "node scripts/check-dist-fresh.mjs --tarball-ok && node scripts/check-size.mjs",
     "test": "jest",
     "test:all": "pnpm test && pnpm test:e2e",
     "test:cov": "jest --coverage",
