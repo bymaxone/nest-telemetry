@@ -285,6 +285,20 @@ describe('a setting that the host nests in an override', () => {
     kept.forEach((value, index) => expect(copy.headersToSpanAttributes.kept[index]).toBe(value))
   })
 
+  it('copies a list whole when the root prototype holds an iterator', () => {
+    // Scenario: a planted Symbol.iterator on the root prototype must not decide how many members are
+    // copied, which would drop an entry of a redaction list.
+    const iterator = function* (): Generator<number> {
+      yield 0
+    }
+    planted(Symbol.iterator as unknown as string, iterator, () => {
+      const copy = settle({ list: ['session', 'password'] }) as {
+        headersToSpanAttributes: { list: string[] }
+      }
+      expect(copy.headersToSpanAttributes.list).toEqual(['session', 'password'])
+    })
+  })
+
   it('copies an object with no prototype, a list subclass and a shared member, and reads a getter once', () => {
     // Scenario: the rest of the cases of the copy: what is copied (every kind of plain object and list), how
     // often a getter runs, that a shared member is copied for each place it sits, and what is not copied.

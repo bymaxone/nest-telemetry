@@ -320,10 +320,15 @@ function detach(value: unknown, seen: { count: number }, depth: number): unknown
         `a list of at most ${MAX_OPTION_ENTRIES} entries`
       )
     }
-    // By own index: a hole is a missing member, not whatever a prototype holds at that index.
-    return Array.from({ length: value.length }, (_member, index) =>
-      detach(Object.hasOwn(value, index) ? value[index] : undefined, seen, depth + 1)
-    )
+    // By own index, in a loop: a hole is a missing member, not whatever a prototype holds at that index,
+    // and no helper that probes its argument for an iterator is used on an object the root prototype
+    // reaches.
+    const copy: unknown[] = []
+    const length = value.length
+    for (let index = 0; index < length; index++) {
+      copy[index] = detach(Object.hasOwn(value, index) ? value[index] : undefined, seen, depth + 1)
+    }
+    return copy
   }
   const members = Object.entries(value)
   if (members.length > MAX_OPTION_ENTRIES) {

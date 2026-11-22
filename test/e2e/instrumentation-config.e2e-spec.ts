@@ -56,6 +56,43 @@ async function configFor(
   return calls[calls.length - 1]?.[0] as unknown as Record<string, Record<string, unknown>>
 }
 
+/** Settings that a polluted realm could plant for the instrumentations that read one when they are built. */
+const PLANTED_SETTINGS = {
+  captureMessageContent: true,
+  dbStatementSerializer: (): string => 'planted',
+  responseHook: (): void => undefined,
+  lambdaHandler: 'planted.handler',
+  metadataToSpanAttributes: { client: { requestMetadata: ['authorization'] } }
+}
+
+/**
+ * Builds the real instrumentations while the settings above sit on the root prototype, and hands the
+ * check an accessor for a built instrumentation by name.
+ */
+async function withPlantedSettings(
+  check: (instance: (name: string) => Record<string, unknown>) => void
+): Promise<void> {
+  for (const [name, value] of Object.entries(PLANTED_SETTINGS)) {
+    Object.defineProperty(Object.prototype, name, { value, configurable: true, writable: true })
+  }
+  try {
+    await configFor({ env: {}, unsafe: { disableRedisArgumentRedaction: true } })
+    const results = jest.mocked(getNodeAutoInstrumentations).mock.results
+    const built = (results[results.length - 1]?.value ?? []) as { instrumentationName: string }[]
+    check(
+      (name) =>
+        built.find((candidate) => candidate.instrumentationName === name) as unknown as Record<
+          string,
+          unknown
+        >
+    )
+  } finally {
+    for (const name of Object.keys(PLANTED_SETTINGS)) {
+      delete (Object.prototype as unknown as Record<string, unknown>)[name]
+    }
+  }
+}
+
 describe('the configuration handed to the real auto-instrumentations', () => {
   it('applies the safe defaults', async () => {
     // Scenario: a host that passes nothing gets file-system tracing off, URL and Redis redaction
@@ -217,41 +254,25 @@ describe('the configuration handed to the real auto-instrumentations', () => {
     }
   })
 
-  it('builds the instrumentations that read a setting in their constructor without a planted value', async () => {
-    // Scenario: the real instrumentations copy the configuration into an ordinary object while they are
-    // built and read some settings then; a planted message-capture switch, Redis serializer, hook or handler
-    // name is not found, because each is an own key that is undefined.
-    const planted = {
-      captureMessageContent: true,
-      dbStatementSerializer: (): string => 'planted',
-      responseHook: (): void => undefined,
-      lambdaHandler: 'planted.handler',
-      metadataToSpanAttributes: { client: { requestMetadata: ['authorization'] } }
-    }
-    for (const [name, value] of Object.entries(planted)) {
-      Object.defineProperty(Object.prototype, name, { value, configurable: true, writable: true })
-    }
-    try {
-      await configFor({ env: {}, unsafe: { disableRedisArgumentRedaction: true } })
-      const results = jest.mocked(getNodeAutoInstrumentations).mock.results
-      const built = (results[results.length - 1]?.value ?? []) as {
-        instrumentationName: string
-        getConfig(): Record<string, unknown>
-      }[]
-      const instance = (name: string): Record<string, unknown> =>
-        built.find((candidate) => candidate.instrumentationName === name) as unknown as Record<
-          string,
-          unknown
-        >
+  it('builds gRPC with no metadata a planted list asks for', async () => {
+    // Scenario: the gRPC instrumentation reads its metadata list from the configuration while it is built; a
+    // planted list is not found, so no metadata becomes an attribute.
+    await withPlantedSettings((instance) => {
       type Capture = { client: { captureRequestMetadata(span: object, metadata: object): void } }
       const grpc = instance('@opentelemetry/instrumentation-grpc')['_metadataCapture'] as Capture
-      // The metadata capture is built from the configuration while the instrumentation is built.
       const attributes: string[] = []
       grpc.client.captureRequestMetadata(
         { setAttribute: (key: string) => attributes.push(key) },
         { get: () => ['secret'] }
       )
       expect(attributes).toEqual([])
+    })
+  })
+
+  it('builds both Redis clients with no planted serializer or hook', async () => {
+    // Scenario: the Redis instrumentation copies its configuration for each client, which reads the serializer
+    // and the hook from it; each is an own key that is undefined.
+    await withPlantedSettings((instance) => {
       for (const key of ['instrumentationV2_V3', 'instrumentationV4_V5']) {
         const client = instance('@opentelemetry/instrumentation-redis')[key] as {
           getConfig(): Record<string, unknown>
@@ -259,11 +280,17 @@ describe('the configuration handed to the real auto-instrumentations', () => {
         expect(client.getConfig()['dbStatementSerializer']).toBeUndefined()
         expect(client.getConfig()['responseHook']).toBeUndefined()
       }
-    } finally {
-      for (const name of Object.keys(planted)) {
-        delete (Object.prototype as unknown as Record<string, unknown>)[name]
-      }
-    }
+    })
+  })
+
+  it('builds OpenAI with message capture off whatever a planted value says', async () => {
+    // Scenario: the OpenAI instrumentation reads the configuration it is handed, which has no prototype, and
+    // writes its own false, so a planted true is not found.
+    await withPlantedSettings((instance) => {
+      expect(instance('@opentelemetry/instrumentation-openai')['_config']).toMatchObject({
+        captureMessageContent: false
+      })
+    })
   })
 
   it('still reads a flag that a class of the host holds, and refuses a stand-in that never ends', async () => {
