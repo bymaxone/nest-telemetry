@@ -352,6 +352,58 @@ describe('a setting that the host nests in an override', () => {
     kept.forEach((value, index) => expect(same.headersToSpanAttributes.kept[index]).toBe(value))
   })
 
+  it('refuses at exactly the bounds and accepts one inside them, with the words of each refusal', () => {
+    // Scenario: 16 levels, 10,000 objects and lists in all, and 1000 members to a list or an object are the
+    // last allowed values; one more of each is refused with the words that say which bound it was.
+    const chain = (levels: number, wrap: (inner: unknown) => unknown): unknown => {
+      let inner: unknown = {}
+      for (let level = 0; level < levels; level++) inner = wrap(inner)
+      return inner
+    }
+    const refused = (setting: unknown): Error =>
+      (() => {
+        try {
+          settle(setting)
+        } catch (error) {
+          return error as Error
+        }
+        return new Error('accepted')
+      })()
+    expect(() => settle(chain(16, (inner) => ({ next: inner })))).not.toThrow()
+    expect(() => settle(chain(16, (inner) => [inner]))).not.toThrow()
+    expect(refused(chain(17, (inner) => ({ next: inner }))).message).toContain(
+      'nested at most 16 levels deep'
+    )
+    expect(refused(chain(17, (inner) => [inner])).message).toContain(
+      'nested at most 16 levels deep'
+    )
+    const total = (extra: number): unknown =>
+      Array.from({ length: 10 }, () => Array.from({ length: 990 }, () => ({}))).concat(
+        Array.from({ length: 89 + extra }, () => ({})) as never
+      )
+    expect(() => settle(total(0))).not.toThrow()
+    expect(refused(total(1)).message).toContain('nested at most 16 levels deep')
+    const members = (count: number): number[] => Array.from({ length: count }, () => 0)
+    const keys = (count: number): object =>
+      Object.fromEntries(members(count).map((_zero, index) => [`k${index}`, 0]))
+    expect(() => settle({ list: members(1000) })).not.toThrow()
+    expect(() => settle(keys(1000))).not.toThrow()
+    expect(refused({ list: members(1001) }).message).toContain('a list of at most 1000 entries')
+    expect(refused(keys(1001)).message).toContain('an object of at most 1000 entries')
+  })
+
+  it('copies a list to exactly its own length, whatever the host list holds past it', () => {
+    // Scenario: the copy has the host's length and no member more, so a redaction list keeps its size.
+    const copy = settle({ list: ['a', 'b', 'c'] }) as {
+      headersToSpanAttributes: { list: string[] }
+    }
+    expect(copy.headersToSpanAttributes.list).toHaveLength(3)
+    expect(Object.keys(copy.headersToSpanAttributes.list)).toEqual(['0', '1', '2'])
+    expect(Object.keys(settle({ nested: [[1]] }).headersToSpanAttributes as object)).toEqual([
+      'nested'
+    ])
+  })
+
   it('is refused when it nests too deep, holds too many values, has a long list or object or a __proto__ key', () => {
     // Scenario: the copy is bounded, and a cycle in the host's object ends in a refusal and not a hang.
     const deep: Record<string, unknown> = {}

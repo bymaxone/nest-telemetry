@@ -134,6 +134,13 @@ describe('buildInstrumentationConfig', () => {
     })
   })
 
+  it("gives an instrumentation that reads nothing while it is built no key of its own beyond the library's", () => {
+    // Scenario: the entries of the logging instrumentations hold exactly the setting the library gives them.
+    const config = buildInstrumentationConfig({}, noLogs)
+    expect(Object.keys(config[PINO] as object)).toEqual(['disableLogSending'])
+    expect(Object.keys(config[FS] as object)).toEqual(['enabled'])
+  })
+
   it('turns file-system instrumentation on when the host asks', () => {
     // Scenario: fs tracing is the host's call.
     expect(buildInstrumentationConfig({ instrumentations: { fs: true } }, noLogs)[FS]).toEqual({

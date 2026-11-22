@@ -324,8 +324,8 @@ function detach(value: unknown, seen: { count: number }, depth: number): unknown
     // By own index, in a loop: a hole is a missing member, not whatever a prototype holds at that index,
     // and no helper that probes its argument for an iterator is used on an object the root prototype
     // reaches.
-    const copy: unknown[] = []
     const length = value.length
+    const copy = new Array<unknown>(length)
     for (let index = 0; index < length; index++) {
       copy[index] = detach(Object.hasOwn(value, index) ? value[index] : undefined, seen, depth + 1)
     }
