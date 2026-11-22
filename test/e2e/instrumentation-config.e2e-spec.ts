@@ -157,6 +157,50 @@ describe('the configuration handed to the real auto-instrumentations', () => {
     })
   })
 
+  it('ignores a flag that only the root prototype of the realm carries', async () => {
+    // Scenario: a polluted realm cannot turn off the URL redaction or turn on the export of log records.
+    for (const name of ['disableUrlRedaction', 'sendLogs']) {
+      Object.defineProperty(Object.prototype, name, { value: true, configurable: true })
+    }
+    try {
+      const config = await configFor({ env: {} })
+      expect(config[HTTP]).toEqual({ redactedQueryParams: [...DEFAULT_REDACTED_QUERY_PARAMS] })
+      expect(config[PINO]).toEqual({ disableLogSending: true })
+    } finally {
+      for (const name of ['disableUrlRedaction', 'sendLogs']) {
+        delete (Object.prototype as unknown as Record<string, unknown>)[name]
+      }
+    }
+  })
+
+  it('still reads a flag that a class of the host holds, and refuses a stand-in that never ends', async () => {
+    // Scenario: a class instance is the host's; a Proxy that answers itself as its prototype is refused and does not hang.
+    class Options {
+      get sendLogs(): boolean {
+        return true
+      }
+    }
+    const config = await configFor({ env: {}, instrumentations: new Options() })
+    expect(config[PINO]).toEqual({ disableLogSending: false })
+    const cycle: object = new Proxy({}, { getPrototypeOf: () => cycle })
+    await expect(
+      startTelemetry({ env: {}, instrumentations: cycle as never })
+    ).rejects.toMatchObject({
+      option: 'instrumentations'
+    })
+  })
+
+  it('ends the walk of a chain that turns into a cycle after it was checked', async () => {
+    // Scenario: a stand-in that answers a sound chain once and then itself does not hang the start; the flag is unset.
+    let answers = 0
+    const turning: object = new Proxy(
+      {},
+      { getPrototypeOf: () => (answers++ === 0 ? Object.prototype : turning) }
+    )
+    const config = await configFor({ env: {}, instrumentations: turning as never })
+    expect(config[PINO]).toEqual({ disableLogSending: true })
+  })
+
   it('honours the host Redis serializer only after the explicit opt-out', async () => {
     // Scenario: with disableRedisArgumentRedaction the override is the host's decision, and the
     // opt-out alone leaves no ioredis entry at all.

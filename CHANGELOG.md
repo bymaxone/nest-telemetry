@@ -8,6 +8,44 @@ The `release.yml` workflow extracts the section matching the pushed `vX.Y.Z` tag
 as the GitHub Release body, so each released version needs a matching `## [X.Y.Z]`
 heading here.
 
+## [Unreleased]
+
+### Planned for the next minor
+
+- **Export the option error class** with `code` and `option` typed in the declarations, so a host can test for
+  it. It is a public addition, so it waits for a minor release.
+
+## [1.0.12] - 2026-11-21
+
+### Fixed
+
+- **A flag that only the root prototype of the realm holds is no longer read as the host's.** `unsafe` flags and
+  `instrumentations.fs`, `sendLogs` and `overrides` were read through the whole prototype chain, so a polluted
+  `Object.prototype` could switch a redaction off or the export of log records on without the host asking. Those
+  keys are now read from the object, a class instance or a class prototype, and never from the root prototype alone.
+
+- **An option that must be an object is refused when it has a brand Node tells apart, and a chain of prototypes that
+  never ends no longer hangs the start.** The list of refused kinds is now a set of brand predicates of
+  `util.types` (so a `WeakMap`, a typed array, an `Error` and a generator object are refused too), and only a plain
+  object, an object with no prototype, a class instance whose chain ends at the root of its realm and the
+  environment object are read. A `Proxy` whose `getPrototypeOf` answers itself looped for ever in the walk; the
+  walk is now bounded at 100 prototypes, and a longer chain is refused.
+
+### Documentation
+
+- **The README and the declarations of `ignorePaths` say what it throws** (when it is called, with the code, the
+  option name `ignorePaths patterns`, the cause and the cap of 1000) and that the `cause` can hold text of the
+  host's value.
+- **The README says which prototype is ignored** and that a field of a class instance and a getter of its class
+  are still read.
+
+### Apply to a derived backend
+
+Nothing to change for options written as an object literal or as a class. A configuration that relied on a flag
+set on `Object.prototype` (a pollution, not an option) now reads that flag as unset. An object option of a kind
+that `util.types` reports (a `WeakMap`, a typed array, an `Error`, a generator object), or whose chain of prototypes
+does not end at the root of its realm, now fails at start with `BYMAX_TELEMETRY_OPTION_INVALID`.
+
 ## [1.0.11] - 2026-11-21
 
 ### Fixed
@@ -469,6 +507,7 @@ First release.
 - Verification from the packed tarball: real `node --import` processes in a CommonJS and a native-ESM
   application, with planted secrets absent from the exported body and negative controls.
 
+[1.0.12]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.12
 [1.0.11]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.11
 [1.0.10]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.10
 [1.0.9]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.9

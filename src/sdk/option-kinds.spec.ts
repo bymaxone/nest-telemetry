@@ -9,6 +9,7 @@ import {
   requireBoolean,
   requireFunction,
   requireObject,
+  readOwnOrClass,
   requireString,
   settleOverrides,
   settleRegExpList,
@@ -241,6 +242,36 @@ describe('settleOverrides, for a key named __proto__', () => {
   })
 })
 
+/** An object with exactly `count` prototypes, the last of them the root of the realm. */
+function chainOf(count: number): object {
+  let proto: object = Object.prototype
+  for (let index = 1; index < count; index++) proto = Object.create(proto) as object
+  return Object.create(proto) as object
+}
+
+/** An object whose `flag` is held by its prototype number `position`, the root of the realm further up. */
+function flagHeldAt(position: number): object {
+  const holder = Object.create(Object.prototype) as object
+  Object.defineProperty(holder, 'flag', { value: true })
+  let upper: object = holder
+  for (let index = 1; index < position; index++) upper = Object.create(upper) as object
+  return Object.create(upper) as object
+}
+
+describe('the longest chain of prototypes', () => {
+  it('accepts 100 prototypes as the options and refuses 101', () => {
+    // Scenario: the bound is exact: the 100th prototype is the last one followed.
+    expect(requireObject('x', chainOf(100))).toBeDefined()
+    expect(thrown(() => requireObject('x', chainOf(101)))).toBeInstanceOf(TelemetryOptionError)
+  })
+
+  it('reads a key held by the 100th prototype and not one held by the 101st', () => {
+    // Scenario: the lookup stops at the same bound, and a key beyond it is not the host's.
+    expect(readOwnOrClass(flagHeldAt(100), 'flag')).toBe(true)
+    expect(readOwnOrClass(flagHeldAt(101), 'flag')).toBeUndefined()
+  })
+})
+
 describe('requireObject, for a value of a kind that is not a plain object', () => {
   class Config {
     readonly enabled = true
@@ -258,6 +289,35 @@ describe('requireObject, for a value of a kind that is not a plain object', () =
     expect((thrown(() => requireObject('x', value)) as Error).message).toBe(
       'The x option must be an object, so the start was refused.'
     )
+  })
+
+  it.each([
+    ['a WeakMap', new WeakMap()],
+    ['a WeakSet', new WeakSet()],
+    ['an Error', new Error('x')],
+    ['a typed array', new Uint8Array(1)],
+    ['an ArrayBuffer', new ArrayBuffer(1)],
+    ['a DataView', new DataView(new ArrayBuffer(1))],
+    ['an iterator of a Map', new Map().keys()],
+    ['a generator object', (function* gen() {})()]
+  ])('refuses %s as the wrong kind, by the brand Node reports', (_what, value) => {
+    // Scenario: an object of a brand Node reports cannot hold settings, so it is refused whatever its prototype.
+    expect(thrown(() => requireObject('x', value))).toBeInstanceOf(TelemetryOptionError)
+  })
+
+  it('refuses an object whose chain ends in a prototype that is not the root of a realm', () => {
+    // Scenario: a chain that ends in a data object with no constructor is not a plain object or a class instance.
+    const data = Object.assign(Object.create(null) as object, { a: 1 })
+    expect(thrown(() => requireObject('x', Object.create(data) as object))).toBeInstanceOf(
+      TelemetryOptionError
+    )
+  })
+
+  it('refuses a stand-in whose chain never ends, instead of walking it for ever', () => {
+    // Scenario: a Proxy that answers itself as its own prototype must end the walk, not hang the start.
+    const cycle: object = new Proxy({}, { getPrototypeOf: () => cycle })
+    expect(thrown(() => requireObject('x', cycle))).toBeInstanceOf(TelemetryOptionError)
+    expect(readOwnOrClass(cycle, 'flag')).toBeUndefined()
   })
 
   it.each([

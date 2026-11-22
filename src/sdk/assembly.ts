@@ -5,7 +5,7 @@
 import type { InstrumentationConfigMap } from '@opentelemetry/auto-instrumentations-node'
 
 import type { RatioSampler, TelemetryEnvironment } from './environment'
-import { requireBoolean, requireObject, settleOverrides } from './option-kinds'
+import { readOwnOrClass, requireBoolean, requireObject, settleOverrides } from './option-kinds'
 import { buildRedactedQueryParams, serializeRedisCommandName } from './redaction'
 import type { InstrumentationOptions, TelemetryOptions, UnsafeOptions } from './types'
 import { reportWarning } from './warning-sink'
@@ -166,9 +166,9 @@ export type InstrumentationInputs = {
 export function settleUnsafe(unsafe: unknown): {
   readonly [K in keyof UnsafeOptions]-?: boolean
 } {
-  const flags = requireObject('unsafe', unsafe) as Record<keyof UnsafeOptions, unknown> | undefined
+  const flags = requireObject('unsafe', unsafe)
   const flag = (name: keyof UnsafeOptions): boolean =>
-    requireBoolean(`unsafe.${name}`, flags?.[name]) === true
+    requireBoolean(`unsafe.${name}`, readOwnOrClass(flags, name)) === true
   return {
     disableUrlRedaction: flag('disableUrlRedaction'),
     disableRedisArgumentRedaction: flag('disableRedisArgumentRedaction'),
@@ -188,12 +188,11 @@ export function settleUnsafe(unsafe: unknown): {
 export function settleInstrumentations(instrumentations: unknown): {
   readonly [K in keyof InstrumentationOptions]-?: InstrumentationOptions[K] | undefined
 } {
-  const read = requireObject('instrumentations', instrumentations) as
-    Record<keyof InstrumentationOptions, unknown> | undefined
+  const read = requireObject('instrumentations', instrumentations)
   return {
-    fs: requireBoolean('instrumentations.fs', read?.fs),
-    sendLogs: requireBoolean('instrumentations.sendLogs', read?.sendLogs),
-    overrides: settleOverrides('instrumentations.overrides', read?.overrides) as
+    fs: requireBoolean('instrumentations.fs', readOwnOrClass(read, 'fs')),
+    sendLogs: requireBoolean('instrumentations.sendLogs', readOwnOrClass(read, 'sendLogs')),
+    overrides: settleOverrides('instrumentations.overrides', readOwnOrClass(read, 'overrides')) as
       InstrumentationConfigMap | undefined
   }
 }
