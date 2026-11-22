@@ -6,6 +6,26 @@
 
 import { types } from 'node:util'
 
+/** The kinds that Node tells apart and that never hold the settings of a host. */
+const BRANDS = [
+  types.isAnyArrayBuffer,
+  types.isArgumentsObject,
+  types.isBoxedPrimitive,
+  types.isDataView,
+  types.isDate,
+  types.isGeneratorObject,
+  types.isMap,
+  types.isMapIterator,
+  types.isNativeError,
+  types.isPromise,
+  types.isRegExp,
+  types.isSet,
+  types.isSetIterator,
+  types.isTypedArray,
+  types.isWeakMap,
+  types.isWeakSet
+]
+
 /**
  * Whether a key is an index of an array: a canonical unsigned 32-bit number below 4294967295, as
  * opposed to a property the host's class added.
@@ -97,29 +117,10 @@ export function requireFunction<F extends (...args: never[]) => unknown>(
  */
 export function requireObject(option: string, value: unknown): object | undefined {
   if (value === undefined || value === null) return undefined
-  if (typeof value !== 'object' || Array.isArray(value) || isOtherKind(value)) {
+  if (typeof value !== 'object' || Array.isArray(value) || !isSettingsObject(value)) {
     throw new TelemetryOptionError(option, 'an object')
   }
   return value
-}
-
-/**
- * Whether an object is a stand-in of a kind that holds no settings, told by the kind Node reports
- * and not by its prototype: the environment object and an instance of a host class have prototypes of
- * their own and are objects of settings.
- *
- * @param value - An object that is not an array.
- * @returns `true` for a boxed primitive, a Map, a Set, a Date, a RegExp or a Promise.
- */
-function isOtherKind(value: object): boolean {
-  return (
-    types.isBoxedPrimitive(value) ||
-    types.isMap(value) ||
-    types.isSet(value) ||
-    types.isDate(value) ||
-    types.isRegExp(value) ||
-    types.isPromise(value)
-  )
 }
 
 /**
@@ -139,6 +140,29 @@ function isRealmRoot(prototype: object): boolean {
   )
 }
 
+/** The longest chain of prototypes that is followed; a longer one is not an object of settings. */
+const MAX_CHAIN = 100
+
+/**
+ * Whether an object can be the host's options: not an exotic object of a kind Node reports, and a
+ * chain of prototypes that ends in the root of a realm (or is the object alone, with no prototype),
+ * so a plain object, a class instance and the environment object pass and a stand-in does not.
+ *
+ * @param value - An object that is not an array.
+ * @returns `true` for an object that can hold settings.
+ */
+function isSettingsObject(value: object): boolean {
+  if (BRANDS.some((brand) => brand(value))) return false
+  let end = value
+  let next: object | null = Object.getPrototypeOf(end)
+  for (let hops = 0; next !== null; hops++) {
+    if (hops >= MAX_CHAIN) return false
+    end = next
+    next = Object.getPrototypeOf(end)
+  }
+  return end === value || isRealmRoot(end)
+}
+
 /**
  * Reads one option of a group from the object the host passed, as the host wrote it: an own field, or a
  * field or getter of a class, but never a value that only the root prototype of the realm holds, which a
@@ -151,7 +175,10 @@ function isRealmRoot(prototype: object): boolean {
 export function readOwnOrClass(group: object | undefined, name: string): unknown {
   if (group === undefined) return undefined
   let holder: object | null = group
-  while (holder !== null && !Object.hasOwn(holder, name)) holder = Object.getPrototypeOf(holder)
+  for (let hops = 0; holder !== null && !Object.hasOwn(holder, name); hops++) {
+    if (hops >= MAX_CHAIN) return undefined
+    holder = Object.getPrototypeOf(holder)
+  }
   if (holder === null || isRealmRoot(holder)) return undefined
   return (group as Record<string, unknown>)[name]
 }

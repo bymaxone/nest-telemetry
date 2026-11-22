@@ -173,14 +173,32 @@ describe('the configuration handed to the real auto-instrumentations', () => {
     }
   })
 
-  it('still reads a flag that a prototype of the host holds, whatever it is', async () => {
-    // Scenario: the control: a prototype with no prototype and no constructor is the host's data, not the root.
-    const base = Object.assign(Object.create(null) as object, { sendLogs: true })
-    const config = await configFor({
-      env: {},
-      instrumentations: Object.create(base) as never
-    })
+  it('still reads a flag that a class of the host holds, and refuses a stand-in that never ends', async () => {
+    // Scenario: a class instance is the host's; a Proxy that answers itself as its prototype is refused and does not hang.
+    class Options {
+      get sendLogs(): boolean {
+        return true
+      }
+    }
+    const config = await configFor({ env: {}, instrumentations: new Options() })
     expect(config[PINO]).toEqual({ disableLogSending: false })
+    const cycle: object = new Proxy({}, { getPrototypeOf: () => cycle })
+    await expect(
+      startTelemetry({ env: {}, instrumentations: cycle as never })
+    ).rejects.toMatchObject({
+      option: 'instrumentations'
+    })
+  })
+
+  it('ends the walk of a chain that turns into a cycle after it was checked', async () => {
+    // Scenario: a stand-in that answers a sound chain once and then itself does not hang the start; the flag is unset.
+    let answers = 0
+    const turning: object = new Proxy(
+      {},
+      { getPrototypeOf: () => (answers++ === 0 ? Object.prototype : turning) }
+    )
+    const config = await configFor({ env: {}, instrumentations: turning as never })
+    expect(config[PINO]).toEqual({ disableLogSending: true })
   })
 
   it('honours the host Redis serializer only after the explicit opt-out', async () => {

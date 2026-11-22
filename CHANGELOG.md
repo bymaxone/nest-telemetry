@@ -24,15 +24,27 @@ heading here.
   `Object.prototype` could switch a redaction off or the export of log records on without the host asking. Those
   keys are now read from the object, a class instance or a class prototype, and never from the root prototype alone.
 
+- **An option that must be an object is refused by every brand Node reports, and a chain of prototypes that
+  never ends no longer hangs the start.** The list of refused kinds is now the brand predicates of
+  `util.types` (so a `WeakMap`, a typed array, an `Error` and a generator object are refused too), and only a plain
+  object, an object with no prototype, a class instance whose chain ends at the root of its realm and the
+  environment object are read. A `Proxy` whose `getPrototypeOf` answers itself looped for ever in the walk; the
+  walk is now bounded at 100 prototypes, and a longer chain is refused.
+
 ### Documentation
 
+- **The README and the declarations of `ignorePaths` say what it throws** (when it is called, with the code, the
+  option name `ignorePaths patterns`, the cause and the cap of 1000) and that the `cause` can hold text of the
+  host's value.
 - **The README says which prototype is ignored** and that a field of a class instance and a getter of its class
   are still read.
 
 ### Apply to a derived backend
 
 Nothing to change for options written as an object literal or as a class. A configuration that relied on a flag
-set on `Object.prototype` (a pollution, not an option) now reads that flag as unset.
+set on `Object.prototype` (a pollution, not an option) now reads that flag as unset. An object option of a kind
+that `util.types` reports (a `WeakMap`, a typed array, an `Error`, a generator object), or whose chain of prototypes
+does not end at the root of its realm, now fails at start with `BYMAX_TELEMETRY_OPTION_INVALID`.
 
 ## [1.0.11] - 2026-11-21
 

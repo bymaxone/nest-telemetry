@@ -97,8 +97,8 @@ describe('readOwnOrClass', () => {
     expect(readOwnOrClass(undefined, 'absent')).toBeUndefined()
   })
 
-  it('does not take the prototype of another realm root for a class', () => {
-    // Scenario: a prototype with no prototype of its own and a constructor that is not it is data, not the root.
+  it('reads a key that a prototype with no prototype and no constructor holds', () => {
+    // Scenario: the lookup alone takes such a prototype for data, not for the root; whether the object is accepted is the kind check's.
     const data = Object.create(null) as Record<string, unknown>
     data['flag'] = true
     expect(readOwnOrClass(Object.create(data) as object, 'flag')).toBe(true)

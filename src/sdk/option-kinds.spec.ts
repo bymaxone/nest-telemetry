@@ -9,6 +9,7 @@ import {
   requireBoolean,
   requireFunction,
   requireObject,
+  readOwnOrClass,
   requireString,
   settleOverrides,
   settleRegExpList,
@@ -258,6 +259,35 @@ describe('requireObject, for a value of a kind that is not a plain object', () =
     expect((thrown(() => requireObject('x', value)) as Error).message).toBe(
       'The x option must be an object, so the start was refused.'
     )
+  })
+
+  it.each([
+    ['a WeakMap', new WeakMap()],
+    ['a WeakSet', new WeakSet()],
+    ['an Error', new Error('x')],
+    ['a typed array', new Uint8Array(1)],
+    ['an ArrayBuffer', new ArrayBuffer(1)],
+    ['a DataView', new DataView(new ArrayBuffer(1))],
+    ['an iterator of a Map', new Map().keys()],
+    ['a generator object', (function* gen() {})()]
+  ])('refuses %s as the wrong kind, by the brand Node reports', (_what, value) => {
+    // Scenario: a kind the list of the first release did not name is refused all the same.
+    expect(thrown(() => requireObject('x', value))).toBeInstanceOf(TelemetryOptionError)
+  })
+
+  it('refuses an object whose chain ends in a prototype that is not the root of a realm', () => {
+    // Scenario: a chain that ends in a data object with no constructor is not a plain object or a class instance.
+    const data = Object.assign(Object.create(null) as object, { a: 1 })
+    expect(thrown(() => requireObject('x', Object.create(data) as object))).toBeInstanceOf(
+      TelemetryOptionError
+    )
+  })
+
+  it('refuses a stand-in whose chain never ends, instead of walking it for ever', () => {
+    // Scenario: a Proxy that answers itself as its own prototype must end the walk, not hang the start.
+    const cycle: object = new Proxy({}, { getPrototypeOf: () => cycle })
+    expect(thrown(() => requireObject('x', cycle))).toBeInstanceOf(TelemetryOptionError)
+    expect(readOwnOrClass(cycle, 'flag')).toBeUndefined()
   })
 
   it.each([

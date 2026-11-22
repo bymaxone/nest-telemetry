@@ -25,8 +25,11 @@ const EXPECTED = 'an array of regular expressions'
  * quantifier on a short path: `/^\/(a+)+$/` took 2.5 s and 5.5 s in two runs on 28 characters,
  * and the time grows exponentially with the length.
  *
- * @param patterns - Patterns tested against the path alone.
+ * @param patterns - Patterns tested against the path alone: an array of at most 1000 regular expressions.
  * @returns A predicate for `TelemetryOptions.ignoreIncomingRequest`.
+ * @throws {Error} When called with anything else: its `code` is `BYMAX_TELEMETRY_OPTION_INVALID`, its `option` is
+ *   `ignorePaths patterns` and the error that an unreadable list raised, which can hold text of the host's
+ *   own value, is its `cause`. The message never repeats the value.
  */
 export function ignorePaths(
   patterns: readonly RegExp[]
