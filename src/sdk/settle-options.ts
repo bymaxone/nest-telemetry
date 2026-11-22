@@ -24,6 +24,7 @@ import type { TelemetryOptions } from './types'
  * @throws {TelemetryOptionError} When an option is of the wrong kind or a list or map is too long.
  */
 export function settleOptions(options: TelemetryOptions): TelemetryOptions {
+  requireObject('options', options)
   const read = readEachOption(options)
   const settled: Record<string, unknown> = {
     enabled: requireBoolean('enabled', read.enabled),

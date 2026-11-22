@@ -11,7 +11,7 @@ const mockSdkInstance = {
   shutdown: jest.fn<Promise<void>, []>()
 }
 const mockNodeSdk = jest.fn((..._args: unknown[]) => mockSdkInstance)
-const mockAutoInstrumentations = jest.fn((..._args: unknown[]) => ['instrumentation'])
+const mockAutoInstrumentations = jest.fn((..._args: unknown[]) => [{ getConfig: () => ({}) }])
 const mockWinstonTransportCheck = jest.fn((..._args: unknown[]) => undefined)
 
 jest.mock('./winston-transport', () => ({

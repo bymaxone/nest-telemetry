@@ -123,63 +123,51 @@ export function requireObject(option: string, value: unknown): object | undefine
   return value
 }
 
-/**
- * Whether a prototype is the root of its realm: the end of every chain, whose own `constructor` has it
- * as its `prototype`. A flag that only this object carries was put there by something other than the host.
- *
- * @param prototype - An object found on the chain of an options object.
- * @returns `true` for the root prototype of a realm.
- */
-function isRealmRoot(prototype: object): boolean {
-  return (
-    Object.getPrototypeOf(prototype) === null &&
-    (
-      Object.getOwnPropertyDescriptor(prototype, 'constructor')?.value as
-        { prototype?: unknown } | undefined
-    )?.prototype === prototype
-  )
-}
-
 /** The longest chain of prototypes that is followed; a longer one is not an object of settings. */
 const MAX_CHAIN = 100
 
 /**
  * Whether an object can be the host's options: not an exotic object of a kind Node reports, and a
- * chain of prototypes that ends in the root of a realm (or is the object alone, with no prototype),
- * so a plain object, a class instance and the environment object pass and a stand-in does not.
+ * chain of prototypes that ends within {@link MAX_CHAIN} prototypes, so a plain object, a class
+ * instance and the environment object pass and a stand-in whose chain never ends does not. No
+ * property of any prototype is read.
  *
  * @param value - An object that is not an array.
  * @returns `true` for an object that can hold settings.
  */
 function isSettingsObject(value: object): boolean {
   if (BRANDS.some((brand) => brand(value))) return false
-  let end = value
-  let next: object | null = Object.getPrototypeOf(end)
+  let next: object | null = Object.getPrototypeOf(value)
   for (let hops = 0; next !== null; hops++) {
     if (hops >= MAX_CHAIN) return false
-    end = next
-    next = Object.getPrototypeOf(end)
+    next = Object.getPrototypeOf(next)
   }
-  return end === value || isRealmRoot(end)
+  return true
 }
 
 /**
  * Reads one option of a group from the object the host passed, as the host wrote it: an own field, or a
- * field or getter of a class, but never a value that only the root prototype of the realm holds, which a
+ * field or getter of a class, but never a value that only the end of its chain of prototypes holds, which a
  * polluted realm could have put there to switch a protection off.
  *
- * @param group - The object the host passed, or `undefined`.
+ * @param group - The object the host passed, or `undefined`. A Proxy is read through what it answers.
  * @param name - The option name.
  * @returns The value, read once, or `undefined` when only the root prototype has it.
  */
 export function readOwnOrClass(group: object | undefined, name: string): unknown {
   if (group === undefined) return undefined
+  // A Proxy answers for itself, so what it answers is what the host wrote, whichever traps it has.
+  if (types.isProxy(group)) return (group as Record<string, unknown>)[name]
   let holder: object | null = group
   for (let hops = 0; holder !== null && !Object.hasOwn(holder, name); hops++) {
     if (hops >= MAX_CHAIN) return undefined
     holder = Object.getPrototypeOf(holder)
   }
-  if (holder === null || isRealmRoot(holder)) return undefined
+  // An object with no prototype that the group only inherits from is the end of the chain, the root
+  // of whatever realm it came from; no property of it is the host's, and none of it is read to tell.
+  if (holder === null || (holder !== group && Object.getPrototypeOf(holder) === null)) {
+    return undefined
+  }
   return (group as Record<string, unknown>)[name]
 }
 
@@ -229,7 +217,8 @@ function copyByIndex<T>(
   }
   const copy: T[] = []
   for (let index = 0; index < length; index++) {
-    const taken = take(host(() => list[index]))
+    // An own index only: a hole in the host's list is not whatever a prototype holds at that index.
+    const taken = take(host(() => (Object.hasOwn(list, index) ? list[index] : undefined)))
     if (taken === undefined) throw new TelemetryOptionError(option, expected)
     copy.push(taken)
   }
@@ -297,6 +286,67 @@ function refuseProtoKey(key: string): void {
   if (key === '__proto__') throw new TelemetryOptionError(OVERRIDE_PATH, 'free of a __proto__ key')
 }
 
+/** The deepest a setting of an override may nest, and the most values it may hold in all. */
+const MAX_NESTING = 16
+const MAX_VALUES = 10_000
+
+/**
+ * Copies a setting that the host nests in an override, so an instrumentation that reads a key of it
+ * finds only what the host wrote: a plain object of any realm becomes an object with no prototype and a list
+ * is copied by own index, each member the same way. Anything else (a function, a class
+ * instance, a `Map`, a `Proxy`) is the host's and is passed on as it is.
+ *
+ * @param value - A setting, or a value inside one.
+ * @param seen - Counts the values copied for one setting.
+ * @param depth - How deep the value sits.
+ * @returns The copy.
+ * @throws {TelemetryOptionError} When the setting nests deeper than {@link MAX_NESTING}, holds more than
+ *   {@link MAX_VALUES} values, or a list or object holds more than {@link MAX_OPTION_ENTRIES} members.
+ */
+function detach(value: unknown, seen: { count: number }, depth: number): unknown {
+  if (typeof value !== 'object' || value === null || types.isProxy(value)) return value
+  const list = Array.isArray(value)
+  // A plain object is one whose prototype is the end of a chain, the root of whatever realm made it,
+  // or that has none; no property of the prototype is read to tell.
+  const prototype = Object.getPrototypeOf(value) as object | null
+  if (!list && prototype !== null && Object.getPrototypeOf(prototype) !== null) return value
+  seen.count += 1
+  if (depth > MAX_NESTING || seen.count > MAX_VALUES) {
+    throw new TelemetryOptionError(OVERRIDE_PATH, 'nested at most 16 levels deep')
+  }
+  if (list) {
+    if (value.length > MAX_OPTION_ENTRIES) {
+      throw new TelemetryOptionError(
+        OVERRIDE_PATH,
+        `a list of at most ${MAX_OPTION_ENTRIES} entries`
+      )
+    }
+    // By own index, in a loop: a hole is a missing member, not whatever a prototype holds at that index,
+    // and no helper that probes its argument for an iterator is used on an object the root prototype
+    // reaches.
+    const length = value.length
+    // Stryker disable next-line ArrayDeclaration: the loop below sets every index, so the length given here changes nothing.
+    const copy = new Array<unknown>(length)
+    for (let index = 0; index < length; index++) {
+      copy[index] = detach(Object.hasOwn(value, index) ? value[index] : undefined, seen, depth + 1)
+    }
+    return copy
+  }
+  const members = Object.entries(value)
+  if (members.length > MAX_OPTION_ENTRIES) {
+    throw new TelemetryOptionError(
+      OVERRIDE_PATH,
+      `an object of at most ${MAX_OPTION_ENTRIES} entries`
+    )
+  }
+  const copy = Object.create(null) as Record<string, unknown>
+  for (const [key, member] of members) {
+    refuseProtoKey(key)
+    copy[key] = detach(member, seen, depth + 1)
+  }
+  return copy
+}
+
 /**
  * Copies one entry of `overrides` into a plain object, reading each own key once. The settings that
  * decide what leaves the host, and the ones that run host code, are checked by kind: the boolean
@@ -325,6 +375,8 @@ function settleOverrideEntry(entry: object): Record<string, unknown> {
       settled = settleStringList(`${OVERRIDE_PATH}.${key}`, setting)
     } else if (key.endsWith('Hook')) {
       settled = requireFunction(`${OVERRIDE_PATH}.<a hook>`, setting)
+    } else {
+      settled = detach(setting, { count: 0 }, 0)
     }
     if (isGiven(settled)) copy[key] = settled
   }

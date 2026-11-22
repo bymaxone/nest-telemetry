@@ -56,6 +56,43 @@ async function configFor(
   return calls[calls.length - 1]?.[0] as unknown as Record<string, Record<string, unknown>>
 }
 
+/** Settings that a polluted realm could plant for the instrumentations that read one when they are built. */
+const PLANTED_SETTINGS = {
+  captureMessageContent: true,
+  dbStatementSerializer: (): string => 'planted',
+  responseHook: (): void => undefined,
+  lambdaHandler: 'planted.handler',
+  metadataToSpanAttributes: { client: { requestMetadata: ['authorization'] } }
+}
+
+/**
+ * Builds the real instrumentations while the settings above sit on the root prototype, and hands the
+ * check an accessor for a built instrumentation by name.
+ */
+async function withPlantedSettings(
+  check: (instance: (name: string) => Record<string, unknown>) => void
+): Promise<void> {
+  for (const [name, value] of Object.entries(PLANTED_SETTINGS)) {
+    Object.defineProperty(Object.prototype, name, { value, configurable: true, writable: true })
+  }
+  try {
+    await configFor({ env: {}, unsafe: { disableRedisArgumentRedaction: true } })
+    const results = jest.mocked(getNodeAutoInstrumentations).mock.results
+    const built = (results[results.length - 1]?.value ?? []) as { instrumentationName: string }[]
+    check(
+      (name) =>
+        built.find((candidate) => candidate.instrumentationName === name) as unknown as Record<
+          string,
+          unknown
+        >
+    )
+  } finally {
+    for (const name of Object.keys(PLANTED_SETTINGS)) {
+      delete (Object.prototype as unknown as Record<string, unknown>)[name]
+    }
+  }
+}
+
 describe('the configuration handed to the real auto-instrumentations', () => {
   it('applies the safe defaults', async () => {
     // Scenario: a host that passes nothing gets file-system tracing off, URL and Redis redaction
@@ -217,6 +254,90 @@ describe('the configuration handed to the real auto-instrumentations', () => {
     }
   })
 
+  it('copies what the host nests in an override and passes the rest through as written', async () => {
+    // Scenario: a plain object and a list nested in an override setting reach the instrumentation as copies
+    // with no prototype, and a function, a class instance and a Proxy as the host wrote them.
+    class Agent {}
+    const agent = new Agent()
+    const fn = (): void => undefined
+    const proxy = new Proxy({}, {})
+    const sparse: unknown[] = []
+    sparse[1] = 'after the hole'
+    const config = await configFor({
+      env: {},
+      instrumentations: {
+        overrides: {
+          [HTTP]: {
+            headersToSpanAttributes: {
+              server: { requestHeaders: ['x-id'] },
+              list: [{ a: 1 }, 'text', 3, null],
+              keep: [agent, fn, proxy],
+              holes: sparse
+            } as never
+          }
+        }
+      }
+    })
+    const copied = config[HTTP]?.['headersToSpanAttributes'] as {
+      server: { requestHeaders: string[] }
+      list: unknown[]
+      keep: unknown[]
+      holes: unknown[]
+    }
+    expect(Object.getPrototypeOf(copied)).toBeNull()
+    // A hole is a missing member, kept as an own undefined at its place.
+    expect(copied.holes).toHaveLength(2)
+    expect(Object.hasOwn(copied.holes, 0)).toBe(true)
+    expect(copied.holes[0]).toBeUndefined()
+    expect(copied.holes[1]).toBe('after the hole')
+    expect(Object.getPrototypeOf(copied.server)).toBeNull()
+    expect(copied.server.requestHeaders).toEqual(['x-id'])
+    expect(Object.getPrototypeOf(copied.list[0])).toBeNull()
+    expect(copied.list.slice(1)).toEqual(['text', 3, null])
+    expect(copied.keep[0]).toBe(agent)
+    expect(copied.keep[1]).toBe(fn)
+    expect(copied.keep[2]).toBe(proxy)
+  })
+
+  it('builds gRPC with no metadata a planted list asks for', async () => {
+    // Scenario: the gRPC instrumentation reads its metadata list from the configuration while it is built; a
+    // planted list is not found, so no metadata becomes an attribute.
+    await withPlantedSettings((instance) => {
+      type Capture = { client: { captureRequestMetadata(span: object, metadata: object): void } }
+      const grpc = instance('@opentelemetry/instrumentation-grpc')['_metadataCapture'] as Capture
+      const attributes: string[] = []
+      grpc.client.captureRequestMetadata(
+        { setAttribute: (key: string) => attributes.push(key) },
+        { get: () => ['secret'] }
+      )
+      expect(attributes).toEqual([])
+    })
+  })
+
+  it('builds both Redis clients with no planted serializer or hook', async () => {
+    // Scenario: the Redis instrumentation copies its configuration for each client, which reads the serializer
+    // and the hook from it; each is an own key that is undefined.
+    await withPlantedSettings((instance) => {
+      for (const key of ['instrumentationV2_V3', 'instrumentationV4_V5']) {
+        const client = instance('@opentelemetry/instrumentation-redis')[key] as {
+          getConfig(): Record<string, unknown>
+        }
+        expect(client.getConfig()['dbStatementSerializer']).toBeUndefined()
+        expect(client.getConfig()['responseHook']).toBeUndefined()
+      }
+    })
+  })
+
+  it('builds OpenAI with message capture off whatever a planted value says', async () => {
+    // Scenario: the OpenAI instrumentation reads the configuration it is handed, which has no prototype, and
+    // writes its own false, so a planted true is not found.
+    await withPlantedSettings((instance) => {
+      expect(instance('@opentelemetry/instrumentation-openai')['_config']).toMatchObject({
+        captureMessageContent: false
+      })
+    })
+  })
+
   it('still reads a flag that a class of the host holds, and refuses a stand-in that never ends', async () => {
     // Scenario: a class instance is the host's; a Proxy that answers itself as its prototype is refused and does not hang.
     class Options {
@@ -263,6 +384,7 @@ describe('the configuration handed to the real auto-instrumentations', () => {
     // This case compares two SDKs started in one process, which the library refuses.
     allowRestart()
     const alone = await configFor({ env: {}, unsafe: { disableRedisArgumentRedaction: true } })
-    expect(alone).not.toHaveProperty([IOREDIS])
+    // Own keys: a name the config does not hold answers with an empty entry.
+    expect(Object.keys(alone)).not.toContain(IOREDIS)
   })
 })

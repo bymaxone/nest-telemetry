@@ -34,6 +34,21 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
+//   - 2026-11-22 (sdk and register, PM-granted): sdk 8,643 B measured, 8.47 KiB budget (8,673 B, 30 B of
+//     headroom); register 8,783 B, 8.61 KiB budget (8,816 B, 33 B). The growth, about 0.15 KiB in each, is the table
+//     of what an instrumentation reads while it is built, and the copy of a nested object of any realm and of a
+//     list by own index.
+//   - 2026-11-22 (sdk and register, PM-granted): sdk 8,485 B measured, 8.32 KiB budget (8,519 B, 34 B of
+//     headroom); register 8,647 B, 8.48 KiB budget (8,683 B, 36 B). The growth, about 0.2 KiB in each, is the copy,
+//     with no prototype and within bounds, of a plain object or list that the host nests in an override setting.
+//   - 2026-11-22 (sdk and register, PM-granted): sdk 8,278 B measured, 8.12 KiB budget (8,314 B, 36 B of
+//     headroom); register 8,426 B, 8.26 KiB budget (8,458 B, 32 B). The growth, about 0.03 KiB in each, is the
+//     configuration of the instrumentations answering an empty entry with no prototype for an instrumentation
+//     name that the host did not configure.
+//   - 2026-11-22 (sdk and register, PM-granted): sdk 8,242 B measured, 8.08 KiB budget (8,273 B, 31 B of
+//     headroom); register 8,385 B, 8.22 KiB budget (8,417 B, 32 B). The growth, about 0.22 KiB in each, is the
+//     placeholders on the process environment while the SDK is built, the configuration of the instrumentations
+//     with no prototype and cut from the root prototype, and the reads of a Proxy and of the end of a chain.
 //   - 2026-11-22 (sdk and register, PM-granted): sdk 8,002 B measured, 7.83 KiB budget (8,018 B,
 //     16 B of headroom); register 8,148 B, 7.98 KiB budget (8,172 B, 24 B). The growth, about 0.03 KiB in each, is
 //     the read of every option of the call, and of every variable of an environment, with the rule that a key
@@ -84,8 +99,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
 //   met by shortening the text of a warning.
 const BUDGETS = [
-  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 7.83 * 1024 },
-  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 7.98 * 1024 },
+  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 8.47 * 1024 },
+  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 8.61 * 1024 },
   { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.04 * 1024 },
   { name: 'observability (metrics)', path: 'dist/observability/index.mjs', brotli: 0.69 * 1024 }
 ]

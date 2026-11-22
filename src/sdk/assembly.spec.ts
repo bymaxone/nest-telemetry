@@ -116,12 +116,29 @@ describe('buildInstrumentationConfig', () => {
     expect(buildInstrumentationConfig({}, noLogs)).toEqual({
       [BUNYAN]: { disableLogSending: true },
       [FS]: { enabled: false },
-      [HTTP]: { redactedQueryParams: [...DEFAULT_REDACTED_QUERY_PARAMS] },
+      // The settings an instrumentation reads while it is built are own keys that are undefined.
+      '@opentelemetry/instrumentation-aws-lambda': { lambdaHandler: undefined },
+      '@opentelemetry/instrumentation-grpc': { metadataToSpanAttributes: undefined },
+      [HTTP]: {
+        headersToSpanAttributes: undefined,
+        redactedQueryParams: [...DEFAULT_REDACTED_QUERY_PARAMS]
+      },
       [IOREDIS]: { dbStatementSerializer: serializeRedisCommandName },
       [PINO]: { disableLogSending: true },
-      [REDIS]: { dbStatementSerializer: serializeRedisCommandName },
+      [REDIS]: {
+        dbStatementSerializer: serializeRedisCommandName,
+        requireParentSpan: undefined,
+        responseHook: undefined
+      },
       [WINSTON]: { disableLogSending: true }
     })
+  })
+
+  it("gives an instrumentation that reads nothing while it is built no key of its own beyond the library's", () => {
+    // Scenario: the entries of the logging instrumentations hold exactly the setting the library gives them.
+    const config = buildInstrumentationConfig({}, noLogs)
+    expect(Object.keys(config[PINO] as object)).toEqual(['disableLogSending'])
+    expect(Object.keys(config[FS] as object)).toEqual(['enabled'])
   })
 
   it('turns file-system instrumentation on when the host asks', () => {
@@ -221,8 +238,9 @@ describe('buildInstrumentationConfig', () => {
       { unsafe: { disableRedisArgumentRedaction: true } },
       noLogs
     )
-    expect(config).not.toHaveProperty([IOREDIS])
-    expect(config).not.toHaveProperty([REDIS])
+    // Own keys: every other name answers with an empty entry with no prototype.
+    expect(Object.keys(config)).not.toContain(IOREDIS)
+    expect(config[REDIS]?.['dbStatementSerializer']).toBeUndefined()
   })
 
   describe('host overrides', () => {
@@ -365,7 +383,7 @@ describe('buildInstrumentationConfig', () => {
         noLogs
       )
       expect(config[HTTP]).toEqual({ redactedQueryParams: [...DEFAULT_REDACTED_QUERY_PARAMS] })
-      expect(config).not.toHaveProperty('@opentelemetry/instrumentation-mysql2')
+      expect(Object.keys(config)).not.toContain('@opentelemetry/instrumentation-mysql2')
     })
 
     it('refuses a host list that is not an array, rather than ignoring it', () => {
