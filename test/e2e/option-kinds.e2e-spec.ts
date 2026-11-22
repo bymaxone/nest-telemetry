@@ -127,7 +127,7 @@ describe('startTelemetry in the real library, for an option of the wrong kind', 
     [
       'holding more than 10,000 objects and lists',
       () => Array.from({ length: 11 }, () => Array.from({ length: 999 }, () => ({}))),
-      'nested at most 16 levels deep'
+      'at most 10,000 objects and lists in all'
     ],
     [
       'a list of more than 1000 entries',

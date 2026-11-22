@@ -25,7 +25,7 @@ const REDIS_INSTRUMENTATION = '@opentelemetry/instrumentation-redis'
 const READ_WHEN_BUILT = Object.assign(Object.create(null), {
   [HTTP_INSTRUMENTATION]: ['headersToSpanAttributes'],
   '@opentelemetry/instrumentation-grpc': ['metadataToSpanAttributes'],
-  '@opentelemetry/instrumentation-aws-lambda': ['lambdaHandler'],
+  '@opentelemetry/instrumentation-aws-lambda': ['lambdaHandler', 'lambdaStartTime'],
   '@opentelemetry/instrumentation-socket.io': ['emitIgnoreEventList', 'onIgnoreEventList'],
   [REDIS_INSTRUMENTATION]: ['dbStatementSerializer', 'responseHook', 'requireParentSpan']
 }) as Readonly<Record<string, readonly string[]>>

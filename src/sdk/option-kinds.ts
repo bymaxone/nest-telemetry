@@ -358,8 +358,11 @@ function detach(value: unknown, seen: { count: number }, depth: number): unknown
   const prototype = getPrototypeOf(value) as object | null
   if (!list && prototype !== null && getPrototypeOf(prototype) !== null) return value
   seen.count += 1
-  if (depth > MAX_NESTING || seen.count > MAX_VALUES) {
+  if (depth > MAX_NESTING) {
     throw new TelemetryOptionError(OVERRIDE_PATH, 'nested at most 16 levels deep')
+  }
+  if (seen.count > MAX_VALUES) {
+    throw new TelemetryOptionError(OVERRIDE_PATH, 'at most 10,000 objects and lists in all')
   }
   if (list) {
     if (value.length > MAX_OPTION_ENTRIES) {
