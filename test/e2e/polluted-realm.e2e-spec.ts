@@ -158,15 +158,20 @@ describe('a name that only the root prototype of the process holds, in a real pr
     expect(answer.code).toBe(0)
   }, 60_000)
 
-  it('answers with the disabled handle, and does not reject, when a read-only detail makes the warning throw', async () => {
-    // Scenario: Node assigns detail onto the warning, which throws for a read-only name on the root prototype; the
-    // refusal still answers with the disabled handle and the process ends normally.
-    const answer = await runChild({ PLANT_READONLY: JSON.stringify({ detail: 'x' }) })
-    expect(answer.enabled).toBe(false)
-    expect(answer.done).toBe(true)
-    expect(answer.code).toBe(0)
-    expect(collector.bodies).toHaveLength(0)
-  }, 60_000)
+  it.each(['detail', 'code', 'type'])(
+    'answers with the disabled handle, and does not reject, when a read-only %s makes the warning throw',
+    async (name) => {
+      // Scenario: Node assigns the detail, code and type of a warning onto a plain Error, which throws for a
+      // read-only name on the root prototype; the refusal still answers with the disabled handle and the
+      // process ends normally.
+      const answer = await runChild({ PLANT_READONLY: JSON.stringify({ [name]: 'x' }) })
+      expect(answer.enabled).toBe(false)
+      expect(answer.done).toBe(true)
+      expect(answer.code).toBe(0)
+      expect(collector.bodies).toHaveLength(0)
+    },
+    60_000
+  )
 
   it('counts one, and does not throw, when a name that breaks the fresh realm is there before the library loads', async () => {
     // Scenario: with microtaskMode already on the prototype when the library loads, the fresh realm cannot be
