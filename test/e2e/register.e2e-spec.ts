@@ -62,6 +62,27 @@ describe('the preload boot with the real loader and the real SDK', () => {
     )
   })
 
+  it('starts nothing through the preload either while a name is planted on the root prototype', async () => {
+    // Scenario: the preload starts telemetry the same way, so a planted serviceName, which the SDK would read as
+    // the service name over the host's own, or any other name, starts no SDK and exports nothing.
+    Object.defineProperty(Object.prototype, 'serviceName', {
+      value: 'planted-name',
+      enumerable: true,
+      configurable: true,
+      writable: true
+    })
+    try {
+      const handle = await bootFromEnvironment(PARENT, { env: { OTEL_SERVICE_NAME: 'preload' } })
+      expect(handle.enabled).toBe(false)
+      trace.getTracer('e2e').startSpan('work').end()
+      process.emit('beforeExit', 0)
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      expect(collector.bodies).toHaveLength(0)
+    } finally {
+      delete (Object.prototype as unknown as Record<string, unknown>)['serviceName']
+    }
+  })
+
   it('starts nothing and registers nothing when OTEL_SDK_DISABLED is true', async () => {
     // Scenario: a disabled boot costs nothing.
     const handle = await bootFromEnvironment(PARENT, { env: { OTEL_SDK_DISABLED: 'true' } })

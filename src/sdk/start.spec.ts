@@ -145,6 +145,41 @@ describe('startTelemetry', () => {
       }
     )
 
+    it('starts nothing, and says how many names, when Object.prototype is polluted', async () => {
+      // Scenario: a process whose root prototype carries a name the engine does not define is not one telemetry
+      // can trust with its data: no SDK is built, the handle is the disabled one, and the one warning carries a
+      // count and never the name.
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      Object.defineProperty(Object.prototype, 'plantedSecretName', {
+        value: 'x',
+        enumerable: true,
+        configurable: true,
+        writable: true
+      })
+      try {
+        const handle = await startTelemetry({ serviceName: 'api', env: {} })
+        expect(handle.enabled).toBe(false)
+        expect(mockNodeSdk).not.toHaveBeenCalled()
+        const refused = emitWarning.mock.calls.filter(
+          ([, options]) =>
+            (options as { code?: string } | undefined)?.code === 'BYMAX_TELEMETRY_REALM_POLLUTED'
+        )
+        expect(refused).toHaveLength(1)
+        expect(String(refused[0]?.[0])).toContain('holds 1 name(s)')
+        expect(String(refused[0]?.[0])).not.toContain('plantedSecretName')
+      } finally {
+        delete (Object.prototype as unknown as Record<string, unknown>)['plantedSecretName']
+      }
+    })
+
+    it('hands the SDK a configuration with no prototype, so a planted name is not one of its options', async () => {
+      // Scenario: the SDK reads its serviceName, sampler, idGenerator, textMapPropagator and providers from the
+      // object it is given; a name that a polluted root prototype holds must not be found on it.
+      await startTelemetry({ serviceName: 'api', env: {} })
+      const [options] = mockNodeSdk.mock.calls[mockNodeSdk.mock.calls.length - 1] as [object]
+      expect(Object.getPrototypeOf(options)).toBeNull()
+    })
+
     it('assembles the SDK from the options and the environment', async () => {
       // Scenario: one boot wires resource, redaction processor, batch processor and
       // instrumentations in the order that makes redaction run first.

@@ -5,7 +5,7 @@
  * instrumentation uses. The planted names stay on the root prototype after the start too.
  * @layer e2e
  */
-import { resourceAttributes, spanAttributes, startCollector } from './fixtures/collector'
+import { startCollector } from './fixtures/collector'
 import type { Collector } from './fixtures/collector'
 import { bundleSdk, runInRealProcess } from './fixtures/real-process'
 import type { SdkBundle } from './fixtures/real-process'
@@ -30,172 +30,112 @@ afterEach(async () => {
 })
 
 /**
- * The child script: plants names on the root prototype, starts telemetry with the host's options,
- * optionally runs a real HTTP request through the instrumentation, records spans for a few seconds,
- * and prints what the start answered.
+ * The child script: plants names on the root prototype, starts telemetry, records a span, plants names again,
+ * records another, optionally builds an exporter of its own, and prints what happened as JSON lines.
  */
 const CHILD = `
-const plant = JSON.parse(process.env.PLANT)
-for (const [name, value] of Object.entries(plant)) {
-  Object.defineProperty(Object.prototype, name, { value, configurable: true, writable: true })
+const plant = (names) => {
+  for (const [name, value] of Object.entries(names)) {
+    Object.defineProperty(Object.prototype, name, { value, enumerable: true, configurable: true, writable: true })
+  }
 }
-if (process.env.PLANT_SOURCE) new Function(process.env.PLANT_SOURCE)()
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+process.on('warning', (warning) => {
+  if (warning.code === 'BYMAX_TELEMETRY_REALM_POLLUTED') console.log(JSON.stringify({ warning: warning.message }))
+})
 const { startTelemetry } = require(process.env.BUNDLE)
 const { trace } = require('@opentelemetry/api')
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+// Planted after the library is loaded: a bundle's own export helper walks its exports with for-in, so an
+// enumerable name planted before the load stops it from loading at all.
+plant(JSON.parse(process.env.PLANT || '{}'))
 ;(async () => {
-  const handle = await startTelemetry({ serviceName: 'host-api', env: JSON.parse(process.env.HOST_ENV || 'null') ?? undefined, instrumentations: JSON.parse(process.env.HOST_INSTR || 'null') ?? undefined })
+  const handle = await startTelemetry({ serviceName: 'host-api', env: { OTEL_BSP_SCHEDULE_DELAY: '200' } })
   console.log(JSON.stringify({ enabled: handle.enabled }))
-  if (process.env.HTTP === '1') {
-    const http = require('node:http')
-    const server = http.createServer((request, response) => response.end('ok'))
-    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
-    await new Promise((resolve, reject) => {
-      const outgoing = http.request({ host: '127.0.0.1', port: server.address().port, path: '/x', headers: { authorization: 'Bearer HOST-SECRET-123' } }, (response) => { response.resume(); response.on('end', resolve) })
-      outgoing.on('error', reject)
-      outgoing.end()
-    })
-    await sleep(300)
-    if (process.env.FETCH === '1') await (await fetch('http://127.0.0.1:' + server.address().port + '/f')).text()
-    await sleep(300)
-    server.close()
-    console.log(JSON.stringify({ hooked: globalThis.__hooked === true }))
-  }
-  if (process.env.FS === '1') require('node:fs').readFileSync(process.env.BUNDLE)
-  for (let index = 0; index < 3; index++) {
-    trace.getTracer('child').startSpan('work-' + index).end()
-    await sleep(1200)
+  trace.getTracer('child').startSpan('before').end()
+  await sleep(900)
+  plant(JSON.parse(process.env.PLANT_AFTER || '{}'))
+  trace.getTracer('child').startSpan('after').end()
+  await sleep(900)
+  if (process.env.HOST_EXPORTER === '1') {
+    const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http')
+    const { TracerProvider, SimpleSpanProcessor } = require('@opentelemetry/sdk-trace')
+    const exporter = new OTLPTraceExporter({ url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT + '/v1/traces' })
+    const provider = new TracerProvider({ spanProcessors: [new SimpleSpanProcessor({ exporter })] })
+    provider.getTracer('host').startSpan('host-span').end()
+    await sleep(900)
   }
   await handle.shutdown()
+  console.log(JSON.stringify({ done: true }))
 })()
 `
 
-/** Runs the child with the planted names and the options of the test. */
+/** What the child printed, merged into one object, and how it ended. */
 async function runChild(
-  plant: Record<string, unknown>,
-  extra: Record<string, string> = {}
-): Promise<{ enabled: unknown; hooked: unknown }> {
+  environment: Record<string, string>
+): Promise<{ enabled?: boolean; warning?: string; done?: boolean; code: number | null }> {
   const result = await runInRealProcess(
     CHILD,
-    {
-      BUNDLE: bundle.file,
-      PLANT: JSON.stringify(plant),
-      OTEL_EXPORTER_OTLP_ENDPOINT: collector.endpoint,
-      ...extra
-    },
+    { BUNDLE: bundle.file, OTEL_EXPORTER_OTLP_ENDPOINT: collector.endpoint, ...environment },
     30_000
   )
   const answers = result.lines.map((line) => JSON.parse(line) as Record<string, unknown>)
-  return Object.assign({ enabled: undefined, hooked: undefined }, ...answers) as {
-    enabled: unknown
-    hooked: unknown
+  return Object.assign({ code: result.code }, ...answers) as {
+    enabled?: boolean
+    warning?: string
+    done?: boolean
+    code: number | null
   }
 }
 
-describe('a name that only the root prototype of the process holds does not decide the export', () => {
-  it('sends the spans to the host endpoint, with no injected header and no compression', async () => {
-    // Scenario: a planted endpoint, header list, compression and timeout, for the traces signal and for
-    // all of them, do not redirect, decorate or compress what the host's own endpoint receives.
+describe('a name that only the root prototype of the process holds, in a real process', () => {
+  it('starts nothing and exports nothing when names are planted before the start, and says how many', async () => {
+    // Scenario: a polluted process, whatever the names are (an endpoint, a proxy, a sampler, a service name, a
+    // hook), starts no SDK: the handle is the disabled one, the one warning carries a count and none of the
+    // names, nothing reaches the collector and the host process ends normally.
     const answer = await runChild({
-      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'http://127.0.0.1:1/v1/traces',
-      OTEL_EXPORTER_OTLP_HEADERS: 'x-planted=yes',
-      OTEL_EXPORTER_OTLP_TRACES_HEADERS: 'x-planted-traces=yes',
-      OTEL_EXPORTER_OTLP_COMPRESSION: 'gzip',
-      OTEL_EXPORTER_OTLP_TIMEOUT: '1'
+      PLANT: JSON.stringify({
+        OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'http://127.0.0.1:1/v1/traces',
+        http_proxy: 'http://127.0.0.1:1',
+        OTEL_TRACES_SAMPLER: 'always_off',
+        serviceName: 'planted-name',
+        requestHook: 'planted'
+      })
+    })
+    expect(answer.enabled).toBe(false)
+    expect(answer.warning).toContain('holds 5 name(s)')
+    expect(answer.warning).not.toMatch(/http_proxy|serviceName|requestHook|OTEL_/)
+    expect(answer.done).toBe(true)
+    expect(answer.code).toBe(0)
+    expect(collector.bodies).toHaveLength(0)
+  }, 60_000)
+
+  it('exports before a name is planted and drops what is exported after, and the host goes on', async () => {
+    // Scenario: pollution that arrives after the start (a request planting a key) reaches the export: the batch
+    // recorded after it is dropped with no I/O, the one recorded before it arrived, and the process does not crash.
+    const answer = await runChild({
+      PLANT_AFTER: JSON.stringify({
+        OTEL_EXPORTER_OTLP_HEADERS: 'x-planted=yes',
+        https_proxy: 'http://127.0.0.1:1'
+      })
     })
     expect(answer.enabled).toBe(true)
-    expect(collector.bodies.join('')).toContain('work-2')
-    for (const headers of collector.headers) {
-      expect(headers['x-planted']).toBeUndefined()
-      expect(headers['x-planted-traces']).toBeUndefined()
-      expect(headers['content-encoding']).toBeUndefined()
-    }
+    const joined = collector.bodies.join('')
+    expect(joined).toContain('"before"')
+    expect(joined).not.toContain('"after"')
+    for (const headers of collector.headers) expect(headers['x-planted']).toBeUndefined()
+    expect(answer.done).toBe(true)
+    expect(answer.code).toBe(0)
   }, 60_000)
 
-  it('still samples, still runs and keeps the service name of the host', async () => {
-    // Scenario: a planted sampler, a planted disable switch and a planted service name change neither
-    // what is exported, nor whether the SDK runs, nor the name the host gave.
-    const answer = await runChild({
-      OTEL_TRACES_SAMPLER: 'always_off',
-      OTEL_SDK_DISABLED: 'true',
-      OTEL_SERVICE_NAME: 'planted-name'
-    })
+  it('exports every span on a clean prototype, and leaves an exporter the host built for itself working', async () => {
+    // Scenario: the guard wraps the export of the exporter classes this library meets, which is process-wide; on a
+    // clean prototype a span recorded by the SDK and one sent by an exporter the host built separately both arrive.
+    const answer = await runChild({ HOST_EXPORTER: '1' })
     expect(answer.enabled).toBe(true)
-    expect(collector.bodies.join('')).toContain('work-0')
-    expect(resourceAttributes(collector.bodies[0] ?? '')['service.name']).toBe('host-api')
-  }, 60_000)
-
-  it('records no request header the host did not ask for and runs no hook it did not give', async () => {
-    // Scenario: a planted headersToSpanAttributes, request hook and response hook neither export the
-    // Authorization header in clear nor run for a real request.
-    const answer = await runChild(
-      {
-        headersToSpanAttributes: {
-          server: { requestHeaders: ['authorization'] },
-          client: { requestHeaders: ['authorization'] }
-        }
-      },
-      {
-        HTTP: '1',
-        PLANT_SOURCE:
-          'Object.prototype.requestHook = () => { globalThis.__hooked = true }; Object.prototype.responseHook = Object.prototype.requestHook'
-      }
-    )
     const joined = collector.bodies.join('')
-    expect(joined).toContain('work-0')
-    expect(joined).not.toContain('HOST-SECRET-123')
-    expect(joined).not.toContain('http.request.header.authorization')
-    expect(answer.hooked).toBe(false)
-  }, 60_000)
-
-  it('does not read a header list that only the root prototype holds under a nested object of the host', async () => {
-    // Scenario: the host gives `headersToSpanAttributes: { server: {}, client: {} }`; a planted
-    // `requestHeaders` must not be found one level down, so the Authorization header is not exported.
-    await runChild(
-      { requestHeaders: ['authorization'], responseHeaders: ['content-type'] },
-      {
-        HTTP: '1',
-        HOST_INSTR: JSON.stringify({
-          overrides: {
-            '@opentelemetry/instrumentation-http': {
-              headersToSpanAttributes: { server: {}, client: {} }
-            }
-          }
-        })
-      }
-    )
-    const joined = collector.bodies.join('')
-    expect(joined).toContain('work-0')
-    expect(joined).not.toContain('HOST-SECRET-123')
-    expect(joined).not.toContain('http.request.header.authorization')
-    expect(joined).not.toContain('http.response.header.content-type')
-  }, 60_000)
-
-  it('keeps the undici instrumentation on when a planted enabled is false', async () => {
-    // Scenario: an instrumentation the host did not configure is handed an empty configuration, which
-    // must not inherit a planted `enabled: false`; the undici instrumentation still records a fetch.
-    await runChild({ enabled: false }, { HTTP: '1', FETCH: '1' })
-    expect(collector.bodies.join('')).toContain('@opentelemetry/instrumentation-undici')
-  }, 60_000)
-
-  it('does not let a planted enabled switch undici back on once the operator switched it off', async () => {
-    // Scenario: OTEL_NODE_DISABLED_INSTRUMENTATIONS names undici; a planted `enabled: true` must not
-    // switch it back on, so no fetch span is exported.
-    await runChild(
-      { enabled: true },
-      { HTTP: '1', FETCH: '1', OTEL_NODE_DISABLED_INSTRUMENTATIONS: 'undici' }
-    )
-    const joined = collector.bodies.join('')
-    expect(joined).toContain('work-0')
-    expect(joined).not.toContain('@opentelemetry/instrumentation-undici')
-  }, 60_000)
-
-  it('does not let a planted instrumentation name switch on what the host left off', async () => {
-    // Scenario: a planted key named after the file-system instrumentation does not enable it for a host
-    // that left it off, so no file-system span is exported for a file the child reads.
-    await runChild({ '@opentelemetry/instrumentation-fs': { enabled: true } }, { FS: '1' })
-    const joined = collector.bodies.join('')
-    expect(joined).toContain('work-0')
-    expect(joined).not.toContain('fs readFileSync')
+    expect(joined).toContain('"before"')
+    expect(joined).toContain('"after"')
+    expect(joined).toContain('"host-span"')
+    expect(answer.code).toBe(0)
   }, 60_000)
 })

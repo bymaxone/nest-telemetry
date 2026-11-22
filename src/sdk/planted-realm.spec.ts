@@ -9,7 +9,6 @@ import { runInNewContext } from 'node:vm'
 
 import { buildInstrumentationConfig, severFromRootPrototype } from './assembly'
 import type { InstrumentationInputs } from './assembly'
-import { withoutPlantedVariables } from './environment'
 import { readOwnOrClass, settleOverrides, settleStringList } from './option-kinds'
 import { settleOptions } from './settle-options'
 import type { TelemetryOptions } from './types'
@@ -27,52 +26,6 @@ function planted<T>(name: string, value: unknown, run: () => T): T {
     delete (Object.prototype as unknown as Record<string, unknown>)[name]
   }
 }
-
-describe('withoutPlantedVariables', () => {
-  it('makes a planted OTEL name an own empty variable for the step only', () => {
-    // Scenario: during the step the planted name reads as empty on the process environment, which
-    // OpenTelemetry treats as unset, and afterwards it is not there as an own variable any more.
-    planted(NAME, 'planted', () => {
-      const seen = withoutPlantedVariables(() => [
-        process.env[NAME],
-        Object.hasOwn(process.env, NAME)
-      ])
-      expect(seen).toEqual(['', true])
-      expect(Object.hasOwn(process.env, NAME)).toBe(false)
-    })
-  })
-
-  it('returns what the step returns and removes the placeholders when it throws', () => {
-    // Scenario: the cleanup does not depend on the step finishing.
-    planted(NAME, 'planted', () => {
-      expect(withoutPlantedVariables(() => 7)).toBe(7)
-      expect(() =>
-        withoutPlantedVariables(() => {
-          throw new Error('step failed')
-        })
-      ).toThrow('step failed')
-      expect(Object.hasOwn(process.env, NAME)).toBe(false)
-    })
-  })
-
-  it('leaves a variable the process environment has, and a name that is not an OTEL one', () => {
-    // Scenario: only a planted OTEL name is shadowed; an own variable keeps its value and is kept.
-    process.env[NAME] = 'real'
-    try {
-      planted(NAME, 'planted', () => {
-        expect(withoutPlantedVariables(() => process.env[NAME])).toBe('real')
-      })
-      expect(process.env[NAME]).toBe('real')
-    } finally {
-      delete process.env[NAME]
-    }
-    planted('NOT_AN_OTEL_NAME', 'planted', () => {
-      withoutPlantedVariables(() =>
-        expect(Object.hasOwn(process.env, 'NOT_AN_OTEL_NAME')).toBe(false)
-      )
-    })
-  })
-})
 
 describe('the configuration handed to the instrumentations', () => {
   const inputs = { instrumentations: { fs: false } } as unknown as InstrumentationInputs
@@ -126,6 +79,7 @@ describe('the configuration handed to the instrumentations', () => {
     [HTTP, ['headersToSpanAttributes']],
     ['@opentelemetry/instrumentation-grpc', ['metadataToSpanAttributes']],
     ['@opentelemetry/instrumentation-aws-lambda', ['lambdaHandler']],
+    ['@opentelemetry/instrumentation-socket.io', ['emitIgnoreEventList', 'onIgnoreEventList']],
     [
       '@opentelemetry/instrumentation-redis',
       ['dbStatementSerializer', 'responseHook', 'requireParentSpan']

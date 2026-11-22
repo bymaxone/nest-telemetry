@@ -12,6 +12,8 @@ import { DEFAULT_REDACTED_QUERY_PARAMS } from '@bymax-one/nest-telemetry'
 
 import { startCollector } from './fixtures/collector'
 import type { Collector } from './fixtures/collector'
+import { buildInstrumentationConfig } from '../../src/sdk/assembly'
+
 import { allowRestart } from './fixtures/restart'
 
 // The real function runs; the wrapper only records what the library passed it.
@@ -69,16 +71,18 @@ const PLANTED_SETTINGS = {
  * Builds the real instrumentations while the settings above sit on the root prototype, and hands the
  * check an accessor for a built instrumentation by name.
  */
-async function withPlantedSettings(
+function withPlantedSettings(
   check: (instance: (name: string) => Record<string, unknown>) => void
-): Promise<void> {
+): void {
   for (const [name, value] of Object.entries(PLANTED_SETTINGS)) {
     Object.defineProperty(Object.prototype, name, { value, configurable: true, writable: true })
   }
   try {
-    await configFor({ env: {}, unsafe: { disableRedisArgumentRedaction: true } })
-    const results = jest.mocked(getNodeAutoInstrumentations).mock.results
-    const built = (results[results.length - 1]?.value ?? []) as { instrumentationName: string }[]
+    const built = getNodeAutoInstrumentations(
+      buildInstrumentationConfig({ unsafe: { disableRedisArgumentRedaction: true } }, {
+        sendLogs: false
+      } as never) as never
+    ) as unknown as { instrumentationName: string }[]
     check(
       (name) =>
         built.find((candidate) => candidate.instrumentationName === name) as unknown as Record<
@@ -194,63 +198,42 @@ describe('the configuration handed to the real auto-instrumentations', () => {
     })
   })
 
-  it('ignores a flag that only the root prototype of the realm carries', async () => {
-    // Scenario: a polluted realm cannot turn off the URL redaction or turn on the export of log records.
-    for (const name of ['disableUrlRedaction', 'sendLogs']) {
-      Object.defineProperty(Object.prototype, name, { value: true, configurable: true })
+  it('refuses to start, and exports nothing, while a name is planted on the root prototype', async () => {
+    // Scenario: a polluted realm cannot switch a redaction off, send log records, run a hook, redirect the export
+    // or disable the SDK: telemetry that sees a name the engine does not define starts nothing, answers with the
+    // disabled handle and one warning that carries a count, and the instrumentations are never built.
+    const warning = jest.spyOn(process, 'emitWarning')
+    const names = ['disableUrlRedaction', 'sendLogs', 'OTEL_SDK_DISABLED', 'plantedHook']
+    for (const name of names) {
+      Object.defineProperty(Object.prototype, name, {
+        value: 'planted',
+        enumerable: true,
+        configurable: true,
+        writable: true
+      })
     }
     try {
-      const config = await configFor({ env: {} })
-      expect(config[HTTP]).toEqual({ redactedQueryParams: [...DEFAULT_REDACTED_QUERY_PARAMS] })
-      expect(config[PINO]).toEqual({ disableLogSending: true })
-    } finally {
-      for (const name of ['disableUrlRedaction', 'sendLogs']) {
-        delete (Object.prototype as unknown as Record<string, unknown>)[name]
-      }
-    }
-  })
-
-  it.each([
-    ['unsafe', { disableUrlRedaction: true, disableRedisArgumentRedaction: true }],
-    [
-      'instrumentations',
-      { sendLogs: true, overrides: { [HTTP]: { ignoreIncomingRequestHook: () => true } } }
-    ]
-  ])(
-    'ignores the group %s when only the root prototype of the realm carries it',
-    async (name, group) => {
-      // Scenario: a polluted realm cannot switch the redaction off, send log records or run a hook of its
-      // own for a host that passed no such group; the configuration is the safe one and a span that
-      // carries a token reaches the collector without it.
-      Object.defineProperty(Object.prototype, name, { value: group, configurable: true })
-      try {
-        const config = await configFor({ env: {} })
-        expect(config[HTTP]).toEqual({ redactedQueryParams: [...DEFAULT_REDACTED_QUERY_PARAMS] })
-        expect(config[PINO]).toEqual({ disableLogSending: true })
-        expect(typeof config[IOREDIS]?.['dbStatementSerializer']).toBe('function')
-        trace
-          .getTracer('e2e')
-          .startSpan('server', { attributes: { 'url.full': '/reset?token=S3CR3T-9f2c' } })
-          .end()
-        await shutdownTelemetry()
-        expect(collector.bodies.join('\n')).not.toContain('S3CR3T-9f2c')
-      } finally {
-        delete (Object.prototype as unknown as Record<string, unknown>)[name]
-      }
-    }
-  )
-
-  it('does not let a variable that only the root prototype of the realm carries switch the SDK off', async () => {
-    // Scenario: a polluted realm cannot disable the SDK through the environment object the host passed.
-    Object.defineProperty(Object.prototype, 'OTEL_SDK_DISABLED', {
-      value: 'true',
-      configurable: true
-    })
-    try {
+      const calls = jest.mocked(getNodeAutoInstrumentations).mock.calls.length
       const handle = await startTelemetry({ env: {} })
-      expect(handle.enabled).toBe(true)
+      expect(handle.enabled).toBe(false)
+      expect(jest.mocked(getNodeAutoInstrumentations).mock.calls).toHaveLength(calls)
+      trace
+        .getTracer('e2e')
+        .startSpan('server', { attributes: { 'url.full': '/reset?token=S3CR3T-9f2c' } })
+        .end()
+      await shutdownTelemetry()
+      expect(collector.bodies).toHaveLength(0)
+      const refusals = warning.mock.calls.filter(
+        ([, options]) =>
+          (options as { code?: string } | undefined)?.code === 'BYMAX_TELEMETRY_REALM_POLLUTED'
+      )
+      expect(refusals).toHaveLength(1)
+      expect(String(refusals[0]?.[0])).toContain('holds 4 name(s)')
+      for (const name of names) expect(String(refusals[0]?.[0])).not.toContain(name)
     } finally {
-      delete (Object.prototype as unknown as Record<string, unknown>)['OTEL_SDK_DISABLED']
+      for (const name of names) {
+        delete (Object.prototype as unknown as Record<string, unknown>)[name]
+      }
     }
   })
 
@@ -302,7 +285,7 @@ describe('the configuration handed to the real auto-instrumentations', () => {
   it('builds gRPC with no metadata a planted list asks for', async () => {
     // Scenario: the gRPC instrumentation reads its metadata list from the configuration while it is built; a
     // planted list is not found, so no metadata becomes an attribute.
-    await withPlantedSettings((instance) => {
+    withPlantedSettings((instance) => {
       type Capture = { client: { captureRequestMetadata(span: object, metadata: object): void } }
       const grpc = instance('@opentelemetry/instrumentation-grpc')['_metadataCapture'] as Capture
       const attributes: string[] = []
@@ -317,7 +300,7 @@ describe('the configuration handed to the real auto-instrumentations', () => {
   it('builds both Redis clients with no planted serializer or hook', async () => {
     // Scenario: the Redis instrumentation copies its configuration for each client, which reads the serializer
     // and the hook from it; each is an own key that is undefined.
-    await withPlantedSettings((instance) => {
+    withPlantedSettings((instance) => {
       for (const key of ['instrumentationV2_V3', 'instrumentationV4_V5']) {
         const client = instance('@opentelemetry/instrumentation-redis')[key] as {
           getConfig(): Record<string, unknown>
@@ -331,7 +314,7 @@ describe('the configuration handed to the real auto-instrumentations', () => {
   it('builds OpenAI with message capture off whatever a planted value says', async () => {
     // Scenario: the OpenAI instrumentation reads the configuration it is handed, which has no prototype, and
     // writes its own false, so a planted true is not found.
-    await withPlantedSettings((instance) => {
+    withPlantedSettings((instance) => {
       expect(instance('@opentelemetry/instrumentation-openai')['_config']).toMatchObject({
         captureMessageContent: false
       })
