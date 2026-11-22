@@ -47,7 +47,7 @@ heading here.
   OTLP exporter that `NodeSDK` builds for metrics or logs are read from the environment when it first sends, after the
   start, so only the HTTP exporters are covered by this.
   The settings an instrumentation reads while it is built (the HTTP header capture, the gRPC metadata capture, the
-  AWS Lambda handler name, and the Redis serializer and hooks that its two clients copy) are own keys that are
+  AWS Lambda handler name, and the Redis settings that its two clients copy) are own keys that are
   undefined, because the configuration the instrumentation copies into an ordinary object cannot be cut from the
   root prototype until it is built.
   The same holds one level down: a plain object that the host nests inside an override setting (for
