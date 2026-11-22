@@ -325,6 +325,7 @@ function detach(value: unknown, seen: { count: number }, depth: number): unknown
     // and no helper that probes its argument for an iterator is used on an object the root prototype
     // reaches.
     const length = value.length
+    // Stryker disable next-line ArrayDeclaration: the loop below sets every index, so the length given here changes nothing.
     const copy = new Array<unknown>(length)
     for (let index = 0; index < length; index++) {
       copy[index] = detach(Object.hasOwn(value, index) ? value[index] : undefined, seen, depth + 1)
