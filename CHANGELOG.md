@@ -8,6 +8,30 @@ The `release.yml` workflow extracts the section matching the pushed `vX.Y.Z` tag
 as the GitHub Release body, so each released version needs a matching `## [X.Y.Z]`
 heading here.
 
+## [1.0.11] - 2026-11-21
+
+### Fixed
+
+- **`ignorePaths` copies its patterns by index and refuses what is not a list of regular expressions.** It copied
+  with `patterns.map`, so an array subclass whose `map` returns nothing ignored no path, and an object with a
+  `source` and `flags` was accepted as an expression. It now reads the length once (at most 1000), each index once
+  and each entry through `util.types.isRegExp`, and throws `BYMAX_TELEMETRY_OPTION_INVALID` for anything else, an expression whose own `flags` cannot be built, or a list that throws while it is read, included (the error it raised is the `cause`).
+- **An option that must be an object refuses a `Map`, a `Set`, a `Date`, a `RegExp`, a `Promise` and a boxed
+  primitive.** They were accepted and read as an empty object; they are refused as the wrong kind, by the kind
+  Node reports and not by the prototype, so a class instance and a `Proxy` of a plain object are still read.
+
+### Documentation
+
+- **The README says that a `__proto__` key is refused as the name of an instrumentation too**, and that an entry
+  or a setting that is `null` or `undefined` is dropped and not refused.
+
+### Apply to a derived backend
+
+A `Map`, `Set`, `Date`, `RegExp`, `Promise` or boxed primitive passed for `unsafe`, `instrumentations`,
+`instrumentations.overrides` or `env` now fails at start with `BYMAX_TELEMETRY_OPTION_INVALID`, and so does an
+`ignorePaths` argument that is not an array of regular expressions. Pass a plain object, and a real array of
+`RegExp`. Nothing else changes.
+
 ## [1.0.10] - 2026-11-21
 
 ### Fixed
@@ -444,6 +468,7 @@ First release.
 - Verification from the packed tarball: real `node --import` processes in a CommonJS and a native-ESM
   application, with planted secrets absent from the exported body and negative controls.
 
+[1.0.11]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.11
 [1.0.10]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.10
 [1.0.9]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.9
 [1.0.8]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.8

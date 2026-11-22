@@ -4,6 +4,17 @@
  * @layer sdk
  */
 
+import { types } from 'node:util'
+
+/**
+ * Whether a key is an index of an array: a canonical unsigned 32-bit number below 4294967295, as
+ * opposed to a property the host's class added.
+ *
+ * @param key - An own key of a list.
+ * @returns `true` for `'0'` up to `'4294967294'`.
+ */
+const isIndex = (key: string): boolean => String(Number(key) >>> 0) === key && key !== '4294967295'
+
 /** The most entries a list or a map option may hold. */
 export const MAX_OPTION_ENTRIES = 1000
 
@@ -17,9 +28,13 @@ export class TelemetryOptionError extends Error {
   /**
    * @param option - The option that was refused.
    * @param expected - What the option must be.
+   * @param cause - The error of the host's own value that made the option unusable.
    */
-  constructor(option: string, expected: string) {
-    super(`The ${option} option must be ${expected}, so the start was refused.`)
+  constructor(option: string, expected: string, cause?: unknown) {
+    super(
+      `The ${option} option must be ${expected}, so the start was refused.`,
+      cause === undefined ? undefined : { cause }
+    )
     this.name = 'TelemetryOptionError'
     this.option = option
   }
@@ -82,14 +97,86 @@ export function requireFunction<F extends (...args: never[]) => unknown>(
  */
 export function requireObject(option: string, value: unknown): object | undefined {
   if (value === undefined || value === null) return undefined
-  if (typeof value !== 'object' || Array.isArray(value)) {
+  if (typeof value !== 'object' || Array.isArray(value) || isOtherKind(value)) {
     throw new TelemetryOptionError(option, 'an object')
   }
   return value
 }
 
 /**
- * Copies a list of strings, reading its length once and each index once.
+ * Whether an object is a stand-in of a kind that holds no settings, told by the kind Node reports
+ * and not by its prototype: the environment object and an instance of a host class have prototypes of
+ * their own and are objects of settings.
+ *
+ * @param value - An object that is not an array.
+ * @returns `true` for a boxed primitive, a Map, a Set, a Date, a RegExp or a Promise.
+ */
+function isOtherKind(value: object): boolean {
+  return (
+    types.isBoxedPrimitive(value) ||
+    types.isMap(value) ||
+    types.isSet(value) ||
+    types.isDate(value) ||
+    types.isRegExp(value) ||
+    types.isPromise(value)
+  )
+}
+
+/**
+ * Copies a list by index, reading its length once as a bounded integer and each index once, never
+ * through the iterator or a method of the host's array.
+ *
+ * @param option - The option name, for the error.
+ * @param value - The option value.
+ * @param noun - What the entries are, in the plural, for the words of the error.
+ * @param take - Returns the copy of an entry, or `undefined` when the entry has the wrong kind.
+ * @param guarded - Whether an error the host's own list raises becomes the cause of the library's error.
+ * @returns The copies, or `undefined` when the option is absent.
+ * @throws {TelemetryOptionError} When the value is not an array of at most {@link MAX_OPTION_ENTRIES}
+ *   entries of the right kind, or its length reads empty while it holds entries.
+ */
+function copyByIndex<T>(
+  option: string,
+  value: unknown,
+  noun: string,
+  take: (entry: unknown) => T | undefined,
+  guarded: boolean
+): readonly T[] | undefined {
+  if (!isGiven(value)) return undefined
+  const expected = `an array of ${noun}`
+  // An error raised by the host's own list is a host error: it is the cause of the library's error
+  // when the caller asks for that, and it reaches the caller as it was thrown otherwise.
+  const host = <R>(read: () => R): R => {
+    if (!guarded) return read()
+    try {
+      return read()
+    } catch (cause) {
+      throw new TelemetryOptionError(option, expected, cause)
+    }
+  }
+  if (!host(() => Array.isArray(value))) throw new TelemetryOptionError(option, expected)
+  const list = value as unknown[]
+  const length: unknown = host(() => list.length)
+  if (typeof length !== 'number' || !Number.isInteger(length) || length < 0) {
+    throw new TelemetryOptionError(option, expected)
+  }
+  if (length > MAX_OPTION_ENTRIES) {
+    throw new TelemetryOptionError(option, `an array of at most ${MAX_OPTION_ENTRIES} ${noun}`)
+  }
+  if (length === 0 && host(() => Object.keys(list).some(isIndex))) {
+    throw new TelemetryOptionError(option, expected)
+  }
+  const copy: T[] = []
+  for (let index = 0; index < length; index++) {
+    const taken = take(host(() => list[index]))
+    if (taken === undefined) throw new TelemetryOptionError(option, expected)
+    copy.push(taken)
+  }
+  return copy
+}
+
+/**
+ * Copies a list of strings.
  *
  * @param option - The option name, for the error.
  * @param value - The option value.
@@ -98,22 +185,41 @@ export function requireObject(option: string, value: unknown): object | undefine
  *   {@link MAX_OPTION_ENTRIES} strings.
  */
 export function settleStringList(option: string, value: unknown): readonly string[] | undefined {
-  if (!isGiven(value)) return undefined
-  if (!Array.isArray(value)) throw new TelemetryOptionError(option, 'an array of strings')
-  const length: unknown = value.length
-  if (typeof length !== 'number' || !Number.isInteger(length) || length < 0) {
-    throw new TelemetryOptionError(option, 'an array of strings')
-  }
-  if (length > MAX_OPTION_ENTRIES) {
-    throw new TelemetryOptionError(option, `an array of at most ${MAX_OPTION_ENTRIES} strings`)
-  }
-  const copy: string[] = []
-  for (let index = 0; index < length; index++) {
-    const item: unknown = value[index]
-    if (typeof item !== 'string') throw new TelemetryOptionError(option, 'an array of strings')
-    copy.push(item)
-  }
-  return copy
+  return copyByIndex(
+    option,
+    value,
+    'strings',
+    (entry) => (typeof entry === 'string' ? entry : undefined),
+    false
+  )
+}
+
+/**
+ * Copies a list of regular expressions, reading the source and the flags of each once. An error the
+ * host's own list raises is the cause of the library's error.
+ *
+ * @param option - The option name, for the error.
+ * @param value - The option value.
+ * @returns A new expression for each entry, or `undefined` when the option is absent.
+ * @throws {TelemetryOptionError} When the value is not an array of at most
+ *   {@link MAX_OPTION_ENTRIES} regular expressions.
+ */
+export function settleRegExpList(option: string, value: unknown): readonly RegExp[] | undefined {
+  return copyByIndex(
+    option,
+    value,
+    'regular expressions',
+    (entry) => {
+      if (!types.isRegExp(entry)) return undefined
+      try {
+        const { source, flags } = entry
+        return new RegExp(source, flags)
+      } catch (cause) {
+        throw new TelemetryOptionError(option, 'an array of regular expressions', cause)
+      }
+    },
+    true
+  )
 }
 
 /** The path an error names for a setting of an override, so the host's own keys never reach it. */

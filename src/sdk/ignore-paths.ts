@@ -2,10 +2,15 @@
  * @fileoverview Path-based predicate for incoming requests that must produce no span.
  * @layer sdk
  */
+import { TelemetryOptionError, settleRegExpList } from './option-kinds'
 import type { IncomingRequestTarget } from './types'
 
 /** The longest path the patterns are tested against; a longer one is never ignored. */
 const MAX_PATH_LENGTH = 2048
+
+/** The words the refusal of the patterns uses, and the name it gives them. */
+const PATTERNS = 'ignorePaths patterns'
+const EXPECTED = 'an array of regular expressions'
 
 /**
  * Builds a predicate that matches the path of an incoming request against the patterns.
@@ -28,7 +33,11 @@ export function ignorePaths(
 ): (request: IncomingRequestTarget) => boolean {
   // Copied without the global and sticky flags: those keep `lastIndex` between tests, so the same
   // path would match on one call and not the next.
-  const stateless = patterns.map(
+  const copied = settleRegExpList(PATTERNS, patterns)
+  if (copied === undefined) {
+    throw new TelemetryOptionError(PATTERNS, EXPECTED)
+  }
+  const stateless = copied.map(
     (pattern) => new RegExp(pattern.source, pattern.flags.replace(/[gy]/g, ''))
   )
   return (request) => {

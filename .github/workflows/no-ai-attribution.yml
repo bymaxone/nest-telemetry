@@ -1,5 +1,8 @@
 name: No AI attribution
 # Its own file, because an edit of a pull request's title or body has to run it again.
+permissions:
+  contents: read
+
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]

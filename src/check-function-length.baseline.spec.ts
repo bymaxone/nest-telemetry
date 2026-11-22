@@ -248,6 +248,18 @@ describe('check-function-length', () => {
       expect(result.output).toContain('src/a.ts::big is not a function key')
     })
 
+    it('refuses an option that has no value instead of skipping the base comparison', () => {
+      const root = repo({ 'src/a.ts': declaration('big', 60) }, { [fnKey('big')]: 60 })
+      commitBase(root)
+
+      for (const option of ['--base', '--baseline']) {
+        const result = run(root, option)
+
+        expect(result.status).toBe(2)
+        expect(result.output).toContain(`${option} needs a value.`)
+      }
+    })
+
     describe('whose baseline predates structured keys', () => {
       /** A repository whose base commit holds `files` and a baseline in the earlier string format. */
       function legacyBase(files: Record<string, string>, legacy: Record<string, number>): string {
