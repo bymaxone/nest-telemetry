@@ -59,6 +59,22 @@ const DISABLED_HANDLE: TelemetryHandle = {
 }
 
 /**
+ * Refuses to start beside a polluted `Object.prototype`: telemetry that cannot be trusted starts nothing and
+ * says so with a count, and never throws at the host.
+ *
+ * @returns `true` when the prototype is polluted and a warning was emitted.
+ */
+function refusesPollution(): boolean {
+  const polluted = pollutedNames()
+  if (polluted === 0) return false
+  process.emitWarning(
+    `Telemetry did not start: the Object.prototype of this process holds ${polluted} name(s) that the engine does not define, or holds them changed, and the SDK and its dependencies would read them as settings. Nothing is exported. Remove them, or start telemetry before they are added.`,
+    { type: 'SecurityWarning', code: 'BYMAX_TELEMETRY_REALM_POLLUTED' }
+  )
+  return true
+}
+
+/**
  * Starts the OpenTelemetry SDK, unless it is disabled.
  *
  * The SDK is off when the host passes `enabled: false` or the standard `OTEL_SDK_DISABLED=true`
@@ -103,15 +119,7 @@ export async function startTelemetry(options: TelemetryOptions = {}): Promise<Te
     })
     throw new Error(RESTART_MESSAGE)
   }
-  const polluted = pollutedNames()
-  if (polluted > 0) {
-    // Telemetry that cannot be trusted starts nothing and says so with a count, and never throws at the host.
-    process.emitWarning(
-      `Telemetry did not start: the Object.prototype of this process holds ${polluted} name(s) that the engine does not define, or holds them changed, and the SDK and its dependencies would read them as settings. Nothing is exported. Remove them, or start telemetry before they are added.`,
-      { type: 'SecurityWarning', code: 'BYMAX_TELEMETRY_REALM_POLLUTED' }
-    )
-    return DISABLED_HANDLE
-  }
+  if (refusesPollution()) return DISABLED_HANDLE
   const start = boot(settled, env).finally(clearPendingStart)
   setPendingStart(start)
   return start
@@ -246,7 +254,10 @@ function buildSdk(
  * @param env - The parsed environment.
  * @returns The handle of the started SDK.
  */
-async function boot(options: TelemetryOptions, env: TelemetryEnvironment): Promise<RunningHandle> {
+async function boot(
+  options: TelemetryOptions,
+  env: TelemetryEnvironment
+): Promise<TelemetryHandle> {
   // Read once for the whole start, each field once: a getter, on the option or on a field of it, could
   // answer differently each time, and the warning about a turned-off redaction, the SDK build and the
   // instrumentation config must all see the same values.
@@ -263,6 +274,9 @@ async function boot(options: TelemetryOptions, env: TelemetryEnvironment): Promi
   // handle can stop.
   const shutdownTimeoutMs = options.shutdownTimeoutMs
   const packages = await loadPackages()
+  // Checked again, with no await between it and the build: a name planted while the packages loaded, and removed
+  // before the first export, would otherwise be read by the SDK and its exporters when they are built.
+  if (refusesPollution()) return DISABLED_HANDLE
   const sdk = buildSdk(packages, options, env, { instrumentations, unsafe, service })
   sdk.start()
   const handle = createHandle(() => sdk.shutdown(), shutdownTimeoutMs)

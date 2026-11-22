@@ -42,7 +42,9 @@ heading here.
   handle and emits one `BYMAX_TELEMETRY_REALM_POLLUTED` warning that carries a count and never a name or a value; the
   preload does the same; and every OTLP export, including the exporters the SDK builds for metrics and logs, drops its
   batch with a failed result and no I/O while the prototype is polluted. The wrap of the export is process-wide, on the
-  base class that the exporters share. A host that extends `Object.prototype` (should.js, chai.should, a polyfill)
+  base class that the exporters share; the Prometheus exporter is not an OTLP exporter and reads its host and port when it
+  is built, so only the check at the start covers it. The check runs again right before the SDK is built, with no await
+  between them, so a name planted while the packages load and removed before the first export is seen too. A host that extends `Object.prototype` (should.js, chai.should, a polyfill)
   cannot start telemetry. The configuration the SDK is built with has no prototype, so a planted `serviceName`,
   `sampler`, `idGenerator`, `textMapPropagator` or provider is not one of its options. The instrumentation
   settings are built with no prototype, the HTTP instrumentation gets its own undefined `headersToSpanAttributes`, and

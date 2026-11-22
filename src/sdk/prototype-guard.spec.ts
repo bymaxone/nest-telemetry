@@ -38,6 +38,24 @@ describe('pollutedNames', () => {
     expect(pollutedNames()).toBe(0)
   })
 
+  it('counts a planted enumerable symbol key, and not one that was hidden with defineProperty', () => {
+    // Scenario: a symbol planted through a polluted path is enumerable, as a string name is; a symbol that
+    // is not enumerable needs code that already runs in the process, and a test runner adds one.
+    const key = Symbol('planted')
+    Object.defineProperty(Object.prototype, key, { value: 1, enumerable: true, configurable: true })
+    try {
+      expect(pollutedNames()).toBe(1)
+    } finally {
+      delete (Object.prototype as unknown as Record<symbol, unknown>)[key]
+    }
+    Object.defineProperty(Object.prototype, key, { value: 1, configurable: true })
+    try {
+      expect(pollutedNames()).toBe(0)
+    } finally {
+      delete (Object.prototype as unknown as Record<symbol, unknown>)[key]
+    }
+  })
+
   it.each(['hasOwnProperty', 'toString', 'constructor', 'valueOf', 'isPrototypeOf'])(
     'counts a standard name overwritten with another value: %s',
     (name) => {

@@ -11,13 +11,13 @@ import { runInNewContext } from 'node:vm'
 
 /** What a fresh realm holds: the descriptors of its `Object.prototype` and the text of a function. */
 interface Pristine {
-  readonly descriptors: Readonly<Record<string, PropertyDescriptor>>
+  readonly descriptors: Readonly<Record<string | symbol, PropertyDescriptor>>
   readonly sourceOf: (value: unknown) => string
 }
 
 /** What the prototype held when this module loaded, so a name swapped for another native function is caught by identity. */
 const loaded = Object.getOwnPropertyDescriptors(Object.prototype) as Record<
-  string,
+  string | symbol,
   PropertyDescriptor
 >
 
@@ -63,7 +63,7 @@ function alike(now: unknown, was: unknown, sourceOf: Pristine['sourceOf']): bool
 }
 
 /**
- * Counts the names of this realm's `Object.prototype` that a fresh realm's does not hold, that it lacks, or
+ * Counts the names, strings and symbols, of this realm's `Object.prototype` that a fresh realm's does not hold, that it lacks, or
  * that it holds changed: its flags, or a function whose text is not the engine's, or not the one this module met.
  *
  * @returns Zero for a clean realm.
@@ -71,12 +71,16 @@ function alike(now: unknown, was: unknown, sourceOf: Pristine['sourceOf']): bool
 export function pollutedNames(): number {
   const { descriptors, sourceOf } = standard()
   const now = Object.getOwnPropertyDescriptors(Object.prototype) as Record<
-    string,
+    string | symbol,
     PropertyDescriptor
   >
+  // A symbol counts when it is enumerable, as an assignment through a polluted path plants it; a symbol made
+  // with defineProperty and hidden needs code that already runs in the process, and a test runner adds one.
   const names = new Set([
-    ...Object.getOwnPropertyNames(now),
-    ...Object.getOwnPropertyNames(descriptors)
+    ...Reflect.ownKeys(now).filter(
+      (name) => typeof name === 'string' || field(now[name], 'enumerable') === true
+    ),
+    ...Reflect.ownKeys(descriptors)
   ])
   let found = 0
   for (const name of names) {

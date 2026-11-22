@@ -57,6 +57,27 @@ describe('the export of the real exporter while a name is planted', () => {
     expect(joined).not.toContain('after-the-plant')
   })
 
+  it('refuses to start when a name is planted while the packages load, and removed after', async () => {
+    // Scenario: the check is made again right before the SDK is built, so a name planted during the import and
+    // gone once the start has answered still starts nothing.
+    const pending = startTelemetry({ env: {} })
+    Object.defineProperty(Object.prototype, 'plantedDuringTheImport', {
+      value: 'x',
+      enumerable: true,
+      configurable: true,
+      writable: true
+    })
+    try {
+      const handle = await pending
+      expect(handle.enabled).toBe(false)
+    } finally {
+      delete (Object.prototype as unknown as Record<string, unknown>)['plantedDuringTheImport']
+    }
+    trace.getTracer('e2e').startSpan('never-exported').end()
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    expect(collector.bodies).toHaveLength(0)
+  })
+
   it('refuses to start while a standard name of the root prototype is gone, as for a planted one', async () => {
     // Scenario: a realm that lacks a name the engine defines is as untrustworthy as one with an extra name.
     const before = Object.getOwnPropertyDescriptor(

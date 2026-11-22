@@ -172,6 +172,32 @@ describe('startTelemetry', () => {
       }
     })
 
+    it('starts nothing when a name is planted while the packages load, even if it is removed before the build', async () => {
+      // Scenario: the check is made again right before the SDK is built, with no await between them, so a name
+      // planted during the import is seen even when it is gone before the first export.
+      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      const pending = startTelemetry({ serviceName: 'api', env: {} })
+      Object.defineProperty(Object.prototype, 'plantedDuringTheImport', {
+        value: 'x',
+        enumerable: true,
+        configurable: true,
+        writable: true
+      })
+      try {
+        const handle = await pending
+        expect(handle.enabled).toBe(false)
+        expect(mockNodeSdk).not.toHaveBeenCalled()
+        expect(
+          emitWarning.mock.calls.filter(
+            ([, options]) =>
+              (options as { code?: string } | undefined)?.code === 'BYMAX_TELEMETRY_REALM_POLLUTED'
+          )
+        ).toHaveLength(1)
+      } finally {
+        delete (Object.prototype as unknown as Record<string, unknown>)['plantedDuringTheImport']
+      }
+    })
+
     it('hands the SDK a configuration with no prototype, so a planted name is not one of its options', async () => {
       // Scenario: the SDK reads its serviceName, sampler, idGenerator, textMapPropagator and providers from the
       // object it is given; a name that a polluted root prototype holds must not be found on it.

@@ -49,7 +49,12 @@ const { trace } = require('@opentelemetry/api')
 // enumerable name planted before the load stops it from loading at all.
 plant(JSON.parse(process.env.PLANT || '{}'))
 ;(async () => {
-  const handle = await startTelemetry({ serviceName: 'host-api', env: { OTEL_BSP_SCHEDULE_DELAY: '200' } })
+  const pending = startTelemetry({ serviceName: 'host-api', env: { OTEL_BSP_SCHEDULE_DELAY: '200' } })
+  // Planted while the packages load, and removed again as soon as the start has answered.
+  const during = JSON.parse(process.env.PLANT_DURING || '{}')
+  plant(during)
+  const handle = await pending
+  for (const name of Object.keys(during)) delete Object.prototype[name]
   console.log(JSON.stringify({ enabled: handle.enabled }))
   trace.getTracer('child').startSpan('before').end()
   await sleep(900)
@@ -107,6 +112,21 @@ describe('a name that only the root prototype of the process holds, in a real pr
     expect(answer.done).toBe(true)
     expect(answer.code).toBe(0)
     expect(collector.bodies).toHaveLength(0)
+  }, 60_000)
+
+  it('starts nothing when a name is planted while the packages load and removed before the first export', async () => {
+    // Scenario: a plant that is gone before anything is exported would otherwise be baked into the exporters the
+    // SDK builds, a metrics or logs endpoint for one; the check right before the build sees it and starts nothing.
+    const answer = await runChild({
+      PLANT_DURING: JSON.stringify({
+        OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://127.0.0.1:1',
+        OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: 'http://127.0.0.1:1'
+      })
+    })
+    expect(answer.enabled).toBe(false)
+    expect(answer.warning).toContain('holds 2 name(s)')
+    expect(collector.bodies).toHaveLength(0)
+    expect(answer.code).toBe(0)
   }, 60_000)
 
   it('exports before a name is planted and drops what is exported after, and the host goes on', async () => {
