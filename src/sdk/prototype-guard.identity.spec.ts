@@ -124,3 +124,28 @@ describe("a flag looser than the fresh realm's", () => {
     })
   })
 })
+
+describe('a value that is not a function in the fresh realm', () => {
+  it('is counted when this realm holds something else there', () => {
+    // Scenario: where the fresh realm holds a plain value, the same value is the only one that is alike; a
+    // function in its place is a change. (A fresh realm that held a value there is mocked.)
+    let guard: typeof PollutedNames | undefined
+    jest.isolateModules(() => {
+      const descriptors = Object.getOwnPropertyDescriptors(Object.prototype) as Record<
+        string,
+        PropertyDescriptor
+      >
+      descriptors['toString'] = { ...descriptors['toString'], value: 5 }
+      jest.doMock('node:vm', () => ({
+        runInNewContext: () => ({
+          descriptors,
+          sourceOf: (value: unknown): string => Function.prototype.toString.call(value)
+        })
+      }))
+      guard = (require('./prototype-guard') as { pollutedNames: typeof PollutedNames })
+        .pollutedNames
+    })
+    jest.dontMock('node:vm')
+    expect((guard as typeof PollutedNames)()).toBe(1)
+  })
+})
