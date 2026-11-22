@@ -114,6 +114,83 @@ describe('startTelemetry in the real library, for an option of the wrong kind', 
     expect(error?.message).toContain('an object of at most 1000 entries')
   })
 
+  it.each([
+    [
+      'nested more than 16 levels deep',
+      () => {
+        let inner: unknown = {}
+        for (let level = 0; level < 17; level++) inner = { next: inner }
+        return inner
+      },
+      'nested at most 16 levels deep'
+    ],
+    [
+      'holding more than 10,000 objects and lists',
+      () => Array.from({ length: 11 }, () => Array.from({ length: 999 }, () => ({}))),
+      'nested at most 16 levels deep'
+    ],
+    [
+      'a list of more than 1000 entries',
+      () => ({ list: new Array(1001).fill(0) }),
+      'a list of at most 1000'
+    ],
+    [
+      'an object of more than 1000 entries',
+      () => Object.fromEntries(Array.from({ length: 1001 }, (_, i) => [`k${i}`, 0])),
+      'an object of at most 1000 entries'
+    ],
+    [
+      'a __proto__ key one level down',
+      () => JSON.parse('{"a":{"__proto__":1}}'),
+      'free of a __proto__ key'
+    ]
+  ])('refuses a setting of an override %s', async (_label, build, words) => {
+    // Scenario: a setting the host nests in an override is copied within bounds, and a start refuses one
+    // beyond them, naming the bound and never the value.
+    const error = await refusal({
+      instrumentations: {
+        overrides: {
+          '@opentelemetry/instrumentation-http': { headersToSpanAttributes: build() }
+        }
+      }
+    })
+    expect(error?.message).toContain(words)
+  })
+
+  it('refuses a hole in a list of strings, and copies a hole in a nested list as undefined', async () => {
+    // Scenario: a hole is a missing entry, not whatever a prototype holds at that index: a list of strings
+    // refuses it, and a nested list of an override setting keeps the place as undefined.
+    const sparse: unknown[] = []
+    sparse[1] = 'session'
+    const error = await refusal({ extraRedactedQueryParams: sparse })
+    expect(error?.message).toContain('an array of strings')
+    const handle = await startTelemetry({
+      instrumentations: {
+        overrides: {
+          '@opentelemetry/instrumentation-http': {
+            headersToSpanAttributes: { holes: sparse } as never
+          }
+        }
+      }
+    })
+    expect(handle.enabled).toBe(true)
+  })
+
+  it('still starts when a getter of the host lengthens the chain of its own options after the check', async () => {
+    // Scenario: the chain was within bounds when it was checked and is longer when a later option is read;
+    // the lookup stops at the bound and reads the option as absent, so nothing hangs and the start goes on.
+    let longer: object = Object.prototype
+    for (let level = 0; level < 150; level++) longer = Object.create(longer) as object
+    const instrumentations = {
+      get fs(): boolean {
+        Object.setPrototypeOf(this, longer)
+        return false
+      }
+    }
+    const handle = await startTelemetry({ instrumentations })
+    expect(handle.enabled).toBe(true)
+  })
+
   it('starts nothing for a refused call, and a later call starts', async () => {
     // Scenario: the refusal leaves no SDK behind, so a valid call right after it starts one.
     await refusal({ instrumentations: { sendLogs: 'false' } })

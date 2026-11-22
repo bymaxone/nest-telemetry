@@ -254,6 +254,42 @@ describe('the configuration handed to the real auto-instrumentations', () => {
     }
   })
 
+  it('copies what the host nests in an override and passes the rest through as written', async () => {
+    // Scenario: a plain object and a list nested in an override setting reach the instrumentation as copies
+    // with no prototype, and a function, a class instance and a Proxy as the host wrote them.
+    class Agent {}
+    const agent = new Agent()
+    const fn = (): void => undefined
+    const proxy = new Proxy({}, {})
+    const config = await configFor({
+      env: {},
+      instrumentations: {
+        overrides: {
+          [HTTP]: {
+            headersToSpanAttributes: {
+              server: { requestHeaders: ['x-id'] },
+              list: [{ a: 1 }, 'text', 3, null],
+              keep: [agent, fn, proxy]
+            } as never
+          }
+        }
+      }
+    })
+    const copied = config[HTTP]?.['headersToSpanAttributes'] as {
+      server: { requestHeaders: string[] }
+      list: unknown[]
+      keep: unknown[]
+    }
+    expect(Object.getPrototypeOf(copied)).toBeNull()
+    expect(Object.getPrototypeOf(copied.server)).toBeNull()
+    expect(copied.server.requestHeaders).toEqual(['x-id'])
+    expect(Object.getPrototypeOf(copied.list[0])).toBeNull()
+    expect(copied.list.slice(1)).toEqual(['text', 3, null])
+    expect(copied.keep[0]).toBe(agent)
+    expect(copied.keep[1]).toBe(fn)
+    expect(copied.keep[2]).toBe(proxy)
+  })
+
   it('builds gRPC with no metadata a planted list asks for', async () => {
     // Scenario: the gRPC instrumentation reads its metadata list from the configuration while it is built; a
     // planted list is not found, so no metadata becomes an attribute.
