@@ -33,9 +33,20 @@ heading here.
   a string is now read as no variable, for every variable the library reads. The process environment never holds
   one, so nothing changes for it.
 
+- **The Lambda start time is read while the instrumentation is built.** The AWS Lambda instrumentation reads
+  `lambdaStartTime` as well as `lambdaHandler` when it is built, so it is an own undefined key like the handler name.
+- **The refusal for too many values in a nested setting says so.** The limit of 10,000 objects and lists in one
+  setting had the message of the limit of 16 levels; it now says `at most 10,000 objects and lists in all`.
+
+### Documentation
+
+- **The README says the limits on a nested override setting are new in 1.0.12** (16 levels, 10,000 objects and lists,
+  1000 entries to a list or an object), so a host that nested more than that finds the refusal documented.
+
 ### Apply to a derived backend
 
-Nothing to change. A host `env` object that held a number, a boolean or an object for one of the `OTEL_*` names now
+Nothing to change. A setting nested in an override beyond those limits fails at start with
+`BYMAX_TELEMETRY_OPTION_INVALID`, as it does since 1.0.12. A host `env` object that held a number, a boolean or an object for one of the `OTEL_*` names now
 reads that variable as unset instead of throwing or converting it.
 
 ## [1.0.12] - 2026-11-21
