@@ -263,6 +263,7 @@ describe('the configuration handed to the real auto-instrumentations', () => {
     // This case compares two SDKs started in one process, which the library refuses.
     allowRestart()
     const alone = await configFor({ env: {}, unsafe: { disableRedisArgumentRedaction: true } })
-    expect(alone).not.toHaveProperty([IOREDIS])
+    // Own keys: a name the config does not hold answers with an empty entry.
+    expect(Object.keys(alone)).not.toContain(IOREDIS)
   })
 })

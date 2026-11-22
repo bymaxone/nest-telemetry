@@ -200,6 +200,21 @@ export function settleInstrumentations(instrumentations: unknown): {
 }
 
 /**
+ * Wraps the instrumentation configuration so that every name answers with an entry that has no
+ * prototype. `getNodeAutoInstrumentations` hands an instrumentation that has no entry an empty object of
+ * its own, which would inherit a planted `enabled`; the keys of the map stay the ones that were set.
+ *
+ * @param map - The configuration, by instrumentation name.
+ * @returns The same map, answering with an empty entry for a name it does not hold.
+ */
+function answerEveryName(map: Record<string, Record<string, unknown>>): InstrumentationConfigMap {
+  return new Proxy(map, {
+    get: (target, name) =>
+      typeof name === 'string' ? (target[name] ?? Object.create(null)) : undefined
+  }) as InstrumentationConfigMap
+}
+
+/**
  * Builds the auto-instrumentation configuration.
  *
  * The library's settings are merged under the host's `overrides`, and the redaction settings are
@@ -255,7 +270,7 @@ export function buildInstrumentationConfig(
       }) as Record<string, unknown>
     }
   }
-  return merged as InstrumentationConfigMap
+  return answerEveryName(merged)
 }
 
 /**

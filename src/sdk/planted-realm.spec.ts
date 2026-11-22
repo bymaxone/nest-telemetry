@@ -83,7 +83,11 @@ describe('the configuration handed to the instrumentations', () => {
         const config = buildInstrumentationConfig(inputs, signals)
         expect(Object.getPrototypeOf(config)).toBeNull()
         expect(config[FS]).toEqual({ enabled: false })
-        expect(config['@opentelemetry/instrumentation-pg' as keyof typeof config]).toBeUndefined()
+        expect(config['@opentelemetry/instrumentation-pg' as keyof typeof config]).toEqual({})
+        expect(
+          Object.getPrototypeOf(config['@opentelemetry/instrumentation-pg' as keyof typeof config])
+        ).toBeNull()
+        expect(Object.keys(config)).not.toContain('@opentelemetry/instrumentation-pg')
         for (const entry of Object.values(config)) {
           expect(Object.getPrototypeOf(entry)).toBeNull()
         }

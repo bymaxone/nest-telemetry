@@ -41,7 +41,11 @@ heading here.
   settings are built with no prototype, the HTTP instrumentation gets its own undefined `headersToSpanAttributes`, and
   the configuration of every instrumentation is cut from the root prototype once it is built, so a planted
   `headersToSpanAttributes`, request hook or response hook neither records the `Authorization` header nor runs, and a
-  planted key named after an instrumentation does not override the host's `fs` or `sendLogs`.
+  planted key named after an instrumentation does not override the host's `fs` or `sendLogs`. An instrumentation the
+  host did not configure also gets an entry with no prototype, so a planted `enabled` cannot switch the
+  instrumentations off or override `OTEL_NODE_DISABLED_INSTRUMENTATIONS`. The one limit: the credentials of a gRPC
+  OTLP exporter that `NodeSDK` builds for metrics or logs are read from the environment when it first sends, after the
+  start, so only the HTTP exporters are covered by this.
 
 - **An option that must be an object is refused when it has a brand Node tells apart, or a chain of prototypes that
   is longer than 100 or never ends.** The list of refused kinds is now a set of brand predicates of `util.types`

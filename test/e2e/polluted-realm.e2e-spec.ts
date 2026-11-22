@@ -56,6 +56,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
       outgoing.end()
     })
     await sleep(300)
+    if (process.env.FETCH === '1') await (await fetch('http://127.0.0.1:' + server.address().port + '/f')).text()
+    await sleep(300)
     server.close()
     console.log(JSON.stringify({ hooked: globalThis.__hooked === true }))
   }
@@ -144,6 +146,25 @@ describe('a name that only the root prototype of the process holds does not deci
     expect(joined).not.toContain('HOST-SECRET-123')
     expect(joined).not.toContain('http.request.header.authorization')
     expect(answer.hooked).toBe(false)
+  }, 60_000)
+
+  it('keeps every instrumentation on when a planted enabled is false', async () => {
+    // Scenario: an instrumentation the host did not configure is handed an empty configuration, which
+    // must not inherit a planted `enabled: false`; the undici instrumentation still records a fetch.
+    await runChild({ enabled: false }, { HTTP: '1', FETCH: '1' })
+    expect(collector.bodies.join('')).toContain('@opentelemetry/instrumentation-undici')
+  }, 60_000)
+
+  it('does not let a planted enabled override the operator switching an instrumentation off', async () => {
+    // Scenario: OTEL_NODE_DISABLED_INSTRUMENTATIONS names undici; a planted `enabled: true` must not
+    // switch it back on, so no fetch span is exported.
+    await runChild(
+      { enabled: true },
+      { HTTP: '1', FETCH: '1', OTEL_NODE_DISABLED_INSTRUMENTATIONS: 'undici' }
+    )
+    const joined = collector.bodies.join('')
+    expect(joined).toContain('work-0')
+    expect(joined).not.toContain('@opentelemetry/instrumentation-undici')
   }, 60_000)
 
   it('does not let a planted instrumentation name switch on what the host left off', async () => {

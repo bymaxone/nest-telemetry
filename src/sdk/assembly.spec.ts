@@ -221,8 +221,9 @@ describe('buildInstrumentationConfig', () => {
       { unsafe: { disableRedisArgumentRedaction: true } },
       noLogs
     )
-    expect(config).not.toHaveProperty([IOREDIS])
-    expect(config).not.toHaveProperty([REDIS])
+    // Own keys: every other name answers with an empty entry with no prototype.
+    expect(Object.keys(config)).not.toContain(IOREDIS)
+    expect(Object.keys(config)).not.toContain(REDIS)
   })
 
   describe('host overrides', () => {
@@ -365,7 +366,7 @@ describe('buildInstrumentationConfig', () => {
         noLogs
       )
       expect(config[HTTP]).toEqual({ redactedQueryParams: [...DEFAULT_REDACTED_QUERY_PARAMS] })
-      expect(config).not.toHaveProperty('@opentelemetry/instrumentation-mysql2')
+      expect(Object.keys(config)).not.toContain('@opentelemetry/instrumentation-mysql2')
     })
 
     it('refuses a host list that is not an array, rather than ignoring it', () => {
