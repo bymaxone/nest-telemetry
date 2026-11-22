@@ -35,24 +35,36 @@ heading here.
   instrumentation does.** OpenTelemetry reads its own `OTEL_*` variables from the process environment, which inherits
   from `Object.prototype`, so a planted `OTEL_EXPORTER_OTLP_*` redirected the spans or added headers and compression,
   and a planted `OTEL_SDK_DISABLED`, `OTEL_TRACES_SAMPLER`, `OTEL_SERVICE_NAME` or `OTEL_RESOURCE_ATTRIBUTES` stopped
-  the export, sampled it away or renamed the service while `enabled` reported true. For the synchronous length of the
-  build and start of the SDK, each such name that only the root prototype holds is now an own empty variable of the
-  process environment (OpenTelemetry reads an empty value as unset), removed when the start ends. The instrumentation
+  the export, sampled it away or renamed the service while `enabled` reported true, and a planted `http_proxy` or
+  `grpc_proxy` routed a gRPC export through a proxy of the attacker's. Telemetry now refuses to run beside such a
+  process: when the `Object.prototype` of the process holds a name that a fresh realm's does not (or lacks, or holds
+  changed, which a name overwritten with another value is), `startTelemetry` starts nothing, answers with the disabled
+  handle and emits one `BYMAX_TELEMETRY_REALM_POLLUTED` warning that carries a count and never a name or a value; the
+  preload does the same; and every OTLP export, including the exporters the SDK builds for metrics and logs, drops its
+  batch with a failed result and no I/O while the prototype is polluted. The wrap of the export is process-wide, on the
+  base class that the exporters share. A host that extends `Object.prototype` (should.js, chai.should, a polyfill)
+  cannot start telemetry. The configuration the SDK is built with has no prototype, so a planted `serviceName`,
+  `sampler`, `idGenerator`, `textMapPropagator` or provider is not one of its options. The instrumentation
   settings are built with no prototype, the HTTP instrumentation gets its own undefined `headersToSpanAttributes`, and
   the configuration of every instrumentation is cut from the root prototype once it is built, so a planted
   `headersToSpanAttributes`, request hook or response hook neither records the `Authorization` header nor runs, and a
   planted key named after an instrumentation does not override the host's `fs` or `sendLogs`. An instrumentation the
   host did not configure also gets an entry with no prototype, so a planted `enabled` cannot switch the
-  instrumentations off or override `OTEL_NODE_DISABLED_INSTRUMENTATIONS`. The one limit: the credentials of a gRPC
-  OTLP exporter that `NodeSDK` builds for metrics or logs are read from the environment when it first sends, after the
-  start, so only the HTTP exporters are covered by this.
+  instrumentations off or override `OTEL_NODE_DISABLED_INSTRUMENTATIONS`.
   The settings an instrumentation reads while it is built (the HTTP header capture, the gRPC metadata capture, the
   AWS Lambda handler name, and the Redis settings that its two clients copy) are own keys that are
   undefined, because the configuration the instrumentation copies into an ordinary object cannot be cut from the
   root prototype until it is built.
   The same holds one level down: a plain object that the host nests inside an override setting (for
   example `headersToSpanAttributes: { server: {} }`) is copied with no prototype, so a planted `requestHeaders` is not
-  found under it, and a list is copied member by member; the copy is refused beyond 16 levels, 10,000 objects and lists or 1000 entries to a list or an object.
+  found under it, and a list is copied member by member; the copy is refused beyond 16 levels below the setting, 10,000 objects and lists or 1000 entries to a list or an object.
+
+- **An option that only a prototype with no prototype holds fails the start instead of being dropped.** A host
+  option chain that ends in a parent object with no prototype (`Object.create(parent)` with the value on `parent`) had
+  its values ignored in silence, so `serviceName`, `ignoreIncomingRequest` or `extraRedactedQueryParams` could go
+  missing without a word. The start now fails with `BYMAX_TELEMETRY_OPTION_INVALID` naming the option, so the host
+  puts it on the options object or on a class; the root prototype of this realm, where a pollution is planted, is
+  still ignored.
 
 - **An option that must be an object is refused when it has a brand Node tells apart, or a chain of prototypes that
   is longer than 100 or never ends.** The list of refused kinds is now a set of brand predicates of `util.types`
@@ -74,7 +86,7 @@ heading here.
 
 ### Apply to a derived backend
 
-Nothing to change for options written as an object literal or as a class. A configuration that relied on an option
+Nothing to change for options written as an object literal or as a class. A host that extends `Object.prototype` can no longer start telemetry, and an option held only by a parent object with no prototype now fails the start. A configuration that relied on an option
 or a flag set on `Object.prototype` (a pollution, not an option) now reads it as unset. An object option of a kind
 that `util.types` reports (a `WeakMap`, a typed array, an `Error`, a generator object), or whose chain of prototypes
 is longer than 100 or never ends, now fails at start with `BYMAX_TELEMETRY_OPTION_INVALID`.
