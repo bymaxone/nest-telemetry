@@ -34,7 +34,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
-//   - 2026-11-22 (sdk and register, PM-granted, second grant): sdk 8,002 B measured, 7.83 KiB budget (8,018 B,
+//   - 2026-11-22 (sdk and register, PM-granted): sdk 8,002 B measured, 7.83 KiB budget (8,018 B,
 //     16 B of headroom); register 8,148 B, 7.98 KiB budget (8,172 B, 24 B). The growth, about 0.03 KiB in each, is
 //     the read of every option of the call, and of every variable of an environment, with the rule that a key
 //     only the root prototype of the realm holds is not the host's, and the copy of the call with no prototype.

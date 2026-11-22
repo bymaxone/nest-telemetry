@@ -169,7 +169,9 @@ describe('an environment variable found only on the root prototype', () => {
   ])('is not read for %s, from the host env or from the process env', (name, value) => {
     // Scenario: a polluted realm cannot switch the SDK off, rename the service or tune the exporter.
     const clean = JSON.stringify(readTelemetryEnvironment({}))
+    const cleanProcess = JSON.stringify(readTelemetryEnvironment())
     polluted(name, value, () => {
+      expect(JSON.stringify(readTelemetryEnvironment())).toBe(cleanProcess)
       expect(JSON.stringify(readTelemetryEnvironment({}))).toBe(clean)
       expect(JSON.stringify(readTelemetryEnvironment(Object.create(null) as never))).toBe(clean)
     })
@@ -178,6 +180,8 @@ describe('an environment variable found only on the root prototype', () => {
   it('is not read for a sampler variable, and an own variable is still read', () => {
     // Scenario: the same rule for the two sampler readers, and the control for a variable the env owns.
     polluted('OTEL_TRACES_SAMPLER', 'traceidratio', () => {
+      expect(readSamplerNearMiss()).toBeUndefined()
+      expect(readRatioSampler()).toBeUndefined()
       expect(readSamplerNearMiss({})).toBeUndefined()
       expect(readRatioSampler({})).toBeUndefined()
     })
