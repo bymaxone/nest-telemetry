@@ -80,6 +80,7 @@ describe('parseOptions', () => {
     assert.throws(() => parseOptions(['--nope', 'x']), /Unknown option/)
     assert.throws(() => parseOptions(['--src']), /--src needs a value/)
     assert.throws(() => parseOptions(['--dist', '--src']), /--dist needs a value/)
+    assert.throws(() => parseOptions(['--src', undefined]), /--src needs a value/)
   })
 })
 

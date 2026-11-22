@@ -62,18 +62,19 @@ export function judge(sources, outputs, root = '.') {
 /** Reads the options; throws on one it does not know or one given without a value. */
 export function parseOptions(argv) {
   const options = { src: [], dist: 'dist', also: [], tarballOk: false }
-  for (let i = 0; i < argv.length; i += 1) {
-    const name = argv[i]
+  const args = argv.values()
+  for (let next = args.next(); !next.done; next = args.next()) {
+    const name = next.value
     if (name === '--tarball-ok') {
       options.tarballOk = true
       continue
     }
     if (!['--src', '--dist', '--also'].includes(name)) throw new Error(`Unknown option ${name}.`)
-    const value = argv[i + 1]
-    if (value === undefined || value.startsWith('--')) throw new Error(`${name} needs a value.`)
-    i += 1
-    if (name === '--dist') options.dist = value
-    else options[name.slice(2)].push(value)
+    const given = args.next()
+    if (given.done || typeof given.value !== 'string' || given.value.startsWith('--')) throw new Error(`${name} needs a value.`)
+    if (name === '--dist') options.dist = given.value
+    else if (name === '--src') options.src.push(given.value)
+    else options.also.push(given.value)
   }
   if (options.src.length === 0) options.src.push('src')
   if (options.also.length === 0) options.also.push('tsup.config.ts', 'package.json')
