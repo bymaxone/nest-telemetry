@@ -104,12 +104,14 @@ function unchanged(
   const now = hasOwn(have, name) ? have[name] : undefined
   const was = hasOwn(want, name) ? want[name] : undefined
   if (field(now, 'enumerable') !== field(was, 'enumerable')) return false
+  // Stryker disable next-line EqualityOperator: one step past the table reads a flag named undefined, which a descriptor never owns, so nothing changes.
   for (let at = 0; at < FLAGS.length; at += 1) {
     const flag = FLAGS[at] as (typeof FLAGS)[number]
     // A flag tighter than the engine's, a frozen realm, is safe; a looser one is not.
     if (field(now, flag) === true && field(was, flag) !== true) return false
   }
   const met = hasOwn(loaded, name) ? loaded[name] : undefined
+  // Stryker disable next-line EqualityOperator: one step past the table reads a field named undefined, which a descriptor never owns, so nothing changes.
   for (let at = 0; at < CONTENT.length; at += 1) {
     const key = CONTENT[at] as (typeof CONTENT)[number]
     if (!alike(field(now, key), field(was, key), sourceOf)) return false
@@ -148,6 +150,7 @@ export function pollutedNames(): number {
     }
   }
   const fresh = ownKeys(descriptors)
+  // Stryker disable next-line EqualityOperator: one step past the fresh names looks up a name that is not there, which is the same on both sides, so it is never counted.
   for (let at = 0; at < fresh.length; at += 1) {
     const name = fresh[at] as string | symbol
     if (seen[name] !== true) {

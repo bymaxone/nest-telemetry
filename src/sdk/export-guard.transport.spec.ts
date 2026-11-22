@@ -172,4 +172,116 @@ describe('a transport behind a guarded exporter', () => {
       delete (Object.prototype as unknown as Record<string, unknown>)['_delegate']
     }
   })
+
+  it('arms the sending transport as a writable, configurable method and marks it with the value true', () => {
+    // Scenario: a host library that wraps the same send after this one must be able to, and the marker that keeps
+    // a transport from being armed twice is the value true on its own symbol.
+    const { exporter, inner } = shaped()
+    exporter.export(['batch'], () => undefined)
+    const send = Object.getOwnPropertyDescriptor(inner, 'send') as PropertyDescriptor
+    expect(send.writable).toBe(true)
+    expect(send.configurable).toBe(true)
+    const mark = Object.getOwnPropertyDescriptor(
+      inner,
+      Symbol.for('@bymax-one/nest-telemetry/export-guard/transport')
+    ) as PropertyDescriptor
+    expect(mark.value).toBe(true)
+    const headers = Object.getOwnPropertyDescriptor(
+      (inner as unknown as { _parameters: object })._parameters,
+      'headers'
+    ) as PropertyDescriptor
+    expect([headers.writable, headers.configurable, headers.enumerable]).toEqual([true, true, true])
+  })
+
+  it('follows at most eight transports, and arms the eighth, never a ninth', () => {
+    // Scenario: a chain of transports that each hold the next stops at eight hops, so one that is deeper is not
+    // walked to its end: the eighth is armed and the ninth is not.
+    const key = Symbol.for('@bymax-one/nest-telemetry/export-guard/transport')
+    const chain: { send: () => undefined; _transport?: unknown }[] = []
+    for (let at = 0; at < 10; at += 1) chain.push({ send: () => undefined })
+    for (let at = 0; at < 9; at += 1)
+      (chain[at] as { _transport?: unknown })._transport = chain[at + 1]
+    class Base {
+      _delegate = chain[0]
+      export(_items: unknown, done: Done): void {
+        done({ code: 0 })
+      }
+    }
+    class Sub extends Base {}
+    const exporter = new Sub()
+    guardExports(exporter)
+    exporter.export([], () => undefined)
+    expect(Object.hasOwn(chain[8] as object, key)).toBe(true)
+    expect(Object.hasOwn(chain[9] as object, key)).toBe(false)
+  })
+
+  it('does not arm a function, and does not wrap a provider named undefined', () => {
+    // Scenario: a delegate that is a function is not a transport, and a parameters object that owns a function
+    // spelled 'undefined' is not read as one more provider.
+    class Base {
+      _delegate = Object.assign(() => undefined, { send: () => undefined })
+      export(_items: unknown, done: Done): void {
+        done({ code: 0 })
+      }
+    }
+    class Sub extends Base {}
+    const exporter = new Sub()
+    guardExports(exporter)
+    exporter.export([], () => undefined)
+    expect(
+      Object.getOwnPropertySymbols(exporter._delegate).filter((symbol) =>
+        String(symbol).includes('export-guard/transport')
+      )
+    ).toHaveLength(0)
+    const { exporter: shapedExporter, inner } = shaped()
+    const parameters = (inner as unknown as { _parameters: Record<string, unknown> })._parameters
+    const named = (): number => 1
+    parameters['undefined'] = named
+    shapedExporter.export([], () => undefined)
+    expect(parameters['undefined']).toBe(named)
+  })
+
+  it('wraps a base class whose mark is not a data property holding true', () => {
+    // Scenario: a mark that is an accessor, or a data property holding anything but true, does not say the class is
+    // wrapped, so the class is wrapped.
+    for (const mark of [
+      { get: () => true, configurable: true },
+      { value: 'yes', configurable: true },
+      { value: false, configurable: true }
+    ]) {
+      class Base {
+        export(_items: unknown, done: Done): void {
+          done({ code: 0 })
+        }
+      }
+      class Sub extends Base {}
+      Object.defineProperty(
+        Base.prototype,
+        Symbol.for('@bymax-one/nest-telemetry/export-guard'),
+        mark
+      )
+      const exporter = new Sub()
+      guardExports(exporter)
+      polluted.mockReturnValue(1)
+      const results: number[] = []
+      exporter.export([], (result) => results.push(result.code))
+      polluted.mockReturnValue(0)
+      expect(results).toEqual([1])
+    }
+  })
+
+  it('leaves an object that cannot send untouched', () => {
+    // Scenario: a transport with no send function is not armed: it gains no wrapper and no marker.
+    class Base {
+      _delegate = { _transport: {} }
+      export(_items: unknown, done: Done): void {
+        done({ code: 0 })
+      }
+    }
+    class Sub extends Base {}
+    const exporter = new Sub()
+    guardExports(exporter)
+    exporter.export([], () => undefined)
+    expect(Reflect.ownKeys(exporter._delegate._transport)).toEqual([])
+  })
 })

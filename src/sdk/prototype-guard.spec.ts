@@ -62,6 +62,21 @@ describe('pollutedNames', () => {
     }
   )
 
+  it.each([
+    ['enumerable', { value: 1, enumerable: true, writable: true }],
+    ['hidden', { value: 1, writable: true }]
+  ])(
+    'counts a planted name that is called undefined once, whether it is %s',
+    (_label, descriptor) => {
+      // Scenario: a loop that runs one step past its names reads the name undefined, which a descriptor map that
+      // owns a key spelled 'undefined' answers: the count would be two; it is one.
+      plant('undefined', descriptor, () => {
+        expect(pollutedNames()).toBe(1)
+      })
+      expect(pollutedNames()).toBe(0)
+    }
+  )
+
   it('counts a planted enumerable symbol key, and not one that was hidden with defineProperty', () => {
     // Scenario: a symbol planted through a polluted path is enumerable, as a string name is; a symbol that
     // is not enumerable needs code that already runs in the process, and a test runner adds one.
