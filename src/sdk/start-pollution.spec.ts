@@ -101,6 +101,27 @@ describe('startTelemetry beside a polluted Object.prototype', () => {
     }
   })
 
+  it('still starts nothing, and does not reject, when the warning cannot be built', async () => {
+    // Scenario: process.emitWarning throws when a name on the root prototype is read-only, because Node assigns it
+    // onto the warning; the refusal stands and the host gets the disabled handle, not an exception.
+    jest.spyOn(process, 'emitWarning').mockImplementation(() => {
+      throw new TypeError('Cannot assign to read only property')
+    })
+    Object.defineProperty(Object.prototype, 'plantedSecretName', {
+      value: 'x',
+      enumerable: true,
+      configurable: true,
+      writable: true
+    })
+    try {
+      const handle = await startTelemetry({ env: {} })
+      expect(handle.enabled).toBe(false)
+      expect(mockNodeSdk).not.toHaveBeenCalled()
+    } finally {
+      delete (Object.prototype as unknown as Record<string, unknown>)['plantedSecretName']
+    }
+  })
+
   it('starts nothing when a name is planted while the packages load, and is removed once the start has answered', async () => {
     // Scenario: the check is made again right before the SDK is built, with no await between them, so a name
     // planted during the import is seen even when it is gone before the first export.
