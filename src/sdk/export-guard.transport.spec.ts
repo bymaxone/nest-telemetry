@@ -284,4 +284,64 @@ describe('a transport behind a guarded exporter', () => {
     exporter.export([], () => undefined)
     expect(Reflect.ownKeys(exporter._delegate._transport)).toEqual([])
   })
+
+  describe('a provider that answers after it waited', () => {
+    /** An exporter whose transport holds one provider, armed by an export, and that provider as the guard wrapped it. */
+    function armed(provider: (...args: unknown[]) => unknown): () => unknown {
+      class Base {
+        _delegate = { _transport: { send: () => undefined, _parameters: { headers: provider } } }
+        export(_items: unknown, done: Done): void {
+          done({ code: 0 })
+        }
+      }
+      class Sub extends Base {}
+      const exporter = new Sub()
+      guardExports(exporter)
+      exporter.export([], () => undefined)
+      return exporter._delegate._transport._parameters.headers as () => unknown
+    }
+
+    it('refuses an asynchronous answer when a name was planted while the provider waited, and passes it on a clean prototype', async () => {
+      // Scenario: a host-supplied headers provider waits, a name is planted meanwhile, and the request that would
+      // follow its answer is refused: the answer rejects with the refusal, and nothing is read from it.
+      const clean = armed(() => Promise.resolve({ authorization: 'x' }))
+      await expect(clean()).resolves.toEqual({ authorization: 'x' })
+      const waiting = armed(async () => {
+        await Promise.resolve()
+        polluted.mockReturnValue(1)
+        return { authorization: 'x' }
+      })
+      await expect(waiting()).rejects.toThrow(
+        'The Object.prototype of this process is polluted, so the batch was dropped.'
+      )
+    })
+
+    it('waits for any thenable, and refuses it the same way', async () => {
+      // Scenario: an answer that is not a native promise but has a then is awaited too.
+      const thenable = { then: (resolve: (value: number) => void): void => resolve(5) }
+      const clean = armed(() => thenable)
+      await expect(clean()).resolves.toBe(5)
+      const planted = armed(() => ({
+        then: (resolve: (value: number) => void): void => {
+          polluted.mockReturnValue(2)
+          resolve(5)
+        }
+      }))
+      await expect(planted()).rejects.toThrow('so the batch was dropped')
+    })
+
+    it('hands a synchronous answer back as it is, and refuses it when the provider itself planted a name', () => {
+      // Scenario: a synchronous provider stays synchronous (gRPC reads its metadata and credentials that way), and
+      // an object whose then is not a function, null and a text are not waited for.
+      const plain = { then: 'not a function' }
+      expect(armed(() => plain)()).toBe(plain)
+      expect(armed(() => null)()).toBeNull()
+      expect(armed(() => 'text')()).toBe('text')
+      const planting = armed(() => {
+        polluted.mockReturnValue(1)
+        return 'answer'
+      })
+      expect(() => planting()).toThrow('so the batch was dropped')
+    })
+  })
 })

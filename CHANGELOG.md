@@ -70,7 +70,7 @@ heading here.
   The check also runs before every request attempt, not only when an export starts: an attempt waits for the modules
   it loads, and a retry waits for a back-off, and a name planted in that time was read by the request. The
   transport of each exporter is wrapped when its first export is made, so an attempt is refused before it starts and
-  again just before it reads its headers, metadata or credentials (HTTP and gRPC), with no I/O and no retry. A test
+  again just before it reads its headers, metadata or credentials (HTTP and gRPC) and once more when an asynchronous provider has answered, with no I/O and no retry. A custom exporter that does not keep its transport in a `_delegate`, and a transport swapped after the first export, are not covered. A test
   plants a name during the first load and during the back-off of a retried 503 and expects no request; the same
   flows send without a plant.
   Every warning of the library also carries an own, empty `detail`, so a `detail` planted on `Object.prototype` is

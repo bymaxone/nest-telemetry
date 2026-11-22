@@ -89,8 +89,32 @@ function innermostTransport(exporter: unknown): Transport | undefined {
 }
 
 /**
+ * Checks again once a provider has answered: a provider the host supplied can wait, and a name planted while it
+ * did would be read by the request that follows. An answer that is not a promise is checked at once and handed
+ * back as it is, so a synchronous provider stays synchronous.
+ *
+ * @param answer - What the provider returned.
+ * @returns The answer, or a promise of it that rejects when the prototype is polluted by then.
+ */
+function refuseIfPolluted(answer: unknown): unknown {
+  if (
+    typeof answer === 'object' &&
+    answer !== null &&
+    typeof (answer as PromiseLike<unknown>).then === 'function'
+  ) {
+    return (async (): Promise<unknown> => {
+      const value = await answer
+      if (pollutedNames() > 0) throw new ErrorClass(DROPPED)
+      return value
+    })()
+  }
+  if (pollutedNames() > 0) throw new ErrorClass(DROPPED)
+  return answer
+}
+
+/**
  * Guards every attempt of a transport: before the attempt starts, and again after the transport loaded what it
- * needs and before it reads its headers, metadata or credentials, so a name planted while an attempt waits, for
+ * needs and before it reads its headers, metadata or credentials, and once more after they were read, so a name planted while an attempt waits, for
  * the first load or for a retry, is seen. An attempt that is refused sends nothing and is not retried.
  *
  * @param exporter - An OTLP exporter whose export is being made.
@@ -118,7 +142,7 @@ function armTransport(exporter: unknown): void {
       enumerable: true,
       value: function (this: unknown, ...args: unknown[]): unknown {
         if (pollutedNames() > 0) throw new ErrorClass(DROPPED)
-        return apply(provider, this, args)
+        return refuseIfPolluted(apply(provider, this, args))
       }
     })
   }
