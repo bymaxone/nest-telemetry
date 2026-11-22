@@ -38,6 +38,30 @@ describe('pollutedNames', () => {
     expect(pollutedNames()).toBe(0)
   })
 
+  it.each([
+    ['a setter that swallows the assignment', { set: (): void => undefined }],
+    ['a getter', { get: (): number => 1 }],
+    ['a read-only value', { value: 1, writable: false }]
+  ])(
+    'counts the name, and does not throw, when an array index is planted as %s',
+    (_label, descriptor) => {
+      // Scenario: an index on the root prototype is inherited by an array, so an entry appended by assignment would
+      // run a setter, be dropped or throw; the guard keeps its names on an object with no prototype, so the
+      // planted index counts once, as any other name, whatever it is.
+      for (const index of ['0', '1']) {
+        plant(index, descriptor, () => {
+          expect(pollutedNames()).toBe(1)
+        })
+      }
+      plant('0', descriptor, () => {
+        plant('1', descriptor, () => {
+          expect(pollutedNames()).toBe(2)
+        })
+      })
+      expect(pollutedNames()).toBe(0)
+    }
+  )
+
   it('counts a planted enumerable symbol key, and not one that was hidden with defineProperty', () => {
     // Scenario: a symbol planted through a polluted path is enumerable, as a string name is; a symbol that
     // is not enumerable needs code that already runs in the process, and a test runner adds one.

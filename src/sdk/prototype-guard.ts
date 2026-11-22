@@ -131,8 +131,10 @@ export function pollutedNames(): number {
   if (pristine === undefined) return 1
   const { descriptors, sourceOf } = pristine
   const now = getOwnPropertyDescriptors(rootPrototype) as Descriptors
-  const names: (string | symbol)[] = []
-  // No prototype: a name here is looked up as a key, and must never meet one a polluted root prototype holds.
+  // No prototype, for both: a name is looked up as a key and an entry is appended by assignment, and neither may meet
+  // a name, or a setter on an index, that a polluted root prototype holds, which an array would inherit.
+  const names = create(null) as Record<number, string | symbol>
+  let total = 0
   const seen = create(null) as Record<string | symbol, true | undefined>
   const here = ownKeys(now)
   for (let at = 0; at < here.length; at += 1) {
@@ -141,7 +143,8 @@ export function pollutedNames(): number {
     // with defineProperty and hidden needs code that already runs in the process, and a test runner adds one.
     if (typeof name === 'string' || field(now[name], 'enumerable') === true) {
       seen[name] = true
-      names[names.length] = name
+      names[total] = name
+      total += 1
     }
   }
   const fresh = ownKeys(descriptors)
@@ -149,11 +152,12 @@ export function pollutedNames(): number {
     const name = fresh[at] as string | symbol
     if (seen[name] !== true) {
       seen[name] = true
-      names[names.length] = name
+      names[total] = name
+      total += 1
     }
   }
   let found = 0
-  for (let at = 0; at < names.length; at += 1) {
+  for (let at = 0; at < total; at += 1) {
     if (!unchanged(names[at] as string | symbol, now, descriptors, sourceOf)) found += 1
   }
   return found

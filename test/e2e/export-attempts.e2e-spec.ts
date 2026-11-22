@@ -39,6 +39,13 @@ const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http')
 const { TracerProvider } = require('@opentelemetry/sdk-trace')
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 ;(async () => {
+  if (process.env.WRAP_PROMISE === '1') {
+    // What a tracing agent or a context manager does after the library loaded: wraps the global Promise and its then.
+    const then = Promise.prototype.then
+    Promise.prototype.then = function (...args) { return then.apply(this, args) }
+    const Original = Promise
+    globalThis.Promise = class extends Original {}
+  }
   const exporter = new OTLPTraceExporter({ url: process.env.ENDPOINT + '/v1/traces' })
   guardExports(exporter)
   const ended = []
@@ -55,10 +62,20 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 `
 
 /** Runs the child against the collector. */
-async function run(plantAt: string, wait: number): Promise<{ results: number[] }> {
+async function run(
+  plantAt: string,
+  wait: number,
+  wrapPromise = false
+): Promise<{ results: number[] }> {
   const result = await runInRealProcess(
     CHILD,
-    { BUNDLE: bundle.file, ENDPOINT: collector.endpoint, PLANT_AT: plantAt, WAIT: String(wait) },
+    {
+      BUNDLE: bundle.file,
+      ENDPOINT: collector.endpoint,
+      PLANT_AT: plantAt,
+      WAIT: String(wait),
+      WRAP_PROMISE: wrapPromise ? '1' : '0'
+    },
     30_000
   )
   return JSON.parse(result.lines[result.lines.length - 1] ?? '{}') as { results: number[] }
@@ -78,6 +95,15 @@ describe('a name planted after the check of an export, in a real process', () =>
     const planted = await run('now', 1500)
     expect(collector.bodies).toHaveLength(0)
     expect(planted.results).toEqual([1])
+  }, 60_000)
+
+  it('sends normally when the global Promise and its then were wrapped after the library loaded', async () => {
+    // Scenario: tracing agents and context managers wrap Promise after load; the guard looks at Object.prototype
+    // only, so that is not a pollution: the batch is sent and the export succeeds.
+    collector = await startCollector()
+    const answer = await run('', 1500, true)
+    expect(collector.bodies).toHaveLength(1)
+    expect(answer.results).toEqual([0])
   }, 60_000)
 
   it('retries a 503 on a clean prototype, and sends no retry when a name is planted during the back-off', async () => {
