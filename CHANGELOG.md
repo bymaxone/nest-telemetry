@@ -23,6 +23,21 @@ heading here.
 - **Export the option error class** with `code` and `option` typed in the declarations, so a host can test for
   it. It is a public addition, so it waits for a minor release.
 
+## [1.0.13] - 2026-11-22
+
+### Fixed
+
+- **An `OTEL_*` value of a host `env` object that is not a string is ignored.** Each variable the library reads
+  went straight to `.trim()`, `.split()` or a number conversion, so `env: { OTEL_SERVICE_NAME: 5 }` threw a
+  `TypeError` at start, and a number or a boolean was read as if it were the text it converts to. A value that is not
+  a string is now read as no variable, for every variable the library reads. The process environment never holds
+  one, so nothing changes for it.
+
+### Apply to a derived backend
+
+Nothing to change. A host `env` object that held a number, a boolean or an object for one of the `OTEL_*` names now
+reads that variable as unset instead of throwing or converting it.
+
 ## [1.0.12] - 2026-11-21
 
 ### Fixed
@@ -577,6 +592,7 @@ First release.
 - Verification from the packed tarball: real `node --import` processes in a CommonJS and a native-ESM
   application, with planted secrets absent from the exported body and negative controls.
 
+[1.0.13]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.13
 [1.0.12]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.12
 [1.0.11]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.11
 [1.0.10]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.10
