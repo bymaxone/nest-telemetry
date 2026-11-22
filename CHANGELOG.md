@@ -24,8 +24,8 @@ heading here.
   `Object.prototype` could switch a redaction off or the export of log records on without the host asking. Those
   keys are now read from the object, a class instance or a class prototype, and never from the root prototype alone.
 
-- **An option that must be an object is refused by every brand Node reports, and a chain of prototypes that
-  never ends no longer hangs the start.** The list of refused kinds is now the brand predicates of
+- **An option that must be an object is refused when it has a brand Node tells apart, and a chain of prototypes that
+  never ends no longer hangs the start.** The list of refused kinds is now a set of brand predicates of
   `util.types` (so a `WeakMap`, a typed array, an `Error` and a generator object are refused too), and only a plain
   object, an object with no prototype, a class instance whose chain ends at the root of its realm and the
   environment object are read. A `Proxy` whose `getPrototypeOf` answers itself looped for ever in the walk; the
