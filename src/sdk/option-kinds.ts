@@ -6,6 +6,15 @@
 
 import { types } from 'node:util'
 
+/**
+ * Whether a key is an index of an array: a canonical unsigned 32-bit number below 4294967295, as
+ * opposed to a property the host's class added.
+ *
+ * @param key - An own key of a list.
+ * @returns `true` for `'0'` up to `'4294967294'`.
+ */
+const isIndex = (key: string): boolean => String(Number(key) >>> 0) === key && key !== '4294967295'
+
 /** The most entries a list or a map option may hold. */
 export const MAX_OPTION_ENTRIES = 1000
 
@@ -154,7 +163,7 @@ function copyByIndex<T>(
   if (length > MAX_OPTION_ENTRIES) {
     throw new TelemetryOptionError(option, `an array of at most ${MAX_OPTION_ENTRIES} ${noun}`)
   }
-  if (length === 0 && host(() => Object.keys(list).length) > 0) {
+  if (length === 0 && host(() => Object.keys(list).some(isIndex))) {
     throw new TelemetryOptionError(option, expected)
   }
   const copy: T[] = []

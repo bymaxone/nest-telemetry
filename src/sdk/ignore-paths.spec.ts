@@ -77,6 +77,14 @@ describe('ignorePaths', () => {
     expect(() => ignorePaths(null as never)).toThrow(absent)
   })
 
+  it('accepts an empty array subclass that carries a field of its own', () => {
+    // Scenario: the field is metadata, not an entry, so the predicate matches nothing and does not refuse.
+    class Tagged extends Array<RegExp> {
+      tag = 'config'
+    }
+    expect(ignorePaths(new Tagged())({ url: '/health' })).toBe(false)
+  })
+
   it('keeps every pattern of an array subclass whose methods return nothing', () => {
     // Scenario: the copy is by index, so a subclass that hides its entries still ignores its paths.
     class Hollow extends Array<RegExp> {

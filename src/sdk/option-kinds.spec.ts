@@ -67,6 +67,14 @@ describe('the checks of one option', () => {
 })
 
 describe('settleStringList', () => {
+  it('keeps an empty list that carries a property that is not an index, as 1.0.10 did', () => {
+    // Scenario: a subclass with a field of its own and no entries is an empty list.
+    class Tagged extends Array<string> {
+      tag = 'config'
+    }
+    expect(settleStringList('x', new Tagged())).toEqual([])
+  })
+
   it('copies the strings in order, and an empty list stays empty', () => {
     // Scenario: the copy is exactly the list that was given, not the list plus anything.
     const given = ['a', 'b']
@@ -323,6 +331,30 @@ describe('settleRegExpList', () => {
     expect((thrown(() => settleRegExpList('x', value)) as Error).message).toBe(
       `The x option must be ${expected}, so the start was refused.`
     )
+  })
+
+  it('keeps an empty list that carries a property that is not an index', () => {
+    // Scenario: a subclass with a field of its own and no entries is an empty list, not a list that hides entries.
+    class Tagged extends Array<RegExp> {
+      tag = 'config'
+    }
+    expect(settleRegExpList('x', new Tagged())).toEqual([])
+  })
+
+  it('keeps an empty list whose extra key is a number too large to be an index', () => {
+    // Scenario: 4294967295 is the first key that is not an array index, so it is metadata and not an entry.
+    const list: RegExp[] = []
+    Object.defineProperty(list, '4294967295', { value: 1, enumerable: true })
+    expect(settleRegExpList('x', list)).toEqual([])
+  })
+
+  it('refuses an empty copy whose keys hold the largest array index', () => {
+    // Scenario: 4294967294 is an array index, so a list that reads empty but has it hides an entry.
+    const list = new Proxy([] as RegExp[], {
+      ownKeys: () => ['4294967294'],
+      getOwnPropertyDescriptor: () => ({ value: /a/, enumerable: true, configurable: true })
+    })
+    expect(thrown(() => settleRegExpList('x', list))).toBeInstanceOf(TelemetryOptionError)
   })
 
   it('refuses an empty copy of an input that holds entries', () => {
