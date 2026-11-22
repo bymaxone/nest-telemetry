@@ -145,65 +145,6 @@ describe('startTelemetry', () => {
       }
     )
 
-    it('starts nothing, and says how many names, when Object.prototype is polluted', async () => {
-      // Scenario: a process whose root prototype carries a name the engine does not define is not one telemetry
-      // can trust with its data: no SDK is built, the handle is the disabled one, and the one warning carries a
-      // count and never the name.
-      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
-      Object.defineProperty(Object.prototype, 'plantedSecretName', {
-        value: 'x',
-        enumerable: true,
-        configurable: true,
-        writable: true
-      })
-      try {
-        const handle = await startTelemetry({ env: {} })
-        expect(handle.enabled).toBe(false)
-        expect(mockNodeSdk).not.toHaveBeenCalled()
-        const refused = emitWarning.mock.calls.filter(
-          ([, options]) =>
-            (options as { code?: string } | undefined)?.code === 'BYMAX_TELEMETRY_REALM_POLLUTED'
-        )
-        expect(refused).toHaveLength(1)
-        expect(String(refused[0]?.[0])).toContain('holds 1 name(s)')
-        expect(refused[0]?.[1]).toEqual({
-          type: 'SecurityWarning',
-          code: 'BYMAX_TELEMETRY_REALM_POLLUTED'
-        })
-        // Refused before anything else runs: not even the warning about a service name that is not set.
-        expect(emitWarning.mock.calls).toHaveLength(1)
-        expect(String(refused[0]?.[0])).not.toContain('plantedSecretName')
-      } finally {
-        delete (Object.prototype as unknown as Record<string, unknown>)['plantedSecretName']
-      }
-    })
-
-    it('starts nothing when a name is planted while the packages load, even if it is removed before the build', async () => {
-      // Scenario: the check is made again right before the SDK is built, with no await between them, so a name
-      // planted during the import is seen even when it is gone before the first export.
-      const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
-      const pending = startTelemetry({ serviceName: 'api', env: {} })
-      Object.defineProperty(Object.prototype, 'plantedDuringTheImport', {
-        value: 'x',
-        enumerable: true,
-        configurable: true,
-        writable: true
-      })
-      try {
-        const handle = await pending
-        expect(handle.enabled).toBe(false)
-        expect(mockNodeSdk).not.toHaveBeenCalled()
-        expect(
-          emitWarning.mock.calls.filter(
-            ([, options]) =>
-              (options as { code?: string } | undefined)?.code === 'BYMAX_TELEMETRY_REALM_POLLUTED'
-          )
-        ).toHaveLength(1)
-      } finally {
-        delete (Object.prototype as unknown as Record<string, unknown>)['plantedDuringTheImport']
-      }
-    })
-
     it('hands the SDK a configuration with no prototype, so a planted name is not one of its options', async () => {
       // Scenario: the SDK reads its serviceName, sampler, idGenerator, textMapPropagator and providers from the
       // object it is given; a name that a polluted root prototype holds must not be found on it.

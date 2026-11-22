@@ -69,7 +69,11 @@ function refusesPollution(): boolean {
   if (polluted === 0) return false
   process.emitWarning(
     `Telemetry did not start: the Object.prototype of this process holds ${polluted} name(s) that the engine does not define, or holds them changed, and the SDK and its dependencies would read them as settings. Nothing is exported. Remove them, or start telemetry before they are added.`,
-    { type: 'SecurityWarning', code: 'BYMAX_TELEMETRY_REALM_POLLUTED' }
+    // No prototype: process.emitWarning reads detail from these options, and a planted one must not be shown.
+    Object.assign(Object.create(null) as object, {
+      type: 'SecurityWarning',
+      code: 'BYMAX_TELEMETRY_REALM_POLLUTED'
+    })
   )
   return true
 }

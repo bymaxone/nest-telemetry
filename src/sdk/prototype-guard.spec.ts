@@ -67,8 +67,8 @@ describe('pollutedNames', () => {
     }
   )
 
-  it('counts a standard function swapped for another function of another text, and one made writable', () => {
-    // Scenario: the swap is caught by the function's text, and a flag looser than the engine's is a change.
+  it('counts a standard function swapped for another function, and one made enumerable', () => {
+    // Scenario: a function that is not the engine's is a change, and so is a flag that differs from the engine's.
     plant('toString', { value: () => 'x', writable: true }, () => {
       expect(pollutedNames()).toBe(1)
     })
@@ -77,7 +77,7 @@ describe('pollutedNames', () => {
     })
   })
 
-  it('counts a standard name that is gone, and counts it once with its descriptor changed', () => {
+  it('counts a standard name that is gone', () => {
     // Scenario: a name the fresh realm holds and this one lacks is a difference too.
     const before = Object.getOwnPropertyDescriptor(
       Object.prototype,
@@ -91,7 +91,7 @@ describe('pollutedNames', () => {
     }
   })
 
-  it('never runs a getter or a setter planted under a descriptor field name', () => {
+  it('never runs a getter planted under the name of a descriptor field', () => {
     // Scenario: descriptors inherit from the prototype under test; an accessor called get, set or value
     // planted there must not run while the realm is compared.
     let ran = 0

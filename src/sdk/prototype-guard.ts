@@ -21,20 +21,27 @@ const loaded = Object.getOwnPropertyDescriptors(Object.prototype) as Record<
   PropertyDescriptor
 >
 
-let pristine: Pristine | undefined
-
 /**
- * A fresh realm's `Object.prototype`, read once: nothing a host did to this realm reaches it.
+ * Builds a fresh realm and reads its `Object.prototype` and a reader of function text. The vm module reads
+ * its options, microtaskMode, contextCodeGeneration and others, from objects it makes itself, so a name the
+ * prototype under test holds can make it throw: the realm is therefore built when this module loads, while the
+ * process is normally still clean, and a build that fails is retried at the first use and, if it fails again,
+ * leaves the realm unable to be compared, which counts as polluted.
  *
- * @returns The descriptors and a reader of function text from that realm.
+ * @returns The fresh realm's descriptors and text reader, or `undefined` when it could not be built.
  */
-function standard(): Pristine {
-  pristine ??= runInNewContext(
-    '({ descriptors: Object.getOwnPropertyDescriptors(Object.prototype), ' +
-      'sourceOf: (value) => Function.prototype.toString.call(value) })'
-  ) as Pristine
-  return pristine
+function build(): Pristine | undefined {
+  try {
+    return runInNewContext(
+      '({ descriptors: Object.getOwnPropertyDescriptors(Object.prototype), ' +
+        'sourceOf: (value) => Function.prototype.toString.call(value) })'
+    ) as Pristine
+  } catch {
+    return undefined
+  }
 }
+
+let pristine: Pristine | undefined = build()
 
 /** The flags of a descriptor that make a name easier to change. */
 const FLAGS = ['writable', 'configurable'] as const
@@ -75,7 +82,9 @@ function alike(now: unknown, was: unknown, sourceOf: Pristine['sourceOf']): bool
  * @returns Zero for a clean realm.
  */
 export function pollutedNames(): number {
-  const { descriptors, sourceOf } = standard()
+  pristine ??= build()
+  if (pristine === undefined) return 1
+  const { descriptors, sourceOf } = pristine
   const now = Object.getOwnPropertyDescriptors(Object.prototype) as Record<
     string | symbol,
     PropertyDescriptor

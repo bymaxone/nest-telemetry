@@ -93,6 +93,23 @@ describe('the export of the real exporter while a name is planted', () => {
     }
   })
 
+  it('counts one when the fresh realm cannot be built, as a realm that cannot be compared is not trusted', () => {
+    // Scenario: the vm module throws while the fresh realm is built, at load and again at the first count; the
+    // count is one, and neither the error nor what it said is shown.
+    let count: number | undefined
+    jest.isolateModules(() => {
+      jest.doMock('node:vm', () => ({
+        runInNewContext: () => {
+          throw new Error('SECRET-FROM-THE-VM')
+        }
+      }))
+      const guard = require('../../src/sdk/prototype-guard') as { pollutedNames(): number }
+      count = guard.pollutedNames()
+    })
+    jest.dontMock('node:vm')
+    expect(count).toBe(1)
+  })
+
   it('leaves an object that has no exporter base class alone', () => {
     // Scenario: the wrap looks for the class an exporter extends; where there is none it does nothing.
     expect(() => guardExports(Object.create(null) as object)).not.toThrow()

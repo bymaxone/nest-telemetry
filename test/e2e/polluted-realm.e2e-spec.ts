@@ -43,6 +43,10 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 process.on('warning', (warning) => {
   if (warning.code === 'BYMAX_TELEMETRY_REALM_POLLUTED') console.log(JSON.stringify({ warning: warning.message }))
 })
+// Hidden before the library loads: not enumerable, so the bundle's export helper still loads.
+for (const [name, value] of Object.entries(JSON.parse(process.env.PLANT_HIDDEN || '{}'))) {
+  Object.defineProperty(Object.prototype, name, { value, enumerable: false, configurable: true, writable: true })
+}
 const { startTelemetry } = require(process.env.BUNDLE)
 const { trace } = require('@opentelemetry/api')
 // Planted after the library is loaded: a bundle's own export helper walks its exports with for-in, so an
@@ -126,6 +130,32 @@ describe('a name that only the root prototype of the process holds, in a real pr
     expect(answer.enabled).toBe(false)
     expect(answer.warning).toContain('holds 2 name(s)')
     expect(collector.bodies).toHaveLength(0)
+    expect(answer.code).toBe(0)
+  }, 60_000)
+
+  it('counts, and does not throw, when the names planted are ones the vm module reads from its options', async () => {
+    // Scenario: the first count builds a fresh realm through the vm module, which reads microtaskMode,
+    // contextCodeGeneration and others from the options it is given; the options have no prototype, so a
+    // planted name is counted and the start answers with the disabled handle instead of rejecting.
+    const answer = await runChild({
+      PLANT: JSON.stringify({ microtaskMode: 'planted', contextCodeGeneration: 'planted' })
+    })
+    expect(answer.enabled).toBe(false)
+    expect(answer.warning).toContain('holds 2 name(s)')
+    expect(answer.warning).not.toContain('planted')
+    expect(answer.done).toBe(true)
+    expect(answer.code).toBe(0)
+  }, 60_000)
+
+  it('counts one, and does not throw, when a name that breaks the fresh realm is there before the library loads', async () => {
+    // Scenario: with microtaskMode already on the prototype when the library loads, the fresh realm cannot be
+    // built, at load or at the first count: a realm that cannot be compared counts as polluted, and the start
+    // answers with the disabled handle and a count, never rejecting and never repeating the value.
+    const answer = await runChild({ PLANT_HIDDEN: JSON.stringify({ microtaskMode: 'planted' }) })
+    expect(answer.enabled).toBe(false)
+    expect(answer.warning).toContain('holds 1 name(s)')
+    expect(answer.warning).not.toContain('planted')
+    expect(answer.done).toBe(true)
     expect(answer.code).toBe(0)
   }, 60_000)
 

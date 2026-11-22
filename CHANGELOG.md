@@ -38,7 +38,7 @@ heading here.
   the export, sampled it away or renamed the service while `enabled` reported true, and a planted `http_proxy` or
   `grpc_proxy` routed a gRPC export through a proxy of the attacker's. Telemetry now refuses to run beside such a
   process: when the `Object.prototype` of the process holds a name that a fresh realm's does not (or lacks, or holds
-  changed, which a name overwritten with another value is), `startTelemetry` starts nothing, answers with the disabled
+  changed, which a name overwritten with another value is, or when a fresh realm to compare it with cannot be built), `startTelemetry` starts nothing, answers with the disabled
   handle and emits one `BYMAX_TELEMETRY_REALM_POLLUTED` warning that carries a count and never a name or a value; the
   preload does the same; and every OTLP export, including the exporters the SDK builds for metrics and logs, drops its
   batch with a failed result and no I/O while the prototype is polluted. The wrap of the export is process-wide, on the
