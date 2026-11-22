@@ -67,6 +67,12 @@ heading here.
   replaced one of them after the library loaded blinded the check. Everything the check and the wrap call is now read
   once when the library loads, and they walk arrays by index and keep their names on an object with no prototype. A
   test replaces, in a real process, every function and getter of the global objects in turn and expects the refusal.
+  The check also runs before every request attempt, not only when an export starts: an attempt waits for the modules
+  it loads, and a retry waits one to five seconds, and a name planted in that time was read by the request. The
+  transport of each exporter is wrapped when its first export is made, so an attempt is refused before it starts and
+  again just before it reads its headers, metadata or credentials (HTTP and gRPC), with no I/O and no retry. A test
+  plants a name during the first load and during the back-off of a retried 503 and expects no request; the same
+  flows send without a plant.
   Every warning of the library also carries an own, empty `detail`, so a `detail` planted on `Object.prototype` is
   not printed, and a warning Node cannot build is dropped instead of thrown.
 

@@ -41,8 +41,11 @@ const stand = function () { called = called + 1; return undefined }
 // What the guard must do, with one target replaced: count one planted name, drop an exported batch with no
 // send, count nothing and send on a clean prototype, and wrap an exporter built after the replacement.
 const guardCheck = () => {
-  const out = { clean: -1, planted: -1, sent: -1, code: -1, cleanSent: -1, cleanCode: -1 }
-  class Base { export(items, done) { out.sent = out.sent + 1; done({ code: 0 }) } }
+  const out = { clean: -1, planted: -1, sent: -1, code: -1, cleanSent: -1, cleanCode: -1, headers: -1, refused: -1 }
+  class Base {
+    _delegate = { _transport: { _transport: { send: () => undefined, _parameters: { headers: () => 7 } } } }
+    export(items, done) { out.sent = out.sent + 1; done({ code: 0 }) }
+  }
   class Sub extends Base {}
   const exporter = new Sub()
   guardExports(exporter)
@@ -50,10 +53,12 @@ const guardCheck = () => {
   out.clean = pollutedNames()
   exporter.export([1], (r) => { out.cleanCode = r.code })
   out.cleanSent = out.sent
+  out.headers = exporter._delegate._transport._transport._parameters.headers()
   out.sent = 0
   root.zzplanted = 'x'
   out.planted = pollutedNames()
   exporter.export([1], (r) => { out.code = r.code })
+  try { exporter._delegate._transport._transport._parameters.headers(); out.refused = 0 } catch (error) { out.refused = 1 }
   delete root.zzplanted
   return out
 }
@@ -61,7 +66,7 @@ const guardCheck = () => {
 const liveCheck = () => {
   Object.hasOwn({}, 'a')
   new Set().add(1)
-  return { clean: 0, planted: 1, sent: 0, code: 1, cleanSent: 1, cleanCode: 0 }
+  return { clean: 0, planted: 1, sent: 0, code: 1, cleanSent: 1, cleanCode: 0, headers: 7, refused: 1 }
 }
 
 const targets = []
@@ -104,7 +109,7 @@ const run = (check) => {
   return results
 }
 const wrong = (r) => r.threw || r.calls !== 0 || r.out.clean !== 0 || r.out.cleanSent !== 1 || r.out.cleanCode !== 0 ||
-  r.out.planted !== 1 || r.out.sent !== 0 || r.out.code !== 1
+  r.out.planted !== 1 || r.out.sent !== 0 || r.out.code !== 1 || r.out.headers !== 7 || r.out.refused !== 1
 const real = run(guardCheck).filter(wrong).map((r) => r.label)
 const control = run(liveCheck).filter((r) => r.calls !== 0).map((r) => r.label)
 log(stringify({ targets: targets.length, wrong: real, control }))

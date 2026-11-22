@@ -4,8 +4,9 @@
  * @layer sdk
  *
  * The exporters read their endpoint, headers, proxy and credentials when they send, and a gRPC one reads
- * them at its first send, after anything this library did at the start. The check therefore runs on each
- * export. It wraps the `export` of the base class that the exporters of this library's peers share, once,
+ * them at its first send, after anything this library did at the start, and an attempt waits for the modules it
+ * loads and, after a failure, for a back-off before it retries. The check therefore runs on each export, before
+ * each attempt of the transport and again just before the attempt reads its headers or credentials. It wraps the `export` of the base class that the exporters of this library's peers share, once,
  * so it reaches the metrics and logs exporters that the SDK builds itself; that wrap is process-wide.
  */
 import {
@@ -24,6 +25,21 @@ const FAILED = 1
 /** Marks a base class that is already wrapped, whichever copy of this library wrapped it. */
 const MARK = Symbol.for('@bymax-one/nest-telemetry/export-guard')
 
+/** Marks a transport whose attempts are already guarded. */
+const ARMED = Symbol.for('@bymax-one/nest-telemetry/export-guard/transport')
+
+/** Why a batch is dropped, shared by the check at the export and the one before each request. */
+const DROPPED = 'The Object.prototype of this process is polluted, so the batch was dropped.'
+
+/** The providers of a transport that a request reads, after the transport loaded what it needs and before it sends. */
+const PROVIDERS = ['headers', 'metadata', 'credentials'] as const
+
+/** What the guard needs of a transport: the method that makes one attempt, and the settings it reads. */
+interface Transport {
+  send(data: unknown, timeoutMillis: unknown): unknown
+  _parameters?: Record<string, unknown>
+}
+
 /** The part of an exporter base class this module wraps. */
 interface Base {
   export(items: unknown, done: (result: { code: number; error?: unknown }) => void): void
@@ -38,6 +54,75 @@ interface Base {
 function isMarked(base: object): boolean {
   const mark = getOwnPropertyDescriptor(base, MARK)
   return mark !== undefined && hasOwn(mark, 'value') && mark.value === true
+}
+
+/**
+ * The property of an object, as its own property only.
+ *
+ * @param holder - An object, or anything.
+ * @param name - The property.
+ * @returns The own value, or `undefined`.
+ */
+function own(holder: unknown, name: string): unknown {
+  return typeof holder === 'object' && holder !== null && hasOwn(holder, name)
+    ? (holder as Record<string, unknown>)[name]
+    : undefined
+}
+
+/**
+ * The transport that makes the requests of an exporter: what `_delegate` holds, followed through `_transport`
+ * while there is one, so a retrying transport is passed over for the one that sends.
+ *
+ * @param exporter - An OTLP exporter.
+ * @returns The innermost transport, or `undefined` when the exporter is not shaped as expected.
+ */
+function innermostTransport(exporter: unknown): Transport | undefined {
+  let at = own(exporter, '_delegate')
+  for (let depth = 0; depth < 8; depth += 1) {
+    const next = own(at, '_transport')
+    if (next === undefined) break
+    at = next
+  }
+  return typeof at === 'object' && at !== null && typeof (at as Transport).send === 'function'
+    ? (at as Transport)
+    : undefined
+}
+
+/**
+ * Guards every attempt of a transport: before the attempt starts, and again after the transport loaded what it
+ * needs and before it reads its headers, metadata or credentials, so a name planted while an attempt waits, for
+ * the first load or for a retry, is seen. An attempt that is refused sends nothing and is not retried.
+ *
+ * @param exporter - An OTLP exporter whose export is being made.
+ */
+function armTransport(exporter: unknown): void {
+  const transport = innermostTransport(exporter)
+  if (transport === undefined || hasOwn(transport, ARMED)) return
+  const send = transport.send
+  defineProperty(transport, 'send', {
+    configurable: true,
+    writable: true,
+    value: async function (this: unknown, data: unknown, timeoutMillis: unknown): Promise<unknown> {
+      if (pollutedNames() > 0) return { status: 'failure', error: new ErrorClass(DROPPED) }
+      return apply(send, this, [data, timeoutMillis])
+    }
+  })
+  const parameters = own(transport, '_parameters') as Record<string, unknown> | undefined
+  for (let at = 0; at < PROVIDERS.length; at += 1) {
+    const name = PROVIDERS[at] as (typeof PROVIDERS)[number]
+    const provider = own(parameters, name)
+    if (typeof provider !== 'function') continue
+    defineProperty(parameters, name, {
+      configurable: true,
+      writable: true,
+      enumerable: true,
+      value: function (this: unknown, ...args: unknown[]): unknown {
+        if (pollutedNames() > 0) throw new ErrorClass(DROPPED)
+        return apply(provider, this, args)
+      }
+    })
+  }
+  defineProperty(transport, ARMED, { value: true })
 }
 
 /**
@@ -62,14 +147,10 @@ export function guardExports(exporter: object): void {
       done: (result: { code: number; error?: unknown }) => void
     ): void {
       if (pollutedNames() > 0) {
-        done({
-          code: FAILED,
-          error: new ErrorClass(
-            'The Object.prototype of this process is polluted, so the batch was dropped.'
-          )
-        })
+        done({ code: FAILED, error: new ErrorClass(DROPPED) })
         return
       }
+      armTransport(this)
       apply(original, this, [items, done])
     }
   })
