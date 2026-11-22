@@ -183,6 +183,19 @@ describe('startTelemetry in the real library, for an option of the wrong kind', 
     expect(Object.getPrototypeOf(instrumentations)).toBe(longer)
   })
 
+  it('refuses an option that only a prototype with no prototype holds, naming it, and does not drop it', async () => {
+    // Scenario: a value the host put on a parent object with no prototype is the host's, so the start fails and
+    // tells it to put the option on the options object; the root prototype of the realm, where a pollution is
+    // planted, is the one place that is ignored.
+    const parent = Object.create(null, { serviceName: { value: 'api' } }) as object
+    const error = await refusal(Object.create(parent))
+    expect(error?.message).toContain(
+      'The serviceName option must be set on the options object itself'
+    )
+    const unsafe = Object.create(Object.create(null, { exportHostId: { value: true } })) as object
+    expect((await refusal({ unsafe }))?.message).toContain('unsafe.exportHostId')
+  })
+
   it('starts nothing for a refused call, and a later call starts', async () => {
     // Scenario: the refusal leaves no SDK behind, so a valid call right after it starts one.
     await refusal({ instrumentations: { sendLogs: 'false' } })

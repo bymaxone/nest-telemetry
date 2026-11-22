@@ -152,9 +152,15 @@ function isSettingsObject(value: object): boolean {
  *
  * @param group - The object the host passed, or `undefined`. A Proxy is read through what it answers.
  * @param name - The option name.
- * @returns The value, read once, or `undefined` when only the root prototype has it.
+ * @param option - The option as the error names it, `name` by default.
+ * @returns The value, read once, or `undefined` when only the root prototype of this realm has it.
+ * @throws {TelemetryOptionError} When only a prototype with no prototype, other than the root of this realm, has it.
  */
-export function readOwnOrClass(group: object | undefined, name: string): unknown {
+export function readOwnOrClass(
+  group: object | undefined,
+  name: string,
+  option: string = name
+): unknown {
   if (group === undefined) return undefined
   // A Proxy answers for itself, so what it answers is what the host wrote, whichever traps it has.
   if (types.isProxy(group)) return (group as Record<string, unknown>)[name]
@@ -163,10 +169,15 @@ export function readOwnOrClass(group: object | undefined, name: string): unknown
     if (hops >= MAX_CHAIN) return undefined
     holder = Object.getPrototypeOf(holder)
   }
-  // An object with no prototype that the group only inherits from is the end of the chain, the root
-  // of whatever realm it came from; no property of it is the host's, and none of it is read to tell.
-  if (holder === null || (holder !== group && Object.getPrototypeOf(holder) === null)) {
-    return undefined
+  if (holder === null) return undefined
+  if (holder !== group && Object.getPrototypeOf(holder) === null) {
+    // The root prototype of this realm is where a pollution is planted, and it is ignored. Any other
+    // prototype with no prototype of its own is the host's, so its value is not dropped in silence.
+    if (holder === Object.prototype) return undefined
+    throw new TelemetryOptionError(
+      option,
+      'set on the options object itself or on a class, not on a prototype that has no prototype'
+    )
   }
   return (group as Record<string, unknown>)[name]
 }

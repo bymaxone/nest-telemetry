@@ -25,6 +25,7 @@ const READ_WHEN_BUILT = Object.assign(Object.create(null), {
   [HTTP_INSTRUMENTATION]: ['headersToSpanAttributes'],
   '@opentelemetry/instrumentation-grpc': ['metadataToSpanAttributes'],
   '@opentelemetry/instrumentation-aws-lambda': ['lambdaHandler'],
+  '@opentelemetry/instrumentation-socket.io': ['emitIgnoreEventList', 'onIgnoreEventList'],
   [REDIS_INSTRUMENTATION]: ['dbStatementSerializer', 'responseHook', 'requireParentSpan']
 }) as Readonly<Record<string, readonly string[]>>
 const PINO_INSTRUMENTATION = '@opentelemetry/instrumentation-pino'
@@ -183,7 +184,7 @@ export function settleUnsafe(unsafe: unknown): {
 } {
   const flags = requireObject('unsafe', unsafe)
   const flag = (name: keyof UnsafeOptions): boolean =>
-    requireBoolean(`unsafe.${name}`, readOwnOrClass(flags, name)) === true
+    requireBoolean(`unsafe.${name}`, readOwnOrClass(flags, name, `unsafe.${name}`)) === true
   return {
     disableUrlRedaction: flag('disableUrlRedaction'),
     disableRedisArgumentRedaction: flag('disableRedisArgumentRedaction'),
@@ -205,10 +206,15 @@ export function settleInstrumentations(instrumentations: unknown): {
 } {
   const read = requireObject('instrumentations', instrumentations)
   return {
-    fs: requireBoolean('instrumentations.fs', readOwnOrClass(read, 'fs')),
-    sendLogs: requireBoolean('instrumentations.sendLogs', readOwnOrClass(read, 'sendLogs')),
-    overrides: settleOverrides('instrumentations.overrides', readOwnOrClass(read, 'overrides')) as
-      InstrumentationConfigMap | undefined
+    fs: requireBoolean('instrumentations.fs', readOwnOrClass(read, 'fs', 'instrumentations.fs')),
+    sendLogs: requireBoolean(
+      'instrumentations.sendLogs',
+      readOwnOrClass(read, 'sendLogs', 'instrumentations.sendLogs')
+    ),
+    overrides: settleOverrides(
+      'instrumentations.overrides',
+      readOwnOrClass(read, 'overrides', 'instrumentations.overrides')
+    ) as InstrumentationConfigMap | undefined
   }
 }
 

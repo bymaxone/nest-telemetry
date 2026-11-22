@@ -119,6 +119,10 @@ describe('buildInstrumentationConfig', () => {
       // The settings an instrumentation reads while it is built are own keys that are undefined.
       '@opentelemetry/instrumentation-aws-lambda': { lambdaHandler: undefined },
       '@opentelemetry/instrumentation-grpc': { metadataToSpanAttributes: undefined },
+      '@opentelemetry/instrumentation-socket.io': {
+        emitIgnoreEventList: undefined,
+        onIgnoreEventList: undefined
+      },
       [HTTP]: {
         headersToSpanAttributes: undefined,
         redactedQueryParams: [...DEFAULT_REDACTED_QUERY_PARAMS]
