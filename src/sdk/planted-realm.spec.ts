@@ -10,7 +10,7 @@ import { runInNewContext } from 'node:vm'
 import { buildInstrumentationConfig, severFromRootPrototype } from './assembly'
 import type { InstrumentationInputs } from './assembly'
 import { withoutPlantedVariables } from './environment'
-import { readOwnOrClass, settleOverrides } from './option-kinds'
+import { readOwnOrClass, settleOverrides, settleStringList } from './option-kinds'
 import { settleOptions } from './settle-options'
 import type { TelemetryOptions } from './types'
 
@@ -225,6 +225,23 @@ describe('the options object of a call', () => {
   })
 })
 
+describe('a list option with a hole', () => {
+  it('is refused for a hole, whatever the root prototype holds at that index', () => {
+    // Scenario: a hole in the host's sparse list is a missing entry, which a list of strings refuses; a data
+    // value planted at index 0 on the root prototype must not fill it in.
+    const sparse: unknown[] = []
+    sparse[1] = 'session'
+    planted('0', 'planted', () => {
+      expect(() => settleStringList('extraRedactedQueryParams', sparse)).toThrow(
+        expect.objectContaining({ code: 'BYMAX_TELEMETRY_OPTION_INVALID' })
+      )
+    })
+    expect(() => settleStringList('extraRedactedQueryParams', sparse)).toThrow(
+      expect.objectContaining({ code: 'BYMAX_TELEMETRY_OPTION_INVALID' })
+    )
+  })
+})
+
 describe('a setting that the host nests in an override', () => {
   const HOST = '@opentelemetry/instrumentation-http'
   const settle = (setting: unknown): Record<string, unknown> =>
@@ -287,7 +304,7 @@ describe('a setting that the host nests in an override', () => {
 
   it('copies a list whole when the root prototype holds an iterator', () => {
     // Scenario: a planted Symbol.iterator on the root prototype must not decide how many members are
-    // copied, which would drop an entry of a redaction list.
+    // copied, which would drop an entry of a nested list of an override setting.
     const iterator = function* (): Generator<number> {
       yield 0
     }

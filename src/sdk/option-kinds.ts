@@ -217,7 +217,8 @@ function copyByIndex<T>(
   }
   const copy: T[] = []
   for (let index = 0; index < length; index++) {
-    const taken = take(host(() => list[index]))
+    // An own index only: a hole in the host's list is not whatever a prototype holds at that index.
+    const taken = take(host(() => (Object.hasOwn(list, index) ? list[index] : undefined)))
     if (taken === undefined) throw new TelemetryOptionError(option, expected)
     copy.push(taken)
   }
