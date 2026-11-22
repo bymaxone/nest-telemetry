@@ -30,7 +30,13 @@ interface Base {
 export function guardExports(exporter: object): void {
   const own = Object.getPrototypeOf(exporter) as object | null
   const base = own === null ? null : (Object.getPrototypeOf(own) as Base | null)
-  if (base === null || typeof base.export !== 'function' || Object.hasOwn(base, MARK)) return
+  if (
+    base === null ||
+    typeof base.export !== 'function' ||
+    Object.getOwnPropertyDescriptor(base, MARK)?.value === true
+  ) {
+    return
+  }
   const original = base.export
   Object.defineProperty(base, 'export', {
     configurable: true,

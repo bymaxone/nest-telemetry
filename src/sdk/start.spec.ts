@@ -157,7 +157,7 @@ describe('startTelemetry', () => {
         writable: true
       })
       try {
-        const handle = await startTelemetry({ serviceName: 'api', env: {} })
+        const handle = await startTelemetry({ env: {} })
         expect(handle.enabled).toBe(false)
         expect(mockNodeSdk).not.toHaveBeenCalled()
         const refused = emitWarning.mock.calls.filter(
@@ -166,6 +166,12 @@ describe('startTelemetry', () => {
         )
         expect(refused).toHaveLength(1)
         expect(String(refused[0]?.[0])).toContain('holds 1 name(s)')
+        expect(refused[0]?.[1]).toEqual({
+          type: 'SecurityWarning',
+          code: 'BYMAX_TELEMETRY_REALM_POLLUTED'
+        })
+        // Refused before anything else runs: not even the warning about a service name that is not set.
+        expect(emitWarning.mock.calls).toHaveLength(1)
         expect(String(refused[0]?.[0])).not.toContain('plantedSecretName')
       } finally {
         delete (Object.prototype as unknown as Record<string, unknown>)['plantedSecretName']

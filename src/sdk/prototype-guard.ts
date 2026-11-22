@@ -36,6 +36,12 @@ function standard(): Pristine {
   return pristine
 }
 
+/** The flags of a descriptor that make a name easier to change. */
+const FLAGS = ['writable', 'configurable'] as const
+
+/** The fields of a descriptor that hold what the name is. */
+const CONTENT = ['value', 'get', 'set'] as const
+
 /**
  * A field of a descriptor, as its own property only: a descriptor of this realm inherits from the prototype
  * under test, so a name planted there, an accessor called `get` say, must never run.
@@ -84,22 +90,19 @@ export function pollutedNames(): number {
   ])
   let found = 0
   for (const name of names) {
+    // An absent descriptor reads every field as undefined, so a deleted name and a planted one differ at once.
     const have = Object.hasOwn(now, name) ? now[name] : undefined
     const want = Object.hasOwn(descriptors, name) ? descriptors[name] : undefined
     const same =
-      have !== undefined &&
-      want !== undefined &&
       field(have, 'enumerable') === field(want, 'enumerable') &&
       // A flag tighter than the engine's, a frozen realm, is safe; a looser one is not.
-      !(field(have, 'writable') && !field(want, 'writable')) &&
-      !(field(have, 'configurable') && !field(want, 'configurable')) &&
-      alike(field(have, 'value'), field(want, 'value'), sourceOf) &&
-      alike(field(have, 'get'), field(want, 'get'), sourceOf) &&
-      alike(field(have, 'set'), field(want, 'set'), sourceOf) &&
-      (!Object.hasOwn(loaded, name) ||
-        (field(have, 'value') === field(loaded[name], 'value') &&
-          field(have, 'get') === field(loaded[name], 'get') &&
-          field(have, 'set') === field(loaded[name], 'set')))
+      FLAGS.every((flag) => field(have, flag) !== true || field(want, flag) === true) &&
+      CONTENT.every(
+        (key) =>
+          alike(field(have, key), field(want, key), sourceOf) &&
+          // And it is the function this module met, not another native one put in its place.
+          (!Object.hasOwn(loaded, name) || field(have, key) === field(loaded[name], key))
+      )
     if (!same) found += 1
   }
   return found

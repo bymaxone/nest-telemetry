@@ -122,6 +122,29 @@ describe('readOwnOrClass', () => {
     )
   })
 
+  it.each([
+    ['unsafe', 'disableUrlRedaction', 'unsafe.disableUrlRedaction'],
+    ['unsafe', 'disableRedisArgumentRedaction', 'unsafe.disableRedisArgumentRedaction'],
+    ['unsafe', 'exportProcessCommandArgs', 'unsafe.exportProcessCommandArgs'],
+    ['unsafe', 'exportHostId', 'unsafe.exportHostId'],
+    ['instrumentations', 'fs', 'instrumentations.fs'],
+    ['instrumentations', 'sendLogs', 'instrumentations.sendLogs'],
+    ['instrumentations', 'overrides', 'instrumentations.overrides']
+  ])(
+    'names %s.%s, and says where to put it, when only a prototype with no prototype holds it',
+    (group, name, option) => {
+      // Scenario: the error names the option as the host wrote it and tells the host what to do.
+      const held = Object.create(Object.create(null, { [name]: { value: true } })) as object
+      const settle = group === 'unsafe' ? settleUnsafe : settleInstrumentations
+      expect(() => settle(held)).toThrow(
+        expect.objectContaining({
+          option,
+          message: expect.stringContaining('set on the options object itself or on a class')
+        })
+      )
+    }
+  )
+
   it('does not depend on the constructor of the root prototype, here or in another realm', () => {
     // Scenario: a root whose constructor was overwritten is still the end of the chain, and an object
     // of a vm context, whose root is not this realm's, is judged the same way.
