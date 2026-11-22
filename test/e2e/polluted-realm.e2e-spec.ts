@@ -171,14 +171,14 @@ describe('a name that only the root prototype of the process holds does not deci
     expect(joined).not.toContain('http.response.header.content-type')
   }, 60_000)
 
-  it('keeps every instrumentation on when a planted enabled is false', async () => {
+  it('keeps the undici instrumentation on when a planted enabled is false', async () => {
     // Scenario: an instrumentation the host did not configure is handed an empty configuration, which
     // must not inherit a planted `enabled: false`; the undici instrumentation still records a fetch.
     await runChild({ enabled: false }, { HTTP: '1', FETCH: '1' })
     expect(collector.bodies.join('')).toContain('@opentelemetry/instrumentation-undici')
   }, 60_000)
 
-  it('does not let a planted enabled override the operator switching an instrumentation off', async () => {
+  it('does not let a planted enabled switch undici back on once the operator switched it off', async () => {
     // Scenario: OTEL_NODE_DISABLED_INSTRUMENTATIONS names undici; a planted `enabled: true` must not
     // switch it back on, so no fetch span is exported.
     await runChild(

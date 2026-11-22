@@ -103,9 +103,9 @@ describe('readOwnOrClass', () => {
   })
 
   it('does not read a key that only the end of the chain holds, whatever that object is', () => {
-    // Scenario: flipped from the rule that read it. The end of a chain, an object with no prototype that
-    // the group inherits from, is never the host's, and nothing of it is read to tell what it is; an
-    // object with no prototype that holds the key itself is read.
+    // Scenario: the end of a chain, an object with no prototype that the group inherits from, is never the
+    // host's, and nothing of it is read to tell what it is; an object with no prototype that holds the key
+    // itself is read.
     const data = Object.create(null) as Record<string, unknown>
     data['flag'] = true
     expect(readOwnOrClass(Object.create(data) as object, 'flag')).toBeUndefined()

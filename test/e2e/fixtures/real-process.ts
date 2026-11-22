@@ -1,3 +1,9 @@
+/**
+ * @fileoverview E2E fixture that runs code in a real Node process: it bundles the SDK entry from its
+ * source with the package's own bundler, so a child process runs the code under test without a `dist/`,
+ * and it spawns a script with its own environment, which Jest's sandboxed `process.env` cannot model.
+ * @layer e2e
+ */
 import { execFileSync, spawn } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'

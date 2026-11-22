@@ -306,8 +306,8 @@ describe('requireObject, for a value of a kind that is not a plain object', () =
   })
 
   it('accepts an object whose chain ends in an object with no prototype, whatever it holds', () => {
-    // Scenario: flipped from refusing it. No property of a prototype is read to tell a root from data, so
-    // the end of a chain is the end of a chain; only a chain that never ends or is too long is refused.
+    // Scenario: no property of a prototype is read to tell a root from data, so the end of a chain is the end
+    // of a chain; only a chain that never ends or is too long is refused.
     const data = Object.assign(Object.create(null) as object, { a: 1 })
     const options = Object.create(data) as object
     expect(requireObject('x', options)).toBe(options)
