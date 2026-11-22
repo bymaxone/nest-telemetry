@@ -325,8 +325,15 @@ function detach(value: unknown, seen: { count: number }, depth: number): unknown
     }
     return Array.prototype.map.call(value, (member: unknown) => detach(member, seen, depth + 1))
   }
+  const members = Object.entries(value)
+  if (members.length > MAX_OPTION_ENTRIES) {
+    throw new TelemetryOptionError(
+      OVERRIDE_PATH,
+      `an object of at most ${MAX_OPTION_ENTRIES} entries`
+    )
+  }
   const copy = Object.create(null) as Record<string, unknown>
-  for (const [key, member] of Object.entries(value)) {
+  for (const [key, member] of members) {
     refuseProtoKey(key)
     copy[key] = detach(member, seen, depth + 1)
   }

@@ -242,7 +242,7 @@ describe('a setting that the host nests in an override', () => {
     kept.forEach((value, index) => expect(copy.headersToSpanAttributes.kept[index]).toBe(value))
   })
 
-  it('is refused when it nests too deep, holds too many values, has a long list or a __proto__ key', () => {
+  it('is refused when it nests too deep, holds too many values, has a long list or object or a __proto__ key', () => {
     // Scenario: the copy is bounded, and a cycle in the host's object ends in a refusal and not a hang.
     const deep: Record<string, unknown> = {}
     let at = deep
@@ -250,11 +250,12 @@ describe('a setting that the host nests in an override', () => {
     const cycle: Record<string, unknown> = {}
     cycle['self'] = cycle
     const wide = { list: Array.from({ length: 1001 }, () => 0) }
+    const broad = Object.fromEntries(Array.from({ length: 1001 }, (_v, index) => [`k${index}`, 0]))
     const many = {
       groups: Array.from({ length: 20 }, () => Array.from({ length: 600 }, () => ({})))
     }
     const proto = JSON.parse('{"a":{"__proto__":1}}') as unknown
-    for (const setting of [deep, cycle, wide, many, proto]) {
+    for (const setting of [deep, cycle, wide, broad, many, proto]) {
       expect(() => settle(setting)).toThrow(
         expect.objectContaining({ code: 'BYMAX_TELEMETRY_OPTION_INVALID' })
       )
