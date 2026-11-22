@@ -34,6 +34,22 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
+//   - 2026-11-22 (sdk and register, PM-granted): sdk 9,608 B measured, 9.42 KiB budget (9,646 B, 38 B of
+//     headroom); register 9,758 B, 9.56 KiB budget (9,789 B, 31 B). The growth, about 0.05 KiB in sdk and none in
+//     register, is the fresh realm built when the module loads, with its retry, and the count of one for a realm
+//     that cannot be compared.
+//   - 2026-11-22 (sdk and register, PM-granted): sdk 9,561 B measured, 9.37 KiB budget (9,594 B, 33 B of
+//     headroom); register 9,721 B, 9.53 KiB budget (9,758 B, 37 B). The growth, about 0.03 KiB in sdk and 0.06 KiB in
+//     register, is the comparison of the prototype with a fresh realm's made table-driven, and the marker of the wrap
+//     of the exporter base checked by its value.
+//   - 2026-11-22 (sdk and register, PM-granted): sdk 9,527 B measured, 9.34 KiB budget (9,564 B, 37 B of
+//     headroom); register 9,660 B, 9.47 KiB budget (9,697 B, 37 B). The growth, about 0.02 KiB in each, is the second
+//     check of the realm's Object.prototype right before the SDK is built and the count of symbol keys.
+//   - 2026-11-22 (sdk and register, PM-granted): sdk 9,480 B measured, 9.29 KiB budget (9,512 B, 32 B of
+//     headroom); register 9,622 B, 9.43 KiB budget (9,656 B, 34 B). The growth, about 0.8 KiB in each, is the check of
+//     the realm's Object.prototype against a fresh realm's, the wrap that drops an export while it is polluted, the
+//     refusal for an option held only by a prototype with no prototype, and the configuration of the SDK with no
+//     prototype.
 //   - 2026-11-22 (sdk and register, PM-granted): sdk 8,643 B measured, 8.47 KiB budget (8,673 B, 30 B of
 //     headroom); register 8,783 B, 8.61 KiB budget (8,816 B, 33 B). The growth, about 0.15 KiB in each, is the table
 //     of what an instrumentation reads while it is built, and the copy of a nested object of any realm and of a
@@ -99,8 +115,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
 //   met by shortening the text of a warning.
 const BUDGETS = [
-  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 8.47 * 1024 },
-  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 8.61 * 1024 },
+  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 9.42 * 1024 },
+  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 9.56 * 1024 },
   { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.04 * 1024 },
   { name: 'observability (metrics)', path: 'dist/observability/index.mjs', brotli: 0.69 * 1024 }
 ]

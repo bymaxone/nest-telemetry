@@ -27,7 +27,7 @@ const STOPPED_KEY = Symbol.for('@bymax-one/nest-telemetry/stopped')
 /** `globalThis` seen as the store of the handle and of the start in progress. */
 const store = globalThis as typeof globalThis & {
   [HANDLE_KEY]?: RunningHandle
-  [PENDING_KEY]?: Promise<RunningHandle>
+  [PENDING_KEY]?: Promise<TelemetryHandle>
 }
 
 /**
@@ -71,7 +71,7 @@ export function clearHandle(): void {
  *
  * @returns The pending start, or `undefined` when none is under way.
  */
-export function pendingStart(): Promise<RunningHandle> | undefined {
+export function pendingStart(): Promise<TelemetryHandle> | undefined {
   return store[PENDING_KEY]
 }
 
@@ -80,7 +80,7 @@ export function pendingStart(): Promise<RunningHandle> | undefined {
  *
  * @param start - The pending start.
  */
-export function setPendingStart(start: Promise<RunningHandle>): void {
+export function setPendingStart(start: Promise<TelemetryHandle>): void {
   store[PENDING_KEY] = start
 }
 

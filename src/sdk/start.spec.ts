@@ -145,6 +145,14 @@ describe('startTelemetry', () => {
       }
     )
 
+    it('hands the SDK a configuration with no prototype, so a planted name is not one of its options', async () => {
+      // Scenario: the SDK reads its serviceName, sampler, idGenerator, textMapPropagator and providers from the
+      // object it is given; a name that a polluted root prototype holds must not be found on it.
+      await startTelemetry({ serviceName: 'api', env: {} })
+      const [options] = mockNodeSdk.mock.calls[mockNodeSdk.mock.calls.length - 1] as [object]
+      expect(Object.getPrototypeOf(options)).toBeNull()
+    })
+
     it('assembles the SDK from the options and the environment', async () => {
       // Scenario: one boot wires resource, redaction processor, batch processor and
       // instrumentations in the order that makes redaction run first.

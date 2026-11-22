@@ -102,15 +102,48 @@ describe('readOwnOrClass', () => {
     expect(readOwnOrClass(undefined, 'absent')).toBeUndefined()
   })
 
-  it('does not read a key that only the end of the chain holds, whatever that object is', () => {
-    // Scenario: the end of a chain, an object with no prototype that the group inherits from, is never the
-    // host's, and nothing of it is read to tell what it is; an object with no prototype that holds the key
-    // itself is read.
+  it('refuses a key that only a prototype with no prototype holds, unless it is the root of this realm', () => {
+    // Scenario: a value found only on a prototype that has none, and is not the root of this realm, is the host's
+    // and not a pollution, so it must not be dropped in silence: the start is refused, naming the option. The root
+    // of this realm is the one place a pollution is planted, and it is ignored. An object with no prototype that holds
+    // the key itself is read.
     const data = Object.create(null) as Record<string, unknown>
     data['flag'] = true
-    expect(readOwnOrClass(Object.create(data) as object, 'flag')).toBeUndefined()
+    expect(() => readOwnOrClass(Object.create(data) as object, 'flag', 'unsafe.flag')).toThrow(
+      expect.objectContaining({ code: 'BYMAX_TELEMETRY_OPTION_INVALID', option: 'unsafe.flag' })
+    )
     expect(readOwnOrClass(data, 'flag')).toBe(true)
+    polluted('flag', true, () => {
+      expect(readOwnOrClass({}, 'flag')).toBeUndefined()
+    })
+    const named = Object.create(Object.create(null, { serviceName: { value: 'api' } })) as object
+    expect(() => settleOptions(named as TelemetryOptions)).toThrow(
+      expect.objectContaining({ option: 'serviceName' })
+    )
   })
+
+  it.each([
+    ['unsafe', 'disableUrlRedaction', 'unsafe.disableUrlRedaction'],
+    ['unsafe', 'disableRedisArgumentRedaction', 'unsafe.disableRedisArgumentRedaction'],
+    ['unsafe', 'exportProcessCommandArgs', 'unsafe.exportProcessCommandArgs'],
+    ['unsafe', 'exportHostId', 'unsafe.exportHostId'],
+    ['instrumentations', 'fs', 'instrumentations.fs'],
+    ['instrumentations', 'sendLogs', 'instrumentations.sendLogs'],
+    ['instrumentations', 'overrides', 'instrumentations.overrides']
+  ])(
+    'names %s.%s, and says where to put it, when only a prototype with no prototype holds it',
+    (group, name, option) => {
+      // Scenario: the error names the option as the host wrote it and tells the host what to do.
+      const held = Object.create(Object.create(null, { [name]: { value: true } })) as object
+      const settle = group === 'unsafe' ? settleUnsafe : settleInstrumentations
+      expect(() => settle(held)).toThrow(
+        expect.objectContaining({
+          option,
+          message: expect.stringContaining('set on the options object itself or on a class')
+        })
+      )
+    }
+  )
 
   it('does not depend on the constructor of the root prototype, here or in another realm', () => {
     // Scenario: a root whose constructor was overwritten is still the end of the chain, and an object
@@ -136,7 +169,9 @@ describe('readOwnOrClass', () => {
     const foreign = runInNewContext(
       'Object.prototype.flag = true; Object.prototype.constructor = 1; ({ own: 1, nested: {} })'
     ) as { own: number }
-    expect(readOwnOrClass(foreign, 'flag')).toBeUndefined()
+    expect(() => readOwnOrClass(foreign, 'flag')).toThrow(
+      expect.objectContaining({ option: 'flag' })
+    )
     expect(readOwnOrClass(foreign, 'own')).toBe(1)
     expect(requireObject('x', foreign)).toBe(foreign)
   })

@@ -27,14 +27,10 @@ import {
   warnAboutUnsafeOptions
 } from './assembly'
 import type { InstrumentationInputs, ServiceIdentity } from './assembly'
-import {
-  readRatioSampler,
-  readSamplerNearMiss,
-  readTelemetryEnvironment,
-  withoutPlantedVariables
-} from './environment'
+import { readRatioSampler, readSamplerNearMiss, readTelemetryEnvironment } from './environment'
 import type { TelemetryEnvironment } from './environment'
 import { warnOnExportFailure } from './export-failure'
+import { guardExports } from './export-guard'
 import {
   clearPendingStart,
   createHandle,
@@ -45,6 +41,7 @@ import {
   setPendingStart
 } from './handle'
 import type { RunningHandle } from './handle'
+import { pollutedNames } from './prototype-guard'
 import { createUrlQueryRedactor } from './redaction'
 import { selectResourceDetectors } from './resource-detectors'
 import { settleOptions } from './settle-options'
@@ -59,6 +56,27 @@ const RESTART_MESSAGE =
 const DISABLED_HANDLE: TelemetryHandle = {
   enabled: false,
   shutdown: () => Promise.resolve()
+}
+
+/**
+ * Refuses to start beside a polluted `Object.prototype`: telemetry that cannot be trusted starts nothing and
+ * says so with a count, and never throws at the host.
+ *
+ * @returns `true` when the prototype is polluted, after the warning was attempted: it may not be built.
+ */
+function refusesPollution(): boolean {
+  const polluted = pollutedNames()
+  if (polluted === 0) return false
+  try {
+    process.emitWarning(
+      `Telemetry did not start: the Object.prototype of this process holds ${polluted} name(s) that the engine does not define, or holds them changed, and the SDK and its dependencies would read them as settings. Nothing is exported. Remove them, or start telemetry before they are added.`,
+      // An own detail: the warning is an ordinary object, so a `detail` planted on the root prototype would print.
+      { type: 'SecurityWarning', code: 'BYMAX_TELEMETRY_REALM_POLLUTED', detail: '' }
+    )
+  } catch {
+    // A warning that cannot be built, a read-only name on the root prototype, must not turn the refusal into a throw.
+  }
+  return true
 }
 
 /**
@@ -106,9 +124,21 @@ export async function startTelemetry(options: TelemetryOptions = {}): Promise<Te
     })
     throw new Error(RESTART_MESSAGE)
   }
+  if (refusesPollution()) return DISABLED_HANDLE
   const start = boot(settled, env).finally(clearPendingStart)
   setPendingStart(start)
   return start
+}
+
+/**
+ * Makes the exports of an exporter, and of the others of its base class, refuse a polluted process.
+ *
+ * @param exporter - An OTLP exporter that was just built.
+ * @returns The same exporter.
+ */
+function guarded<E extends object>(exporter: E): E {
+  guardExports(exporter)
+  return exporter
 }
 
 /** The OpenTelemetry packages a start loads, all of them behind dynamic imports. */
@@ -187,7 +217,9 @@ function buildSdk(
   const { sdkNode, sdkTrace, autoInstrumentations, exporter, resources } = packages
   const signals = planSignals(env)
   const { instrumentations, unsafe, service } = read
-  return new sdkNode.NodeSDK({
+  // No prototype: the SDK reads serviceName, sampler, idGenerator, textMapPropagator and its providers from
+  // this object, and a name that a polluted root prototype holds must not be one of them.
+  const configuration = Object.assign(Object.create(null) as object, {
     ...signals.overrides,
     resource: resources.resourceFromAttributes(buildResourceAttributes(service, env)),
     resourceDetectors: selectResourceDetectors(
@@ -208,12 +240,16 @@ function buildSdk(
       // Ordered before the batch processor, so each span is redacted in place before it is exported.
       ...(unsafe?.disableUrlRedaction === true ? [] : [createUrlQueryRedactor()]),
       new sdkTrace.BatchSpanProcessor({
-        exporter: warnOnExportFailure(new exporter.OTLPTraceExporter(), 'otlp-http traces'),
+        exporter: warnOnExportFailure(
+          guarded(new exporter.OTLPTraceExporter()),
+          'otlp-http traces'
+        ),
         ...env.batchSpanProcessor
       })
     ],
     instrumentations: [buildInstrumentations(autoInstrumentations, options, read, signals)]
   })
+  return new sdkNode.NodeSDK(configuration)
 }
 
 /**
@@ -223,7 +259,10 @@ function buildSdk(
  * @param env - The parsed environment.
  * @returns The handle of the started SDK.
  */
-async function boot(options: TelemetryOptions, env: TelemetryEnvironment): Promise<RunningHandle> {
+async function boot(
+  options: TelemetryOptions,
+  env: TelemetryEnvironment
+): Promise<TelemetryHandle> {
   // Read once for the whole start, each field once: a getter, on the option or on a field of it, could
   // answer differently each time, and the warning about a turned-off redaction, the SDK build and the
   // instrumentation config must all see the same values.
@@ -240,12 +279,11 @@ async function boot(options: TelemetryOptions, env: TelemetryEnvironment): Promi
   // handle can stop.
   const shutdownTimeoutMs = options.shutdownTimeoutMs
   const packages = await loadPackages()
-  // OpenTelemetry reads its own variables while the SDK is built and started, all of it synchronously.
-  const sdk = withoutPlantedVariables(() => {
-    const built = buildSdk(packages, options, env, { instrumentations, unsafe, service })
-    built.start()
-    return built
-  })
+  // Checked again, with no await between it and the build: a name planted while the packages loaded, and removed
+  // before the first export, would otherwise be read by the SDK and its exporters when they are built.
+  if (refusesPollution()) return DISABLED_HANDLE
+  const sdk = buildSdk(packages, options, env, { instrumentations, unsafe, service })
+  sdk.start()
   const handle = createHandle(() => sdk.shutdown(), shutdownTimeoutMs)
   registerHandle(handle)
   return handle
