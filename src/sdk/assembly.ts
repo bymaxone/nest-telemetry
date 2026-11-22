@@ -4,6 +4,7 @@
  */
 import type { InstrumentationConfigMap } from '@opentelemetry/auto-instrumentations-node'
 
+import { emitWarning } from './emit-warning'
 import type { RatioSampler, TelemetryEnvironment } from './environment'
 import { readOwnOrClass, requireBoolean, requireObject, settleOverrides } from './option-kinds'
 import { buildRedactedQueryParams, serializeRedisCommandName } from './redaction'
@@ -342,7 +343,7 @@ export function warnAboutMissingServiceName(
   env: TelemetryEnvironment
 ): void {
   if (env.serviceName === undefined && nonBlank(options.serviceName) === undefined) {
-    process.emitWarning(
+    emitWarning(
       'No service name is set, so spans are exported as unknown_service:node. Set OTEL_SERVICE_NAME or the serviceName option.',
       { type: 'Warning', code: 'BYMAX_TELEMETRY_SERVICE_NAME_MISSING' }
     )
@@ -359,25 +360,25 @@ export function warnAboutUnsafeOptions(options: {
 }): void {
   const unsafe = options.unsafe
   if (unsafe?.disableUrlRedaction === true) {
-    process.emitWarning(
+    emitWarning(
       'URL redaction is disabled: url.query, url.full, http.url and http.target are exported as recorded.',
       WARNING_OPTIONS
     )
   }
   if (unsafe?.exportProcessCommandArgs === true) {
-    process.emitWarning(
+    emitWarning(
       'Process command-line redaction is disabled: process.command_args, process.command_line and process.command are exported in the resource, and command-line arguments can carry secrets.',
       WARNING_OPTIONS
     )
   }
   if (unsafe?.exportHostId === true) {
-    process.emitWarning(
+    emitWarning(
       'Host id redaction is disabled: host.id, the machine identifier, is exported in the resource, and it identifies the machine to every collector and backend.',
       WARNING_OPTIONS
     )
   }
   if (unsafe?.disableRedisArgumentRedaction === true) {
-    process.emitWarning(
+    emitWarning(
       'Redis argument redaction is disabled: command arguments, EVAL and EVALSHA payloads included, are exported in db.query.text.',
       WARNING_OPTIONS
     )
@@ -460,7 +461,7 @@ export function warnAboutSamplerName(meant: string | undefined): void {
  */
 export function warnAboutOversizedTimers(env: TelemetryEnvironment): void {
   for (const name of env.oversizedTimers) {
-    process.emitWarning(
+    emitWarning(
       `${name} is above 2147483647 ms, which a timer cannot hold, so the default applies. Set a value up to 2147483647.`,
       { type: 'Warning', code: 'BYMAX_TELEMETRY_BSP_VALUE_IGNORED' }
     )
@@ -480,7 +481,7 @@ export function warnAboutOversizedTimers(env: TelemetryEnvironment): void {
 export function warnAboutIgnoredOptions(options: TelemetryOptions): void {
   const stop = options.enabled === false
   if (stop || Object.values(readEachOption(options)).some(isPresent)) {
-    process.emitWarning(
+    emitWarning(
       stop
         ? 'startTelemetry({ enabled: false }) was called while telemetry is already running. It does not stop the running SDK: call shutdownTelemetry() for that.'
         : 'startTelemetry was called while telemetry is already running, so the options of this call were ignored. Pass them to the first call.',

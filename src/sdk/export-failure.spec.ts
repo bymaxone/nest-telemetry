@@ -63,7 +63,8 @@ describe('warnOnExportFailure', () => {
     expect(emitWarning).toHaveBeenCalledTimes(1)
     expect(emitWarning).toHaveBeenCalledWith(expect.stringContaining('otlp-http traces'), {
       type: 'Warning',
-      code: CODE
+      code: CODE,
+      detail: ''
     })
     expect(emitWarning.mock.calls[0]?.[0]).toContain('ECONNREFUSED')
   })

@@ -58,7 +58,7 @@ describe('the preload boot with the real loader and the real SDK', () => {
     expect(handle.enabled).toBe(true)
     expect(emitWarning).toHaveBeenCalledWith(
       expect.stringContaining('The OpenTelemetry loader hook could not be registered'),
-      { type: 'Warning', code: 'BYMAX_TELEMETRY_ESM_HOOK_UNAVAILABLE' }
+      { type: 'Warning', code: 'BYMAX_TELEMETRY_ESM_HOOK_UNAVAILABLE', detail: '' }
     )
   })
 

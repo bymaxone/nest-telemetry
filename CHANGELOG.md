@@ -61,6 +61,15 @@ heading here.
   example `headersToSpanAttributes: { server: {} }`) is copied with no prototype, so a planted `requestHeaders` is not
   found under it, and a list is copied member by member; the copy is refused beyond 16 levels below the setting, 10,000 objects and lists or 1000 entries to a list or an object.
 
+- **The check no longer looks a built-in up when it runs.** The pollution check and the wrap of the export called
+  `Object.getOwnPropertyDescriptors`, `Object.hasOwn`, `Reflect.ownKeys`, `Set.prototype.add`, the iterators of arrays
+  and sets, `Function.prototype.call` and the `Object` and `Error` globals as they were when they ran, so code that
+  replaced one of them after the library loaded blinded the check. Everything the check and the wrap call is now read
+  once when the library loads, and they walk arrays by index and keep their names on an object with no prototype. A
+  test replaces, in a real process, every function and getter of the global objects in turn and expects the refusal.
+  Every warning of the library also carries an own, empty `detail`, so a `detail` planted on `Object.prototype` is
+  not printed, and a warning Node cannot build is dropped instead of thrown.
+
 - **An option that only a prototype with no prototype holds fails the start instead of being dropped.** A host
   option chain that ends in a parent object with no prototype (`Object.create(parent)` with the value on `parent`) had
   its values ignored in silence, so `serviceName`, `ignoreIncomingRequest` or `extraRedactedQueryParams` could go

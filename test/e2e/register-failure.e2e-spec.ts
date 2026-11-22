@@ -25,7 +25,7 @@ describe('the preload boot when an optional peer cannot be loaded', () => {
     await expect(handle.shutdown()).resolves.toBeUndefined()
     expect(emitWarning).toHaveBeenCalledWith(
       expect.stringContaining('Telemetry could not be started'),
-      { type: 'Warning', code: 'BYMAX_TELEMETRY_START_FAILED' }
+      { type: 'Warning', code: 'BYMAX_TELEMETRY_START_FAILED', detail: '' }
     )
   })
 
@@ -45,7 +45,8 @@ describe('the preload boot when an optional peer cannot be loaded', () => {
     expect(handle.enabled).toBe(false)
     expect(emitWarning).toHaveBeenCalledWith(expect.stringContaining('(code UNKNOWN)'), {
       type: 'Warning',
-      code: 'BYMAX_TELEMETRY_START_FAILED'
+      code: 'BYMAX_TELEMETRY_START_FAILED',
+      detail: ''
     })
   })
 
@@ -63,7 +64,7 @@ describe('the preload boot when an optional peer cannot be loaded', () => {
     })
     expect(emitWarning).toHaveBeenCalledWith(
       'Telemetry could not be started (code ERR_MODULE_NOT_FOUND, package @opentelemetry/sdk-node), so the application continues without it.',
-      { type: 'Warning', code: 'BYMAX_TELEMETRY_START_FAILED' }
+      { type: 'Warning', code: 'BYMAX_TELEMETRY_START_FAILED', detail: '' }
     )
   })
 
@@ -79,7 +80,7 @@ describe('the preload boot when an optional peer cannot be loaded', () => {
     })
     expect(emitWarning).toHaveBeenCalledWith(
       'Telemetry could not be started (code UNKNOWN), so the application continues without it.',
-      { type: 'Warning', code: 'BYMAX_TELEMETRY_START_FAILED' }
+      { type: 'Warning', code: 'BYMAX_TELEMETRY_START_FAILED', detail: '' }
     )
   })
 })

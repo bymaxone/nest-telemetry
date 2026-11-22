@@ -53,7 +53,8 @@ describe('shutdownTimeoutMs against a collector that never answers', () => {
       expect.stringContaining('did not finish within 500 ms'),
       {
         type: 'Warning',
-        code: 'BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT'
+        code: 'BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT',
+        detail: ''
       }
     )
   })

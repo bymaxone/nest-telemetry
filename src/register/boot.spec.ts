@@ -142,7 +142,7 @@ describe('bootFromEnvironment', () => {
     expect(emitWarning).toHaveBeenCalledTimes(1)
     expect(emitWarning).toHaveBeenCalledWith(
       'The OpenTelemetry loader hook could not be registered (code UNKNOWN), so native ES modules are not instrumented. Install @opentelemetry/instrumentation to instrument them; CommonJS code is unaffected.',
-      { type: 'Warning', code: 'BYMAX_TELEMETRY_ESM_HOOK_UNAVAILABLE' }
+      { type: 'Warning', code: 'BYMAX_TELEMETRY_ESM_HOOK_UNAVAILABLE', detail: '' }
     )
   })
 
@@ -210,7 +210,7 @@ describe('bootFromEnvironment', () => {
       expect(emitWarning).toHaveBeenCalledTimes(1)
       expect(emitWarning).toHaveBeenCalledWith(
         'Telemetry could not be started (code UNKNOWN), so the application continues without it.',
-        { type: 'Warning', code: 'BYMAX_TELEMETRY_START_FAILED' }
+        { type: 'Warning', code: 'BYMAX_TELEMETRY_START_FAILED', detail: '' }
       )
     })
 

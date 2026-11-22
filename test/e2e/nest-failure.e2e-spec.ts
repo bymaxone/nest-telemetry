@@ -201,7 +201,11 @@ describe('TelemetryModule when the flush fails, in a real Nest application', () 
         await app.init()
         reportWarning({ code, text: `warning ${code}`, fields: { kind: 'otlp-http traces' } })
         await new Promise((resolve) => setImmediate(resolve))
-        expect(emitWarning).toHaveBeenCalledWith(`warning ${code}`, { type: 'Warning', code })
+        expect(emitWarning).toHaveBeenCalledWith(`warning ${code}`, {
+          type: 'Warning',
+          code,
+          detail: ''
+        })
         expect(unhandled).not.toHaveBeenCalled()
         await app.close()
       } finally {

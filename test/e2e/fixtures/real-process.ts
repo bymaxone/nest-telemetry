@@ -6,7 +6,7 @@
  */
 import { execFileSync, spawn } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 
 /** The root of this repository, from which the bundler and the peers resolve. */
 const ROOT = join(__dirname, '..', '..', '..')
@@ -31,9 +31,10 @@ export interface SdkBundle {
  * Bundles the SDK entry from its source with the bundler the package is built with, so a child
  * process runs the code under test without a `dist/` that the test job has not built.
  *
+ * @param entry - The source file to bundle; the SDK entry by default.
  * @returns The bundle.
  */
-export function bundleSdk(): SdkBundle {
+export function bundleSdk(entry = 'src/sdk/index.ts'): SdkBundle {
   // Inside `node_modules`, so the native module loader finds the peers by walking up from the bundle,
   // and every tool that ignores `node_modules` ignores it too.
   const cache = join(ROOT, 'node_modules', '.cache')
@@ -42,7 +43,7 @@ export function bundleSdk(): SdkBundle {
   execFileSync(
     join(ROOT, 'node_modules', '.bin', 'tsup'),
     [
-      'src/sdk/index.ts',
+      entry,
       '--no-config',
       '--format',
       'cjs',
@@ -58,7 +59,7 @@ export function bundleSdk(): SdkBundle {
     { cwd: ROOT, stdio: 'ignore' }
   )
   return {
-    file: join(directory, 'index.cjs'),
+    file: join(directory, `${basename(entry, '.ts')}.cjs`),
     remove: () => rmSync(directory, { recursive: true })
   }
 }

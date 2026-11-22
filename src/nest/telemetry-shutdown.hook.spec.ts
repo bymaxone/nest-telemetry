@@ -398,7 +398,8 @@ describe('an asynchronous structured logger that rejects', () => {
     expect(emitWarning).toHaveBeenCalledTimes(1)
     expect(emitWarning).toHaveBeenCalledWith(EXPORT.text, {
       type: 'Warning',
-      code: 'BYMAX_TELEMETRY_EXPORT_FAILED'
+      code: 'BYMAX_TELEMETRY_EXPORT_FAILED',
+      detail: ''
     })
     expect(unhandled).not.toHaveBeenCalled()
   })

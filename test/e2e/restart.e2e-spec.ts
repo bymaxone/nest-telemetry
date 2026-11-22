@@ -43,7 +43,7 @@ describe('a start after a shutdown', () => {
     await expect(startTelemetry({ serviceName: 'api', env: {} })).rejects.toThrow('global setup')
     expect(emitWarning).toHaveBeenCalledWith(
       expect.stringContaining('cannot start again after it was shut down'),
-      { type: 'Warning', code: 'BYMAX_TELEMETRY_RESTART_UNSUPPORTED' }
+      { type: 'Warning', code: 'BYMAX_TELEMETRY_RESTART_UNSUPPORTED', detail: '' }
     )
 
     const handle = await bootFromEnvironment('file:///app/preload.mjs', {
@@ -54,7 +54,8 @@ describe('a start after a shutdown', () => {
     // The preload names the failure by its code only; the refusal's own text is the public API's.
     expect(emitWarning).toHaveBeenCalledWith(expect.stringContaining('(code UNKNOWN)'), {
       type: 'Warning',
-      code: 'BYMAX_TELEMETRY_START_FAILED'
+      code: 'BYMAX_TELEMETRY_START_FAILED',
+      detail: ''
     })
 
     expect(collector.bodies).toHaveLength(1)

@@ -65,15 +65,13 @@ export interface IProviderLookup {
  * Keeps the promise an asynchronous application logger returns from becoming an unhandled
  * rejection, which ends a Node process by default, and reports through the fallback when it
  * rejects, since the logger then never took the entry. Nothing waits for it. A logger that returns
- * nothing is unaffected, and a fallback that throws is absorbed too.
+ * nothing is unaffected. The fallback is the process warning, which never throws.
  *
  * @param result - Whatever the logger method returned.
  * @param fallback - Reports through the channel that needs no application logger.
  */
 function absorbRejection(result: unknown, fallback: () => void): void {
-  Promise.resolve(result)
-    .catch(fallback)
-    .catch(() => undefined)
+  Promise.resolve(result).catch(fallback)
 }
 
 /** Awaits the SDK flush as part of the application's own graceful shutdown. */

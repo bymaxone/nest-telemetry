@@ -174,7 +174,8 @@ describe('warnAboutMissingWinstonTransport', () => {
       expect.stringContaining('@opentelemetry/winston-transport'),
       {
         type: 'Warning',
-        code: 'BYMAX_TELEMETRY_WINSTON_TRANSPORT_MISSING'
+        code: 'BYMAX_TELEMETRY_WINSTON_TRANSPORT_MISSING',
+        detail: ''
       }
     )
   })

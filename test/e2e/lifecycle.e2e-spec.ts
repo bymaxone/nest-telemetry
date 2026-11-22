@@ -74,7 +74,7 @@ describe('batch processor tuning from the standard variables', () => {
     expect(collector.bodies).toHaveLength(0)
     expect(emitWarning).toHaveBeenCalledWith(
       expect.stringContaining('OTEL_BSP_SCHEDULE_DELAY is above 2147483647 ms'),
-      { type: 'Warning', code: 'BYMAX_TELEMETRY_BSP_VALUE_IGNORED' }
+      { type: 'Warning', code: 'BYMAX_TELEMETRY_BSP_VALUE_IGNORED', detail: '' }
     )
     await handle.shutdown()
     expect(collector.bodies.join('\n')).toContain('span-19')
@@ -150,7 +150,8 @@ describe('the service name warning', () => {
     expect(emitWarning).toHaveBeenCalledTimes(1)
     expect(emitWarning).toHaveBeenCalledWith(expect.stringContaining('OTEL_SERVICE_NAME'), {
       type: 'Warning',
-      code: 'BYMAX_TELEMETRY_SERVICE_NAME_MISSING'
+      code: 'BYMAX_TELEMETRY_SERVICE_NAME_MISSING',
+      detail: ''
     })
     await handle.shutdown()
   })
@@ -275,7 +276,8 @@ describe('the process command line in the exported resource', () => {
       expect.stringContaining('Host id redaction is disabled'),
       {
         type: 'SecurityWarning',
-        code: 'BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED'
+        code: 'BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED',
+        detail: ''
       }
     )
   })
@@ -288,7 +290,7 @@ describe('the process command line in the exported resource', () => {
     expect(collector.bodies.join('\n')).toContain(ARGV_SECRET)
     expect(emitWarning).toHaveBeenCalledWith(
       expect.stringContaining('Process command-line redaction is disabled'),
-      { type: 'SecurityWarning', code: 'BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED' }
+      { type: 'SecurityWarning', code: 'BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED', detail: '' }
     )
   })
 
@@ -376,7 +378,8 @@ describe('a later call while the SDK is running', () => {
       expect.stringContaining('the options of this call were ignored'),
       {
         type: 'Warning',
-        code: 'BYMAX_TELEMETRY_OPTIONS_IGNORED'
+        code: 'BYMAX_TELEMETRY_OPTIONS_IGNORED',
+        detail: ''
       }
     )
     await shutdownTelemetry()
@@ -407,7 +410,8 @@ describe('a later call while the SDK is running', () => {
       expect.stringContaining('does not stop the running SDK'),
       {
         type: 'Warning',
-        code: 'BYMAX_TELEMETRY_OPTIONS_IGNORED'
+        code: 'BYMAX_TELEMETRY_OPTIONS_IGNORED',
+        detail: ''
       }
     )
     trace.getTracer('e2e').startSpan('after-disable').end()
