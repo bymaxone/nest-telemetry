@@ -301,7 +301,7 @@ describe('requireObject, for a value of a kind that is not a plain object', () =
     ['an iterator of a Map', new Map().keys()],
     ['a generator object', (function* gen() {})()]
   ])('refuses %s as the wrong kind, by the brand Node reports', (_what, value) => {
-    // Scenario: a kind the list of the first release did not name is refused all the same.
+    // Scenario: an object of a brand Node reports cannot hold settings, so it is refused whatever its prototype.
     expect(thrown(() => requireObject('x', value))).toBeInstanceOf(TelemetryOptionError)
   })
 
