@@ -179,6 +179,8 @@ describe('startTelemetry in the real library, for an option of the wrong kind', 
     }
     const handle = await startTelemetry({ instrumentations })
     expect(handle.enabled).toBe(true)
+    // The getter ran and the chain is the longer one, so the lookup that followed met the bound.
+    expect(Object.getPrototypeOf(instrumentations)).toBe(longer)
   })
 
   it('starts nothing for a refused call, and a later call starts', async () => {
