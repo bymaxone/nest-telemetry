@@ -33,13 +33,11 @@ function read(source: NodeJS.ProcessEnv, name: string): string | undefined {
  * @returns What the step returned.
  */
 export function withoutPlantedVariables<T>(step: () => T): T {
-  const placeholders: string[] = []
-  for (const name of Reflect.ownKeys(Object.prototype)) {
-    if (typeof name === 'string' && name.startsWith('OTEL_') && !Object.hasOwn(process.env, name)) {
-      process.env[name] = ''
-      placeholders.push(name)
-    }
-  }
+  const placeholders = Reflect.ownKeys(Object.prototype).filter(
+    (name): name is string =>
+      typeof name === 'string' && name.startsWith('OTEL_') && !Object.hasOwn(process.env, name)
+  )
+  for (const name of placeholders) process.env[name] = ''
   try {
     return step()
   } finally {
