@@ -29,8 +29,7 @@ heading here.
 
 A `Map`, `Set`, `Date`, `RegExp`, `Promise` or boxed primitive passed for `unsafe`, `instrumentations`,
 `instrumentations.overrides` or `env` now fails at start with `BYMAX_TELEMETRY_OPTION_INVALID`. `ignorePaths` throws
-the same code when it is called, which is when the module that holds your configuration is evaluated and before
-`startTelemetry` runs, for an argument that is not an array of at most 1000 regular expressions, a list that reads
+the same code when it is called, not at start, for an argument that is not an array of at most 1000 regular expressions, a list that reads
 empty while it holds index keys, a pattern whose flags cannot be built, and a list whose own read throws (the
 error it raised is the `cause`). Pass a plain object, and a real array of `RegExp`. Nothing else changes.
 
