@@ -8,7 +8,7 @@
 import { buildInstrumentationConfig, severFromRootPrototype } from './assembly'
 import type { InstrumentationInputs } from './assembly'
 import { withoutPlantedVariables } from './environment'
-import { readOwnOrClass } from './option-kinds'
+import { readOwnOrClass, settleOverrides } from './option-kinds'
 import { settleOptions } from './settle-options'
 import type { TelemetryOptions } from './types'
 
@@ -199,5 +199,65 @@ describe('the options object of a call', () => {
     // Scenario: the control: no options is not an error.
     expect(settleOptions({})).toEqual({})
     expect(settleOptions(null as never)).toEqual({})
+  })
+})
+
+describe('a setting that the host nests in an override', () => {
+  const HOST = '@opentelemetry/instrumentation-http'
+  const settle = (setting: unknown): Record<string, unknown> =>
+    (
+      settleOverrides('overrides', { [HOST]: { headersToSpanAttributes: setting } }) as Record<
+        string,
+        Record<string, unknown>
+      >
+    )[HOST] as Record<string, unknown>
+
+  it('is copied with no prototype, objects and lists to any depth, so a planted key is not found', () => {
+    // Scenario: `server: {}` the host wrote must not answer a `requestHeaders` the root prototype holds.
+    planted('requestHeaders', ['authorization'], () => {
+      const copy = settle({ server: {}, client: { requestHeaders: ['x-id'] } }) as {
+        headersToSpanAttributes: {
+          server: Record<string, unknown>
+          client: Record<string, unknown>
+        }
+      }
+      const { server, client } = copy.headersToSpanAttributes
+      expect(Object.getPrototypeOf(server)).toBeNull()
+      expect(server['requestHeaders']).toBeUndefined()
+      expect(client['requestHeaders']).toEqual(['x-id'])
+    })
+    const nested = settle({ rules: [{ a: 1 }, [{ b: 2 }]] }) as {
+      headersToSpanAttributes: { rules: [Record<string, number>, Record<string, number>[]] }
+    }
+    const [first, second] = nested.headersToSpanAttributes.rules
+    expect(Object.getPrototypeOf(first)).toBeNull()
+    expect(Object.getPrototypeOf((second as Record<string, number>[])[0])).toBeNull()
+  })
+
+  it('passes a function, a class instance, a Date, a Map and a Proxy through as the host wrote them', () => {
+    // Scenario: only a plain object and a list are copied; anything else is the host's.
+    class Agent {}
+    const kept = [new Agent(), new Date(0), new Map(), new Proxy({}, {}), (): void => undefined]
+    const copy = settle({ kept }) as { headersToSpanAttributes: { kept: unknown[] } }
+    kept.forEach((value, index) => expect(copy.headersToSpanAttributes.kept[index]).toBe(value))
+  })
+
+  it('is refused when it nests too deep, holds too many values, has a long list or a __proto__ key', () => {
+    // Scenario: the copy is bounded, and a cycle in the host's object ends in a refusal and not a hang.
+    const deep: Record<string, unknown> = {}
+    let at = deep
+    for (let level = 0; level < 20; level++) at = at['next'] = {}
+    const cycle: Record<string, unknown> = {}
+    cycle['self'] = cycle
+    const wide = { list: Array.from({ length: 1001 }, () => 0) }
+    const many = {
+      groups: Array.from({ length: 20 }, () => Array.from({ length: 600 }, () => ({})))
+    }
+    const proto = JSON.parse('{"a":{"__proto__":1}}') as unknown
+    for (const setting of [deep, cycle, wide, many, proto]) {
+      expect(() => settle(setting)).toThrow(
+        expect.objectContaining({ code: 'BYMAX_TELEMETRY_OPTION_INVALID' })
+      )
+    }
   })
 })

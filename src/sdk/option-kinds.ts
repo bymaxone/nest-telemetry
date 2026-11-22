@@ -285,6 +285,54 @@ function refuseProtoKey(key: string): void {
   if (key === '__proto__') throw new TelemetryOptionError(OVERRIDE_PATH, 'free of a __proto__ key')
 }
 
+/** The deepest a setting of an override may nest, and the most values it may hold in all. */
+const MAX_NESTING = 16
+const MAX_VALUES = 10_000
+
+/**
+ * Copies a setting that the host nests in an override, so an instrumentation that reads a key of it
+ * finds only what the host wrote: a plain object becomes an object with no prototype and a list is
+ * copied by `Array.prototype.map`, each member the same way. Anything else (a function, a class
+ * instance, a `Map`, a `Proxy`) is the host's and is passed on as it is.
+ *
+ * @param value - A setting, or a value inside one.
+ * @param seen - Counts the values copied for one setting.
+ * @param depth - How deep the value sits.
+ * @returns The copy.
+ * @throws {TelemetryOptionError} When the setting nests deeper than {@link MAX_NESTING}, holds more than
+ *   {@link MAX_VALUES} values, or a list or object holds more than {@link MAX_OPTION_ENTRIES} members.
+ */
+function detach(value: unknown, seen: { count: number }, depth: number): unknown {
+  if (typeof value !== 'object' || value === null || types.isProxy(value)) return value
+  const list = Array.isArray(value)
+  if (
+    !list &&
+    Object.getPrototypeOf(value) !== Object.prototype &&
+    Object.getPrototypeOf(value) !== null
+  ) {
+    return value
+  }
+  seen.count += 1
+  if (depth > MAX_NESTING || seen.count > MAX_VALUES) {
+    throw new TelemetryOptionError(OVERRIDE_PATH, 'nested at most 16 levels deep')
+  }
+  if (list) {
+    if (value.length > MAX_OPTION_ENTRIES) {
+      throw new TelemetryOptionError(
+        OVERRIDE_PATH,
+        `a list of at most ${MAX_OPTION_ENTRIES} entries`
+      )
+    }
+    return Array.prototype.map.call(value, (member: unknown) => detach(member, seen, depth + 1))
+  }
+  const copy = Object.create(null) as Record<string, unknown>
+  for (const [key, member] of Object.entries(value)) {
+    refuseProtoKey(key)
+    copy[key] = detach(member, seen, depth + 1)
+  }
+  return copy
+}
+
 /**
  * Copies one entry of `overrides` into a plain object, reading each own key once. The settings that
  * decide what leaves the host, and the ones that run host code, are checked by kind: the boolean
@@ -313,6 +361,8 @@ function settleOverrideEntry(entry: object): Record<string, unknown> {
       settled = settleStringList(`${OVERRIDE_PATH}.${key}`, setting)
     } else if (key.endsWith('Hook')) {
       settled = requireFunction(`${OVERRIDE_PATH}.<a hook>`, setting)
+    } else {
+      settled = detach(setting, { count: 0 }, 0)
     }
     if (isGiven(settled)) copy[key] = settled
   }

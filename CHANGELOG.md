@@ -46,6 +46,9 @@ heading here.
   instrumentations off or override `OTEL_NODE_DISABLED_INSTRUMENTATIONS`. The one limit: the credentials of a gRPC
   OTLP exporter that `NodeSDK` builds for metrics or logs are read from the environment when it first sends, after the
   start, so only the HTTP exporters are covered by this.
+  The same holds one level down: a plain object or a list that the host nests inside an override setting (for
+  example `headersToSpanAttributes: { server: {} }`) is copied with no prototype, so a planted `requestHeaders` is not
+  found under it; the copy is refused beyond 16 levels, 10,000 values or 1000 entries to a list.
 
 - **An option that must be an object is refused when it has a brand Node tells apart, or a chain of prototypes that
   is longer than 100 or never ends.** The list of refused kinds is now a set of brand predicates of `util.types`

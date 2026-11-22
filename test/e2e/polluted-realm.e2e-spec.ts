@@ -44,7 +44,7 @@ const { startTelemetry } = require(process.env.BUNDLE)
 const { trace } = require('@opentelemetry/api')
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 ;(async () => {
-  const handle = await startTelemetry({ serviceName: 'host-api', env: JSON.parse(process.env.HOST_ENV || 'null') ?? undefined })
+  const handle = await startTelemetry({ serviceName: 'host-api', env: JSON.parse(process.env.HOST_ENV || 'null') ?? undefined, instrumentations: JSON.parse(process.env.HOST_INSTR || 'null') ?? undefined })
   console.log(JSON.stringify({ enabled: handle.enabled }))
   if (process.env.HTTP === '1') {
     const http = require('node:http')
@@ -146,6 +146,29 @@ describe('a name that only the root prototype of the process holds does not deci
     expect(joined).not.toContain('HOST-SECRET-123')
     expect(joined).not.toContain('http.request.header.authorization')
     expect(answer.hooked).toBe(false)
+  }, 60_000)
+
+  it('does not read a header list that only the root prototype holds under a nested object of the host', async () => {
+    // Scenario: the host gives `headersToSpanAttributes: { server: {}, client: {} }`; a planted
+    // `requestHeaders` must not be found one level down, so the Authorization header is not exported.
+    await runChild(
+      { requestHeaders: ['authorization'], responseHeaders: ['content-type'] },
+      {
+        HTTP: '1',
+        HOST_INSTR: JSON.stringify({
+          overrides: {
+            '@opentelemetry/instrumentation-http': {
+              headersToSpanAttributes: { server: {}, client: {} }
+            }
+          }
+        })
+      }
+    )
+    const joined = collector.bodies.join('')
+    expect(joined).toContain('work-0')
+    expect(joined).not.toContain('HOST-SECRET-123')
+    expect(joined).not.toContain('http.request.header.authorization')
+    expect(joined).not.toContain('http.response.header.content-type')
   }, 60_000)
 
   it('keeps every instrumentation on when a planted enabled is false', async () => {
