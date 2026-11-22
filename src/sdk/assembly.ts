@@ -216,42 +216,59 @@ export function buildInstrumentationConfig(
   signals: SignalPlan
 ): InstrumentationConfigMap {
   const instrumentations = settleInstrumentations(options.instrumentations)
-  const overrides: Record<string, Record<string, unknown>> = {}
+  // Records with no prototype: a name that a polluted root prototype holds is not an instrumentation of
+  // the host, and the lookups below must not find it.
+  const overrides = Object.create(null) as Record<string, Record<string, unknown>>
   for (const [name, config] of Object.entries(instrumentations.overrides ?? {})) {
     // `settleInstrumentations` copied the entry and dropped the settings that are absent.
     overrides[name] = config as Record<string, unknown>
   }
   const redactRedis = options.unsafe?.disableRedisArgumentRedaction !== true
   const disableLogSending = !(instrumentations.sendLogs ?? signals.sendLogs)
-  const library: Record<string, Record<string, unknown>> = {
+  const library = Object.assign(Object.create(null), {
     [FS_INSTRUMENTATION]: { enabled: instrumentations.fs === true },
-    [HTTP_INSTRUMENTATION]: {},
+    // The HTTP instrumentation builds its header capture when it is constructed, so the option is
+    // an own key that is undefined: a value the root prototype holds is then never found.
+    [HTTP_INSTRUMENTATION]: { headersToSpanAttributes: undefined },
     [PINO_INSTRUMENTATION]: { disableLogSending },
     [WINSTON_INSTRUMENTATION]: { disableLogSending },
     [BUNYAN_INSTRUMENTATION]: { disableLogSending }
-  }
-  const merged: Record<string, Record<string, unknown>> = {}
+  }) as Record<string, Record<string, unknown>>
+  const merged = Object.create(null) as Record<string, Record<string, unknown>>
   for (const name of new Set([...Object.keys(library), ...Object.keys(overrides)])) {
-    merged[name] = { ...library[name], ...overrides[name] }
+    merged[name] = Object.assign(Object.create(null), library[name], overrides[name])
   }
   const hostParams = merged[HTTP_INSTRUMENTATION]?.['redactedQueryParams']
-  merged[HTTP_INSTRUMENTATION] = {
-    ...merged[HTTP_INSTRUMENTATION],
+  merged[HTTP_INSTRUMENTATION] = Object.assign(Object.create(null), merged[HTTP_INSTRUMENTATION], {
     redactedQueryParams: buildRedactedQueryParams([
       ...(Array.isArray(hostParams) ? (hostParams as string[]) : []),
       ...(options.extraRedactedQueryParams ?? [])
     ])
-  }
+  }) as Record<string, unknown>
   const ignoreIncomingRequest = options.ignoreIncomingRequest
   if (isPresent(ignoreIncomingRequest)) {
     merged[HTTP_INSTRUMENTATION]['ignoreIncomingRequestHook'] = ignoreIncomingRequest
   }
   if (redactRedis) {
     for (const name of [IOREDIS_INSTRUMENTATION, REDIS_INSTRUMENTATION]) {
-      merged[name] = { ...merged[name], dbStatementSerializer: serializeRedisCommandName }
+      merged[name] = Object.assign(Object.create(null), merged[name], {
+        dbStatementSerializer: serializeRedisCommandName
+      }) as Record<string, unknown>
     }
   }
   return merged as InstrumentationConfigMap
+}
+
+/**
+ * Cuts the settings an instrumentation reads while it works from the root prototype of the realm, so a
+ * hook or an attribute list that a polluted realm planted there is not found when a request arrives.
+ *
+ * @param instrumentation - A constructed instrumentation.
+ * @returns The same instrumentation.
+ */
+export function severFromRootPrototype<T extends { getConfig(): object }>(instrumentation: T): T {
+  Object.setPrototypeOf(instrumentation.getConfig(), null)
+  return instrumentation
 }
 
 /**

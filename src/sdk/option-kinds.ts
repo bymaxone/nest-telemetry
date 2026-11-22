@@ -123,63 +123,51 @@ export function requireObject(option: string, value: unknown): object | undefine
   return value
 }
 
-/**
- * Whether a prototype is the root of its realm: the end of every chain, whose own `constructor` has it
- * as its `prototype`. A flag that only this object carries was put there by something other than the host.
- *
- * @param prototype - An object found on the chain of an options object.
- * @returns `true` for the root prototype of a realm.
- */
-function isRealmRoot(prototype: object): boolean {
-  return (
-    Object.getPrototypeOf(prototype) === null &&
-    (
-      Object.getOwnPropertyDescriptor(prototype, 'constructor')?.value as
-        { prototype?: unknown } | undefined
-    )?.prototype === prototype
-  )
-}
-
 /** The longest chain of prototypes that is followed; a longer one is not an object of settings. */
 const MAX_CHAIN = 100
 
 /**
  * Whether an object can be the host's options: not an exotic object of a kind Node reports, and a
- * chain of prototypes that ends in the root of a realm (or is the object alone, with no prototype),
- * so a plain object, a class instance and the environment object pass and a stand-in does not.
+ * chain of prototypes that ends within {@link MAX_CHAIN} prototypes, so a plain object, a class
+ * instance and the environment object pass and a stand-in whose chain never ends does not. No
+ * property of any prototype is read.
  *
  * @param value - An object that is not an array.
  * @returns `true` for an object that can hold settings.
  */
 function isSettingsObject(value: object): boolean {
   if (BRANDS.some((brand) => brand(value))) return false
-  let end = value
-  let next: object | null = Object.getPrototypeOf(end)
+  let next: object | null = Object.getPrototypeOf(value)
   for (let hops = 0; next !== null; hops++) {
     if (hops >= MAX_CHAIN) return false
-    end = next
-    next = Object.getPrototypeOf(end)
+    next = Object.getPrototypeOf(next)
   }
-  return end === value || isRealmRoot(end)
+  return true
 }
 
 /**
  * Reads one option of a group from the object the host passed, as the host wrote it: an own field, or a
- * field or getter of a class, but never a value that only the root prototype of the realm holds, which a
+ * field or getter of a class, but never a value that only the end of its chain of prototypes holds, which a
  * polluted realm could have put there to switch a protection off.
  *
- * @param group - The object the host passed, or `undefined`.
+ * @param group - The object the host passed, or `undefined`. A Proxy is read through what it answers.
  * @param name - The option name.
  * @returns The value, read once, or `undefined` when only the root prototype has it.
  */
 export function readOwnOrClass(group: object | undefined, name: string): unknown {
   if (group === undefined) return undefined
+  // A Proxy answers for itself, so what it answers is what the host wrote, whichever traps it has.
+  if (types.isProxy(group)) return (group as Record<string, unknown>)[name]
   let holder: object | null = group
   for (let hops = 0; holder !== null && !Object.hasOwn(holder, name); hops++) {
     if (hops >= MAX_CHAIN) return undefined
     holder = Object.getPrototypeOf(holder)
   }
-  if (holder === null || isRealmRoot(holder)) return undefined
+  // An object with no prototype that the group only inherits from is the end of the chain, the root
+  // of whatever realm it came from; no property of it is the host's, and none of it is read to tell.
+  if (holder === null || (holder !== group && Object.getPrototypeOf(holder) === null)) {
+    return undefined
+  }
   return (group as Record<string, unknown>)[name]
 }
 

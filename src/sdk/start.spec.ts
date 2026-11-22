@@ -26,7 +26,7 @@ const mockOtlpExporter = jest.fn((..._args: unknown[]) => ({
   kind: 'exporter',
   export: jest.fn((_spans: unknown, done: (result: { code: number }) => void) => done({ code: 1 }))
 }))
-const mockAutoInstrumentations = jest.fn((..._args: unknown[]) => ['instrumentation'])
+const mockAutoInstrumentations = jest.fn((..._args: unknown[]) => [{ getConfig: () => ({}) }])
 const mockResourceFromAttributes = jest.fn((..._args: unknown[]) => ({ kind: 'resource' }))
 const mockWinstonTransportCheck = jest.fn((..._args: unknown[]) => undefined)
 
@@ -174,7 +174,7 @@ describe('startTelemetry', () => {
       const config = mockNodeSdk.mock.calls[0] as unknown as [Record<string, unknown>]
       const [options] = config
       expect(options['resource']).toEqual({ kind: 'resource' })
-      expect(options['instrumentations']).toEqual([['instrumentation']])
+      expect(options['instrumentations']).toEqual([[{ getConfig: expect.any(Function) }]])
       expect(options['metricReaders']).toEqual([])
       expect(options['logRecordProcessors']).toEqual([])
       const processors = options['spanProcessors'] as { onEnding?: unknown; kind?: string }[]

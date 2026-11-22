@@ -18,7 +18,7 @@ const mockOtlpExporter = jest.fn((..._args: unknown[]) => ({
   kind: 'exporter',
   export: jest.fn((_spans: unknown, done: (result: { code: number }) => void) => done({ code: 1 }))
 }))
-const mockAutoInstrumentations = jest.fn((..._args: unknown[]) => ['instrumentation'])
+const mockAutoInstrumentations = jest.fn((..._args: unknown[]) => [{ getConfig: () => ({}) }])
 const mockResourceFromAttributes = jest.fn((..._args: unknown[]) => ({ kind: 'resource' }))
 const mockWinstonTransportCheck = jest.fn((..._args: unknown[]) => undefined)
 

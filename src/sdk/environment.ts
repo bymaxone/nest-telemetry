@@ -22,6 +22,32 @@ function read(source: NodeJS.ProcessEnv, name: string): string | undefined {
   return readOwnOrClass(source, name) as string | undefined
 }
 
+/**
+ * Runs a synchronous step while every `OTEL_*` name that only the root prototype of the realm holds
+ * reads as empty on the process environment, so a name a polluted realm planted cannot decide what
+ * OpenTelemetry reads there while it builds and starts the SDK (the exporters, the sampler, the
+ * resource, the batch processor). OpenTelemetry treats an empty value as unset. Each placeholder is an
+ * own variable for the length of the step and is deleted when it ends; a variable the process
+ * environment really has is never touched.
+ *
+ * @param step - The synchronous work; nothing in it may wait, or the placeholders outlive the step.
+ * @returns What the step returned.
+ */
+export function withoutPlantedVariables<T>(step: () => T): T {
+  const placeholders: string[] = []
+  for (const name of Reflect.ownKeys(Object.prototype)) {
+    if (typeof name === 'string' && name.startsWith('OTEL_') && !Object.hasOwn(process.env, name)) {
+      process.env[name] = ''
+      placeholders.push(name)
+    }
+  }
+  try {
+    return step()
+  } finally {
+    for (const name of placeholders) delete process.env[name]
+  }
+}
+
 /** Batch-span-processor tuning, present only for the variables that hold a usable value. */
 export interface BatchSpanProcessorTuning {
   /** Spans held before new ones are dropped (`OTEL_BSP_MAX_QUEUE_SIZE`). */

@@ -1,5 +1,5 @@
 import { createServer } from 'node:http'
-import type { Server } from 'node:http'
+import type { IncomingHttpHeaders, Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 
 /** A local OTLP/HTTP receiver that keeps every request body it is sent. */
@@ -8,6 +8,8 @@ export interface Collector {
   readonly endpoint: string
   /** Every body received, in order, whatever the path. */
   readonly bodies: string[]
+  /** The headers of every request received, in the order of `bodies`. */
+  readonly headers: IncomingHttpHeaders[]
   /** Resolves with the bodies once at least `count` have arrived, or rejects after `timeoutMs`. */
   waitForBodies(count: number, timeoutMs: number): Promise<string[]>
   /** Stops listening. */
@@ -21,6 +23,7 @@ export interface Collector {
  */
 export async function startCollector(): Promise<Collector> {
   const bodies: string[] = []
+  const headers: IncomingHttpHeaders[] = []
   const server: Server = createServer((request, response) => {
     let data = ''
     request.on('data', (chunk: Buffer) => {
@@ -28,6 +31,7 @@ export async function startCollector(): Promise<Collector> {
     })
     request.on('end', () => {
       bodies.push(data)
+      headers.push(request.headers)
       response.setHeader('content-type', 'application/json')
       response.end('{}')
     })
@@ -37,6 +41,7 @@ export async function startCollector(): Promise<Collector> {
   return {
     endpoint: `http://127.0.0.1:${port}`,
     bodies,
+    headers,
     waitForBodies: async (count, timeoutMs) => {
       const deadline = Date.now() + timeoutMs
       while (bodies.length < count) {

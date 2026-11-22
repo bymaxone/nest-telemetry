@@ -27,15 +27,31 @@ heading here.
 - **A group of options that only the root prototype of the realm holds is no longer read either.** The options of the
   call were read by property access, so a polluted `Object.prototype.unsafe` switched the redaction off, and
   `Object.prototype.instrumentations` ran a hook of its own, for a host that passed no such group. Every option of the
-  call (`unsafe`, `instrumentations`, `env` and the rest) is now read with the same rule, and so is each `OTEL_*` variable
-  of an environment (so a polluted `Object.prototype.OTEL_SDK_DISABLED` no longer switches the SDK off), and the copy of
-  the call that the start works from has no prototype, so a key the call did not give stays absent.
+  call (`unsafe`, `instrumentations`, `env` and the rest) is now read with the same rule, and so is each `OTEL_*`
+  variable of an environment, and the copy of the call that the start works from has no prototype, so a key the call
+  did not give stays absent.
+
+- **A name that only the root prototype of the process holds no longer decides what OpenTelemetry reads or what an
+  instrumentation does.** OpenTelemetry reads its own `OTEL_*` variables from the process environment, which inherits
+  from `Object.prototype`, so a planted `OTEL_EXPORTER_OTLP_*` redirected the spans or added headers and compression,
+  and a planted `OTEL_SDK_DISABLED`, `OTEL_TRACES_SAMPLER`, `OTEL_SERVICE_NAME` or `OTEL_RESOURCE_ATTRIBUTES` stopped
+  the export, sampled it away or renamed the service while `enabled` reported true. For the synchronous length of the
+  build and start of the SDK, each such name that only the root prototype holds is now an own empty variable of the
+  process environment (OpenTelemetry reads an empty value as unset), removed when the start ends. The instrumentation
+  settings are built with no prototype, the HTTP instrumentation gets its own undefined `headersToSpanAttributes`, and
+  the configuration of every instrumentation is cut from the root prototype once it is built, so a planted
+  `headersToSpanAttributes`, request hook or response hook neither records the `Authorization` header nor runs, and a
+  planted key named after an instrumentation does not override the host's `fs` or `sendLogs`.
 
 - **An option that must be an object is refused when it has a brand Node tells apart, or a chain of prototypes that
   is longer than 100 or never ends.** The list of refused kinds is now a set of brand predicates of `util.types`
-  (so a `WeakMap`, a typed array, an `Error` and a generator object are refused too), and only a plain object, an
-  object with no prototype, a class instance whose chain ends at the root of its realm within 100 prototypes and the
-  environment object are read. A `Proxy` whose `getPrototypeOf` answers itself was accepted before and is refused now.
+  (so a `WeakMap`, a typed array, an `Error` and a generator object are refused too), and a plain object, an
+  object with no prototype, a class instance whose chain ends within 100 prototypes and the environment object are
+  read. A `Proxy` whose `getPrototypeOf` answers itself was accepted before and is refused now. No property of a
+  prototype is read to tell the end of a chain from data, so an overwritten `constructor` on the root, or an object
+  of another realm, changes nothing. A `Proxy` that has only a `get` trap is read through what it answers, and the
+  options object of the call itself is refused when it is a function, an array or any other value that is not an
+  object of settings.
 
 ### Documentation
 
@@ -50,7 +66,7 @@ heading here.
 Nothing to change for options written as an object literal or as a class. A configuration that relied on an option
 or a flag set on `Object.prototype` (a pollution, not an option) now reads it as unset. An object option of a kind
 that `util.types` reports (a `WeakMap`, a typed array, an `Error`, a generator object), or whose chain of prototypes
-is longer than 100 or does not end at the root of its realm, now fails at start with `BYMAX_TELEMETRY_OPTION_INVALID`.
+is longer than 100 or never ends, now fails at start with `BYMAX_TELEMETRY_OPTION_INVALID`.
 
 ## [1.0.11] - 2026-11-21
 

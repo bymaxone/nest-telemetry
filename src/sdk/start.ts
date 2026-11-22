@@ -18,6 +18,7 @@ import {
   settleService,
   settleUnsafe,
   planSignals,
+  severFromRootPrototype,
   warnAboutIgnoredOptions,
   warnAboutMissingServiceName,
   warnAboutOversizedTimers,
@@ -26,7 +27,12 @@ import {
   warnAboutUnsafeOptions
 } from './assembly'
 import type { InstrumentationInputs, ServiceIdentity } from './assembly'
-import { readRatioSampler, readSamplerNearMiss, readTelemetryEnvironment } from './environment'
+import {
+  readRatioSampler,
+  readSamplerNearMiss,
+  readTelemetryEnvironment,
+  withoutPlantedVariables
+} from './environment'
 import type { TelemetryEnvironment } from './environment'
 import { warnOnExportFailure } from './export-failure'
 import {
@@ -136,6 +142,34 @@ type ReadOnce = Pick<InstrumentationInputs, 'instrumentations' | 'unsafe'> & {
 }
 
 /**
+ * Builds the auto-instrumentations from the settled options, each with the settings it reads cut from
+ * the root prototype of the realm.
+ *
+ * @param packages - The auto-instrumentation package.
+ * @param options - The host's policy.
+ * @param read - The options that are read once for the whole start.
+ * @param signals - The signal plan.
+ * @returns The instrumentations.
+ */
+function buildInstrumentations(
+  packages: typeof AutoInstrumentations,
+  options: TelemetryOptions,
+  read: ReadOnce,
+  signals: ReturnType<typeof planSignals>
+): ReturnType<typeof AutoInstrumentations.getNodeAutoInstrumentations> {
+  const config = buildInstrumentationConfig(
+    {
+      instrumentations: read.instrumentations,
+      unsafe: read.unsafe,
+      extraRedactedQueryParams: options.extraRedactedQueryParams,
+      ignoreIncomingRequest: options.ignoreIncomingRequest
+    },
+    signals
+  )
+  return packages.getNodeAutoInstrumentations(config).map(severFromRootPrototype)
+}
+
+/**
  * Builds the SDK from the host's options and the environment, without starting it.
  *
  * @param packages - The loaded OpenTelemetry packages.
@@ -178,19 +212,7 @@ function buildSdk(
         ...env.batchSpanProcessor
       })
     ],
-    instrumentations: [
-      autoInstrumentations.getNodeAutoInstrumentations(
-        buildInstrumentationConfig(
-          {
-            instrumentations,
-            unsafe,
-            extraRedactedQueryParams: options.extraRedactedQueryParams,
-            ignoreIncomingRequest: options.ignoreIncomingRequest
-          },
-          signals
-        )
-      )
-    ]
+    instrumentations: [buildInstrumentations(autoInstrumentations, options, read, signals)]
   })
 }
 
@@ -217,8 +239,13 @@ async function boot(options: TelemetryOptions, env: TelemetryEnvironment): Promi
   // Read before the SDK starts: an option that throws when read must not leave a started SDK that no
   // handle can stop.
   const shutdownTimeoutMs = options.shutdownTimeoutMs
-  const sdk = buildSdk(await loadPackages(), options, env, { instrumentations, unsafe, service })
-  sdk.start()
+  const packages = await loadPackages()
+  // OpenTelemetry reads its own variables while the SDK is built and started, all of it synchronously.
+  const sdk = withoutPlantedVariables(() => {
+    const built = buildSdk(packages, options, env, { instrumentations, unsafe, service })
+    built.start()
+    return built
+  })
   const handle = createHandle(() => sdk.shutdown(), shutdownTimeoutMs)
   registerHandle(handle)
   return handle

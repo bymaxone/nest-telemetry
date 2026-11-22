@@ -3,9 +3,11 @@
  * the host's, while a field of the options object, of a class instance or of a class prototype still is.
  * @layer sdk
  */
-import { readRatioSampler, readSamplerNearMiss, readTelemetryEnvironment } from './environment'
+import { runInNewContext } from 'node:vm'
+
 import { readEachOption, settleInstrumentations, settleUnsafe } from './assembly'
-import { readOwnOrClass } from './option-kinds'
+import { readRatioSampler, readSamplerNearMiss, readTelemetryEnvironment } from './environment'
+import { readOwnOrClass, requireObject } from './option-kinds'
 import { settleOptions } from './settle-options'
 import type { TelemetryOptions } from './types'
 
@@ -100,11 +102,43 @@ describe('readOwnOrClass', () => {
     expect(readOwnOrClass(undefined, 'absent')).toBeUndefined()
   })
 
-  it('reads a key that a prototype with no prototype and no constructor holds', () => {
-    // Scenario: the lookup alone takes such a prototype for data, not for the root; whether the object is accepted is the kind check's.
+  it('does not read a key that only the end of the chain holds, whatever that object is', () => {
+    // Scenario: flipped from the rule that read it. The end of a chain, an object with no prototype that
+    // the group inherits from, is never the host's, and nothing of it is read to tell what it is; an
+    // object with no prototype that holds the key itself is read.
     const data = Object.create(null) as Record<string, unknown>
     data['flag'] = true
-    expect(readOwnOrClass(Object.create(data) as object, 'flag')).toBe(true)
+    expect(readOwnOrClass(Object.create(data) as object, 'flag')).toBeUndefined()
+    expect(readOwnOrClass(data, 'flag')).toBe(true)
+  })
+
+  it('does not depend on the constructor of the root prototype, here or in another realm', () => {
+    // Scenario: a root whose constructor was overwritten is still the end of the chain, and an object
+    // of a vm context, whose root is not this realm's, is judged the same way.
+    const original = Object.getOwnPropertyDescriptor(
+      Object.prototype,
+      'constructor'
+    ) as PropertyDescriptor
+    Object.defineProperty(Object.prototype, 'constructor', {
+      value: 'overwritten',
+      configurable: true,
+      writable: true
+    })
+    try {
+      polluted('flag', true, () => {
+        expect(readOwnOrClass({}, 'flag')).toBeUndefined()
+        expect(settleUnsafe({}).disableUrlRedaction).toBe(false)
+        expect(requireObject('x', {})).toEqual({})
+      })
+    } finally {
+      Object.defineProperty(Object.prototype, 'constructor', original)
+    }
+    const foreign = runInNewContext(
+      'Object.prototype.flag = true; Object.prototype.constructor = 1; ({ own: 1, nested: {} })'
+    ) as { own: number }
+    expect(readOwnOrClass(foreign, 'flag')).toBeUndefined()
+    expect(readOwnOrClass(foreign, 'own')).toBe(1)
+    expect(requireObject('x', foreign)).toBe(foreign)
   })
 })
 
