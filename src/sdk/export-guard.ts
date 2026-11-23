@@ -9,6 +9,7 @@
  * each attempt of the transport and again just before the attempt reads its headers or credentials. It wraps the `export` of the base class that the exporters of this library's peers share, once,
  * so it reaches the metrics and logs exporters that the SDK builds itself; that wrap is process-wide.
  */
+import { POLLUTED_CODE } from './error-code'
 import {
   apply,
   defineProperty,
@@ -32,6 +33,19 @@ const ARMED = Symbol.for('@bymax-one/nest-telemetry/export-guard/transport')
 
 /** Why a batch is dropped, shared by the check at the export and the one before each request. */
 const DROPPED = 'The Object.prototype of this process is polluted, so the batch was dropped.'
+
+/**
+ * The error a dropped batch fails with: its own `code` names the cause, so the warning that reports the
+ * failed export says the prototype is polluted instead of blaming the collector. The descriptor has no
+ * prototype, so a name planted on the root prototype cannot make the definition throw.
+ *
+ * @returns An error with the message {@link DROPPED} and an own, read-only `code`.
+ */
+function dropped(): Error {
+  const error = new ErrorClass(DROPPED)
+  defineProperty(error, 'code', { __proto__: null, value: POLLUTED_CODE } as PropertyDescriptor)
+  return error
+}
 
 /** The providers of a transport that a request reads, after the transport loaded what it needs and before it sends. */
 const PROVIDERS = ['headers', 'metadata', 'credentials'] as const
@@ -108,7 +122,7 @@ function refuseIfPolluted(answer: unknown): unknown {
     // value passed on would be read for a then), and nothing may be read from it to find out: the slot says whether
     // it is one.
     if (isPromise(answer)) apply(promiseThen, answer, [ignore, ignore])
-    throw new ErrorClass(DROPPED)
+    throw dropped()
   }
   if (
     typeof answer === 'object' &&
@@ -117,7 +131,7 @@ function refuseIfPolluted(answer: unknown): unknown {
   ) {
     return (async (): Promise<unknown> => {
       const value = await answer
-      if (pollutedNames() > 0) throw new ErrorClass(DROPPED)
+      if (pollutedNames() > 0) throw dropped()
       return value
     })()
   }
@@ -139,7 +153,7 @@ function armTransport(exporter: unknown): void {
     configurable: true,
     writable: true,
     value: async function (this: unknown, data: unknown, timeoutMillis: unknown): Promise<unknown> {
-      if (pollutedNames() > 0) return { status: 'failure', error: new ErrorClass(DROPPED) }
+      if (pollutedNames() > 0) return { status: 'failure', error: dropped() }
       return apply(send, this, [data, timeoutMillis])
     }
   })
@@ -153,7 +167,7 @@ function armTransport(exporter: unknown): void {
       writable: true,
       enumerable: true,
       value: function (this: unknown, ...args: unknown[]): unknown {
-        if (pollutedNames() > 0) throw new ErrorClass(DROPPED)
+        if (pollutedNames() > 0) throw dropped()
         return refuseIfPolluted(apply(provider, this, args))
       }
     })
@@ -183,7 +197,7 @@ export function guardExports(exporter: object): void {
       done: (result: { code: number; error?: unknown }) => void
     ): void {
       if (pollutedNames() > 0) {
-        done({ code: FAILED, error: new ErrorClass(DROPPED) })
+        done({ code: FAILED, error: dropped() })
         return
       }
       armTransport(this)
