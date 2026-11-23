@@ -229,8 +229,21 @@ describe('settleOverrides, for a map or an entry whose keys sit on a prototype w
     Object.assign(Object.create(null) as object, { pino: { enabled: false } })
   const entryBase = (): object => Object.assign(Object.create(null) as object, { enabled: false })
 
+  const plainParent = (): object => ({ pino: { enabled: false } })
+  const plainEntryParent = (): object => ({ enabled: false })
+
   it.each([
     ['the map', () => Object.create(base()) as object, 'x'],
+    [
+      'the map, when its parent is an ordinary object',
+      () => Object.create(plainParent()) as object,
+      'x'
+    ],
+    [
+      'an entry, when its parent is an ordinary object',
+      () => ({ pino: Object.create(plainEntryParent()) as object }),
+      'instrumentations.overrides[]'
+    ],
     [
       'an entry of the map',
       () => ({ pino: Object.create(entryBase()) as object }),
@@ -246,7 +259,7 @@ describe('settleOverrides, for a map or an entry whose keys sit on a prototype w
     // so the host's `enabled: false` would be lost; the start is refused with a fixed path instead.
     expect(thrown(() => settleOverrides('x', make()))).toMatchObject({
       option,
-      message: `The ${option} option must be set on the object itself, not on a prototype that has no prototype, so the start was refused.`
+      message: `The ${option} option must be set on the object itself, not on a prototype, so the start was refused.`
     })
   })
 
@@ -281,11 +294,17 @@ describe('settleOverrides, for a map or an entry whose keys sit on a prototype w
     }
   })
 
-  it('does not refuse a map whose parent has a prototype of its own, whatever the parent holds', () => {
-    // Scenario: only a holder with no prototype is the case that is refused; an ordinary parent object
-    // is not, so a parent that holds a name and has a prototype leaves the start going.
-    const parent = Object.create({}, { pino: { value: { enabled: true }, enumerable: true } })
-    expect(() => settleOverrides('x', Object.create(parent) as object)).not.toThrow()
+  it('does not refuse a map whose parent holds only names that are not enumerable', () => {
+    // Scenario: the methods of a class are not enumerable and hold no setting, so a class instance, whose
+    // parent has a prototype of its own, is read as before.
+    class Settings {
+      own = { pino: { enabled: false } }
+      method(): void {}
+    }
+    expect(settleOverrides('x', Object.assign(new Settings().own))).toEqual({
+      pino: { enabled: false }
+    })
+    expect(() => settleOverrides('x', new Settings() as object)).not.toThrow()
   })
 
   it('does not refuse a Proxy whose answer for its prototype is a holder of settings', () => {

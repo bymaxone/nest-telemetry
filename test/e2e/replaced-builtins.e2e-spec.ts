@@ -27,7 +27,7 @@ afterAll(() => {
  * runs the check while the target is replaced, restores it, and reports only after all are restored.
  */
 const CHILD = `
-const { pollutedNames, guardExports, settleOptions, warnOnExportFailure, exportFailureCount, registerWarningSink, clearWarningSink, describeFailure } = require(process.env.BUNDLE)
+const { GUARDED_BUILTINS, pollutedNames, guardExports, settleOptions, warnOnExportFailure, exportFailureCount, registerWarningSink, clearWarningSink, describeFailure } = require(process.env.BUNDLE)
 const defineProperty = Object.defineProperty
 const ownKeys = Reflect.ownKeys
 const getDescriptor = Object.getOwnPropertyDescriptor
@@ -53,7 +53,7 @@ const guardCheck = () => {
   out.clean = pollutedNames()
   exporter.export([1], (r) => { out.cleanCode = r.code })
   out.cleanSent = out.sent
-  out.headers = exporter._delegate._transport._transport._parameters.headers()
+  try { out.headers = exporter._delegate._transport._transport._parameters.headers() } catch (error) { out.headers = 0 }
   out.sent = 0
   root.zzplanted = 'x'
   out.planted = pollutedNames()
@@ -147,8 +147,20 @@ const run = (check) => {
   }
   return results
 }
-const wrong = (r) => r.threw || r.calls !== 0 || r.out.clean !== 0 || r.out.cleanSent !== 1 || r.out.cleanCode !== 0 ||
-  r.out.planted !== 1 || r.out.sent !== 0 || r.out.code !== 1 || r.out.headers !== 7 || r.out.refused !== 1
+// The members the guard compares with a fresh realm: replacing one is a refusal, the family baseline (DEC-213
+// type B). Promise, timers, Date and the others a host wraps by design are not in the table, and still export.
+const guarded = (label) => {
+  const at = label.lastIndexOf('.')
+  const owner = label.slice(0, at)
+  const name = label.slice(at + 1)
+  if (owner === 'globalThis') return GUARDED_BUILTINS.some(([expression]) => expression === name || expression === name + '.prototype')
+  return GUARDED_BUILTINS.some(([expression, names]) => expression === owner && names.includes(name))
+}
+const wrong = (r) => guarded(r.label)
+  ? r.threw || r.calls !== 0 || r.out.clean === 0 || r.out.cleanSent !== 0 || r.out.cleanCode !== 1 ||
+    r.out.planted < 1 || r.out.sent !== 0 || r.out.code !== 1
+  : r.threw || r.calls !== 0 || r.out.clean !== 0 || r.out.cleanSent !== 1 || r.out.cleanCode !== 0 ||
+    r.out.planted !== 1 || r.out.sent !== 0 || r.out.code !== 1 || r.out.headers !== 7 || r.out.refused !== 1
 // What naming a failed start must do with one target replaced: the code and the package its message names.
 const describeCheck = () => ({
   named: describeFailure({ code: 'ERR_X', message: 'Cannot find @opentelemetry/sdk-node' }) === 'code ERR_X, package @opentelemetry/sdk-node' ? 1 : 0
@@ -167,8 +179,11 @@ describe('a built-in that something replaces after the library loaded', () => {
   it('is never called by the guard or the export wrap, and the refusal stands', async () => {
     // Scenario: every function and getter of the global objects, and each global constructor, is replaced in turn
     // after the bundle loaded; with a name planted the guard still counts it and the wrap still drops the batch
-    // with no send, an exporter wrapped after the replacement is guarded too, a clean prototype still exports,
-    // and the replacement is never called.
+    // with no send, an exporter wrapped after the replacement is guarded too, and the replacement is never
+    // called. Triage of the flip (DEC-213 type B, the family baseline): a replaced member of the guard's table
+    // (Array, String, Map, Set, RegExp and Number prototypes, and the statics of Object, JSON, Reflect, Symbol,
+    // Number and Array) now refuses even on a clean prototype; every other target, Promise, timers and Date
+    // included, is wrapped by hosts by design and still exports.
     const result = await runInRealProcess(CHILD, { BUNDLE: bundle.file }, 60_000)
     const report = JSON.parse(result.lines[result.lines.length - 1] ?? '{}') as {
       targets: number
@@ -260,5 +275,38 @@ describe('a built-in that something replaces after the library loaded', () => {
       Object.defineProperty(root, 'isPrototypeOf', own)
     }
     expect(late?.()).toBe(0)
+  })
+
+  it('counts one, not zero, while the table of guarded built-ins cannot be read', () => {
+    // Scenario: Reflect is set to null, so reading the guarded objects throws; a guard that cannot look is not
+    // clean, so it counts one, and counts zero again once Reflect is back.
+    const original = Object.getOwnPropertyDescriptor(globalThis, 'Reflect') as PropertyDescriptor
+    try {
+      Object.defineProperty(globalThis, 'Reflect', { ...original, value: null })
+      expect(pollutedNames()).toBe(1)
+    } finally {
+      Object.defineProperty(globalThis, 'Reflect', original)
+    }
+    expect(pollutedNames()).toBe(0)
+  })
+
+  it('counts a guarded built-in that was replaced and one that was deleted, and counts zero once each is back', () => {
+    // Scenario: Number.isFinite replaced by another function counts one, deleted counts one, and the guard
+    // counts zero again after each is restored.
+    const original = Object.getOwnPropertyDescriptor(Number, 'isFinite') as PropertyDescriptor
+    try {
+      Object.defineProperty(Number, 'isFinite', { ...original, value: () => true })
+      expect(pollutedNames()).toBe(1)
+    } finally {
+      Object.defineProperty(Number, 'isFinite', original)
+    }
+    expect(pollutedNames()).toBe(0)
+    try {
+      Reflect.deleteProperty(Number, 'isFinite')
+      expect(pollutedNames()).toBe(1)
+    } finally {
+      Object.defineProperty(Number, 'isFinite', original)
+    }
+    expect(pollutedNames()).toBe(0)
   })
 })

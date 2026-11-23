@@ -400,24 +400,20 @@ function detach(value: unknown, seen: { count: number }, depth: number): unknown
 }
 
 /**
- * Refuses an object whose settings sit on a prototype with no prototype, which a copy of its own keys
- * would drop in silence. The root prototype of this realm is where a pollution is planted and is ignored,
- * as are the methods of a class, which are not enumerable.
+ * Refuses an object whose settings sit on a prototype, which a copy of its own keys would drop in
+ * silence. The root prototype of this realm is where a pollution is planted and is ignored, as are the
+ * methods of a class, which are not enumerable.
  *
  * @param path - What the error names.
  * @param value - The map or the entry the host passed.
- * @throws {TelemetryOptionError} When a prototype with no prototype, other than the root of this realm,
- *   has an enumerable key.
+ * @throws {TelemetryOptionError} When a prototype other than the root of this realm has an enumerable key.
  */
 function refuseAncestorKeys(path: string, value: object): void {
   if (isProxy(value)) return
   let holder: object | null = getPrototypeOf(value)
   for (let hops = 0; holder !== null && hops < MAX_CHAIN; hops++) {
-    if (getPrototypeOf(holder) === null && holder !== rootPrototype && keys(holder).length > 0) {
-      throw new TelemetryOptionError(
-        path,
-        'set on the object itself, not on a prototype that has no prototype'
-      )
+    if (holder !== rootPrototype && keys(holder).length > 0) {
+      throw new TelemetryOptionError(path, 'set on the object itself, not on a prototype')
     }
     holder = getPrototypeOf(holder)
   }

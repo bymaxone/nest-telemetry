@@ -6,6 +6,7 @@
  */
 import { runInNewContext } from 'node:vm'
 
+import { readBuiltins } from './prototype-guard'
 import type { pollutedNames as PollutedNames } from './prototype-guard'
 
 /** The `Object.prototype` of a fresh realm, whose functions have the engine's text and another identity. */
@@ -99,6 +100,7 @@ describe("a flag looser than the fresh realm's", () => {
       descriptors['toString'] = { ...descriptors['toString'], ...flags }
       jest.doMock('node:vm', () => ({
         runInNewContext: () => ({
+          objects: readBuiltins(),
           descriptors,
           sourceOf: (value: unknown): string => Function.prototype.toString.call(value)
         })
@@ -138,6 +140,7 @@ describe('a value that is not a function in the fresh realm', () => {
       descriptors['toString'] = { ...descriptors['toString'], value: 5 }
       jest.doMock('node:vm', () => ({
         runInNewContext: () => ({
+          objects: readBuiltins(),
           descriptors,
           sourceOf: (value: unknown): string => Function.prototype.toString.call(value)
         })

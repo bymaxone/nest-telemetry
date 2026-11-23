@@ -110,6 +110,37 @@ describe('guardExports', () => {
     }
   })
 
+  it('decides to drop, and to send, with the then of Promise replaced by a function that throws', () => {
+    // Scenario: a host wrapped Promise.prototype.then; the decision to drop or to send reads no then, so the
+    // batch is dropped when polluted and sent when clean, and the replacement is never called.
+    const { sent, make } = exporters()
+    const exporter = make()
+    guardExports(exporter)
+    const original = Object.getOwnPropertyDescriptor(
+      Promise.prototype,
+      'then'
+    ) as PropertyDescriptor
+    let calls = 0
+    Object.defineProperty(Promise.prototype, 'then', {
+      ...original,
+      value: (): never => {
+        calls += 1
+        throw new Error('replaced then must not run')
+      }
+    })
+    try {
+      const results: { code: number }[] = []
+      exporter.export(['clean'], (result) => results.push(result))
+      polluted.mockReturnValue(1)
+      exporter.export(['dropped'], (result) => results.push(result))
+      expect(results.map((result) => result.code)).toEqual([0, 1])
+      expect(sent).toEqual([['clean']])
+      expect(calls).toBe(0)
+    } finally {
+      Object.defineProperty(Promise.prototype, 'then', original)
+    }
+  })
+
   it('wraps a base class once, however many exporters ask, and reaches every exporter that extends it', () => {
     // Scenario: a second exporter of the same base, and a second call for the same one, do not stack a wrapper:
     // one export asks the guard once.

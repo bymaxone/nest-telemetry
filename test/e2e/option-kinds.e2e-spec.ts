@@ -214,6 +214,19 @@ describe('startTelemetry in the real library, for an option of the wrong kind', 
     ).toContain('The instrumentations.overrides option must be set on the object itself')
   })
 
+  it('refuses an override that an ordinary parent object holds, which a copy of own keys would drop', async () => {
+    // Scenario: `Object.create({ enabled: false })` keeps the setting on its parent, so the instrumentation
+    // would stay on; the start is refused naming the entry, and nothing is started.
+    const error = await refusal({
+      instrumentations: { overrides: { pino: Object.create({ enabled: false }) } }
+    })
+    expect(error).toMatchObject({
+      code: 'BYMAX_TELEMETRY_OPTION_INVALID',
+      option: 'instrumentations.overrides[]'
+    })
+    expect(error?.message).toContain('not on a prototype')
+  })
+
   it('starts with an overrides map that is a Proxy, which is read for what it answers', async () => {
     // Scenario: a Proxy is judged by what it answers, so the check for a null-prototype ancestor passes it by.
     const overrides = new Proxy({ pino: { enabled: false } }, {}) as never

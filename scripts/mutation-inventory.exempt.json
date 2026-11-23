@@ -18,5 +18,9 @@
   {
     "file": "src/readme-coverage.spec.ts",
     "reason": "Reads the README and the entry files of the subpaths with the TypeScript compiler and imports nothing from src/, so it executes no mutated code and judges no mutant."
+  },
+  {
+    "file": "src/builtin-calls.spec.ts",
+    "reason": "Reads the text of the source files with the TypeScript compiler and imports only the table of names from the guard, so it executes no mutated code and judges no mutant."
   }
 ]
