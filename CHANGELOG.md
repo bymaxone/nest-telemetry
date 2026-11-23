@@ -10,6 +10,14 @@ heading here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A built-in that code replaces after the library loaded can no longer lose a warning or a host option.** The
+  callback of a failed export looked its built-ins up when it ran, so a replaced one made it throw before the caller
+  was told and the `BYMAX_TELEMETRY_EXPORT_FAILED` warning was lost. The settling of the start options did the same,
+  so a replaced one dropped host options such as `enabled: false` in silence. Both paths now call the built-ins the
+  library read once when it loaded.
+
 ### Planned for the next minor
 
 - **Export the option error class** with `code` and `option` typed in the declarations, so a host can test for

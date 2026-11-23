@@ -35,6 +35,33 @@ export const ownKeys = Reflect.ownKeys
 /** `Reflect.apply`. */
 export const apply = Reflect.apply
 
+/** `Object.entries`. */
+export const entries = Object.entries
+
+/** `Object.keys`. */
+export const keys = Object.keys
+
+/** `Array.isArray`. */
+export const isArray = Array.isArray
+
+/** `Number.isInteger`. */
+export const isInteger = Number.isInteger
+
+/** `Reflect.get`. */
+export const reflectGet = Reflect.get
+
+/** `Reflect.set`. */
+export const reflectSet = Reflect.set
+
+/** `Reflect.deleteProperty`. */
+export const reflectDelete = Reflect.deleteProperty
+
+/** `util.types.isProxy`. */
+export const isProxy = types.isProxy
+
+/** `util.types.isRegExp`. */
+export const isRegExp = types.isRegExp
+
 /** `Error`, for the result of a dropped batch. */
 export const ErrorClass = Error
 
@@ -49,3 +76,24 @@ export const isPromise = types.isPromise
 
 /** `Promise.prototype.then`, to attach a handler to a promise that the guard drops. */
 export const promiseThen = Promise.prototype.then
+
+/** `String.prototype.endsWith`, called through {@link apply}. */
+export const endsWith = String.prototype.endsWith
+
+/** `Object`, which turns any value into an object. */
+export const toObject = Object
+
+/** `String`, which turns a value into its text. */
+export const toText = String
+
+/** `RegExp.prototype.exec`, called through {@link apply}: `test` looks `exec` up again when it runs. */
+export const regExpExec = RegExp.prototype.exec
+
+/** `Number`, which turns a value into a number. */
+export const toNumber = Number
+
+/** `performance.now`, called through {@link apply} on {@link clockOwner}. */
+export const clockNow = performance.now
+
+/** The `performance` object that {@link clockNow} belongs to, as it was when this module loaded. */
+export const clockOwner = performance

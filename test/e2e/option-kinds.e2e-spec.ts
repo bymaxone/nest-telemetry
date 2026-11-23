@@ -245,5 +245,10 @@ describe('startTelemetry in the real library, for an option of the wrong kind', 
         key === 'length' ? 0 : (Reflect.get(target, key, receiver) as unknown)
     })
     expect(() => ignorePaths(hidden)).toThrow('must be an array of regular expressions')
+    // An empty list that holds no index key is an empty list, not a hidden one.
+    expect(() => ignorePaths([])).not.toThrow()
+    const tagged: RegExp[] = []
+    Object.assign(tagged, { note: 'metadata, not an entry' })
+    expect(() => ignorePaths(tagged)).not.toThrow()
   })
 })

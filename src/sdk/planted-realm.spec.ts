@@ -256,6 +256,13 @@ describe('a setting that the host nests in an override', () => {
     kept.forEach((value, index) => expect(copy.headersToSpanAttributes.kept[index]).toBe(value))
   })
 
+  it('copies an empty list as an empty list', () => {
+    // Scenario: a nested list the host left empty stays empty, with no member the copy invented.
+    const copy = settle({ none: [] }) as { headersToSpanAttributes: { none: unknown[] } }
+    expect(copy.headersToSpanAttributes.none).toEqual([])
+    expect(copy.headersToSpanAttributes.none).toHaveLength(0)
+  })
+
   it('copies a list whole when the root prototype holds an iterator', () => {
     // Scenario: a planted Symbol.iterator on the root prototype must not decide how many members are
     // copied, which would drop an entry of a nested list of an override setting.

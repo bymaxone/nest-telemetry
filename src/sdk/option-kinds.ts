@@ -6,6 +6,23 @@
 
 import { types } from 'node:util'
 
+import {
+  apply,
+  create,
+  entries,
+  endsWith,
+  getPrototypeOf,
+  hasOwn,
+  isArray,
+  isInteger,
+  isProxy,
+  isRegExp,
+  keys,
+  rootPrototype,
+  toNumber,
+  toText
+} from './primordials'
+
 /** The kinds that Node tells apart and that never hold the settings of a host. */
 const BRANDS = [
   types.isAnyArrayBuffer,
@@ -33,7 +50,23 @@ const BRANDS = [
  * @param key - An own key of a list.
  * @returns `true` for `'0'` up to `'4294967294'`.
  */
-const isIndex = (key: string): boolean => String(Number(key) >>> 0) === key && key !== '4294967295'
+const isIndex = (key: string): boolean =>
+  toText(toNumber(key) >>> 0) === key && key !== '4294967295'
+
+/**
+ * Whether a list holds an own key that is an index, by index of the key list.
+ *
+ * @param list - The host's list.
+ * @returns `true` when one own key is an index.
+ */
+function hasIndexKey(list: object): boolean {
+  const own = keys(list)
+  // Stryker disable next-line EqualityOperator: one step past the end reads `undefined`, which `isIndex` rejects, so the result is the same
+  for (let at = 0; at < own.length; at += 1) {
+    if (isIndex(own[at] as string)) return true
+  }
+  return false
+}
 
 /** The most entries a list or a map option may hold. */
 export const MAX_OPTION_ENTRIES = 1000
@@ -117,7 +150,7 @@ export function requireFunction<F extends (...args: never[]) => unknown>(
  */
 export function requireObject(option: string, value: unknown): object | undefined {
   if (value === undefined || value === null) return undefined
-  if (typeof value !== 'object' || Array.isArray(value) || !isSettingsObject(value)) {
+  if (typeof value !== 'object' || isArray(value) || !isSettingsObject(value)) {
     throw new TelemetryOptionError(option, 'an object')
   }
   return value
@@ -136,11 +169,14 @@ const MAX_CHAIN = 100
  * @returns `true` for an object that can hold settings.
  */
 function isSettingsObject(value: object): boolean {
-  if (BRANDS.some((brand) => brand(value))) return false
-  let next: object | null = Object.getPrototypeOf(value)
+  // By index: a method of the array prototype is not looked up.
+  for (let at = 0; at < BRANDS.length; at += 1) {
+    if ((BRANDS[at] as (value: unknown) => boolean)(value)) return false
+  }
+  let next: object | null = getPrototypeOf(value)
   for (let hops = 0; next !== null; hops++) {
     if (hops >= MAX_CHAIN) return false
-    next = Object.getPrototypeOf(next)
+    next = getPrototypeOf(next)
   }
   return true
 }
@@ -163,17 +199,17 @@ export function readOwnOrClass(
 ): unknown {
   if (group === undefined) return undefined
   // A Proxy answers for itself, so what it answers is what the host wrote, whichever traps it has.
-  if (types.isProxy(group)) return (group as Record<string, unknown>)[name]
+  if (isProxy(group)) return (group as Record<string, unknown>)[name]
   let holder: object | null = group
-  for (let hops = 0; holder !== null && !Object.hasOwn(holder, name); hops++) {
+  for (let hops = 0; holder !== null && !hasOwn(holder, name); hops++) {
     if (hops >= MAX_CHAIN) return undefined
-    holder = Object.getPrototypeOf(holder)
+    holder = getPrototypeOf(holder)
   }
   if (holder === null) return undefined
-  if (holder !== group && Object.getPrototypeOf(holder) === null) {
+  if (holder !== group && getPrototypeOf(holder) === null) {
     // The root prototype of this realm is where a pollution is planted, and it is ignored. Any other
     // prototype with no prototype of its own is the host's, so its value is not dropped in silence.
-    if (holder === Object.prototype) return undefined
+    if (holder === rootPrototype) return undefined
     throw new TelemetryOptionError(
       option,
       'set on the options object itself or on a class, not on a prototype that has no prototype'
@@ -214,24 +250,24 @@ function copyByIndex<T>(
       throw new TelemetryOptionError(option, expected, cause)
     }
   }
-  if (!host(() => Array.isArray(value))) throw new TelemetryOptionError(option, expected)
+  if (!host(() => isArray(value))) throw new TelemetryOptionError(option, expected)
   const list = value as unknown[]
   const length: unknown = host(() => list.length)
-  if (typeof length !== 'number' || !Number.isInteger(length) || length < 0) {
+  if (typeof length !== 'number' || !isInteger(length) || length < 0) {
     throw new TelemetryOptionError(option, expected)
   }
   if (length > MAX_OPTION_ENTRIES) {
     throw new TelemetryOptionError(option, `an array of at most ${MAX_OPTION_ENTRIES} ${noun}`)
   }
-  if (length === 0 && host(() => Object.keys(list).some(isIndex))) {
+  if (length === 0 && host(() => hasIndexKey(list))) {
     throw new TelemetryOptionError(option, expected)
   }
   const copy: T[] = []
   for (let index = 0; index < length; index++) {
     // An own index only: a hole in the host's list is not whatever a prototype holds at that index.
-    const taken = take(host(() => (Object.hasOwn(list, index) ? list[index] : undefined)))
+    const taken = take(host(() => (hasOwn(list, index) ? list[index] : undefined)))
     if (taken === undefined) throw new TelemetryOptionError(option, expected)
-    copy.push(taken)
+    copy[copy.length] = taken
   }
   return copy
 }
@@ -271,7 +307,7 @@ export function settleRegExpList(option: string, value: unknown): readonly RegEx
     value,
     'regular expressions',
     (entry) => {
-      if (!types.isRegExp(entry)) return undefined
+      if (!isRegExp(entry)) return undefined
       try {
         const { source, flags } = entry
         return new RegExp(source, flags)
@@ -315,12 +351,12 @@ const MAX_VALUES = 10_000
  *   {@link MAX_VALUES} values, or a list or object holds more than {@link MAX_OPTION_ENTRIES} members.
  */
 function detach(value: unknown, seen: { count: number }, depth: number): unknown {
-  if (typeof value !== 'object' || value === null || types.isProxy(value)) return value
-  const list = Array.isArray(value)
+  if (typeof value !== 'object' || value === null || isProxy(value)) return value
+  const list = isArray(value)
   // A plain object is one whose prototype is the end of a chain, the root of whatever realm made it,
   // or that has none; no property of the prototype is read to tell.
-  const prototype = Object.getPrototypeOf(value) as object | null
-  if (!list && prototype !== null && Object.getPrototypeOf(prototype) !== null) return value
+  const prototype = getPrototypeOf(value) as object | null
+  if (!list && prototype !== null && getPrototypeOf(prototype) !== null) return value
   seen.count += 1
   if (depth > MAX_NESTING || seen.count > MAX_VALUES) {
     throw new TelemetryOptionError(OVERRIDE_PATH, 'nested at most 16 levels deep')
@@ -336,22 +372,24 @@ function detach(value: unknown, seen: { count: number }, depth: number): unknown
     // and no helper that probes its argument for an iterator is used on an object the root prototype
     // reaches.
     const length = value.length
-    // Stryker disable next-line ArrayDeclaration: the loop below sets every index, so the length given here changes nothing.
-    const copy = new Array<unknown>(length)
+    const copy: unknown[] = []
     for (let index = 0; index < length; index++) {
-      copy[index] = detach(Object.hasOwn(value, index) ? value[index] : undefined, seen, depth + 1)
+      copy[index] = detach(hasOwn(value, index) ? value[index] : undefined, seen, depth + 1)
     }
     return copy
   }
-  const members = Object.entries(value)
+  const members = entries(value)
   if (members.length > MAX_OPTION_ENTRIES) {
     throw new TelemetryOptionError(
       OVERRIDE_PATH,
       `an object of at most ${MAX_OPTION_ENTRIES} entries`
     )
   }
-  const copy = Object.create(null) as Record<string, unknown>
-  for (const [key, member] of members) {
+  const copy = create(null) as Record<string, unknown>
+  for (let at = 0; at < members.length; at += 1) {
+    const pair = members[at] as [string, unknown]
+    const key = pair[0]
+    const member = pair[1]
     refuseProtoKey(key)
     copy[key] = detach(member, seen, depth + 1)
   }
@@ -369,7 +407,7 @@ function detach(value: unknown, seen: { count: number }, depth: number): unknown
  *   more than {@link MAX_OPTION_ENTRIES} settings.
  */
 function settleOverrideEntry(entry: object): Record<string, unknown> {
-  const settings = Object.entries(entry)
+  const settings = entries(entry)
   if (settings.length > MAX_OPTION_ENTRIES) {
     throw new TelemetryOptionError(
       OVERRIDE_PATH,
@@ -377,14 +415,17 @@ function settleOverrideEntry(entry: object): Record<string, unknown> {
     )
   }
   const copy: Record<string, unknown> = {}
-  for (const [key, setting] of settings) {
+  for (let at = 0; at < settings.length; at += 1) {
+    const pair = settings[at] as [string, unknown]
+    const key = pair[0]
+    const setting = pair[1]
     refuseProtoKey(key)
     let settled: unknown = setting
     if (key === 'enabled' || key === 'disableLogSending') {
       settled = requireBoolean(`${OVERRIDE_PATH}.${key}`, setting)
     } else if (key === 'redactedQueryParams') {
       settled = settleStringList(`${OVERRIDE_PATH}.${key}`, setting)
-    } else if (key.endsWith('Hook')) {
+    } else if (apply(endsWith, key, ['Hook'])) {
       settled = requireFunction(`${OVERRIDE_PATH}.<a hook>`, setting)
     } else {
       settled = detach(setting, { count: 0 }, 0)
@@ -409,12 +450,15 @@ export function settleOverrides(
 ): Record<string, Record<string, unknown>> | undefined {
   const map = requireObject(option, value)
   if (map === undefined) return undefined
-  const entries = Object.entries(map)
-  if (entries.length > MAX_OPTION_ENTRIES) {
+  const pairs = entries(map)
+  if (pairs.length > MAX_OPTION_ENTRIES) {
     throw new TelemetryOptionError(option, `an object of at most ${MAX_OPTION_ENTRIES} entries`)
   }
   const copy: Record<string, Record<string, unknown>> = {}
-  for (const [name, entry] of entries) {
+  for (let at = 0; at < pairs.length; at += 1) {
+    const pair = pairs[at] as [string, unknown]
+    const name = pair[0]
+    const entry = pair[1]
     refuseProtoKey(name)
     const config = requireObject(option, entry)
     if (config !== undefined) copy[name] = settleOverrideEntry(config)

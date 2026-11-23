@@ -81,6 +81,10 @@ describe('describeFailure', () => {
     ['a thrown string', 'plain text'],
     ['an object with a message that is not text', { message: 42 }],
     [
+      'an object whose message is not text but prints as a package name',
+      { message: { toString: () => '@opentelemetry/api' } }
+    ],
+    [
       'an object whose message getter throws',
       Object.defineProperty({}, 'message', {
         get: () => {

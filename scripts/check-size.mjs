@@ -34,6 +34,15 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
+//   - 2026-11-23 (sdk and register, PM-granted): sdk 10,447 B measured, 10.24 KiB budget (10,486 B, 39 B of
+//     headroom); register 10,614 B, 10.40 KiB budget (10,650 B, 36 B). The growth, 21 B in the sdk and 42 B in
+//     register, is the clock, the number conversion and the pattern match of the failure description, which are
+//     now read once at load as well.
+//   - 2026-11-23 (all four, PM-granted): sdk 10,426 B measured, 10.22 KiB budget (10,465 B, 39 B of
+//     headroom); register 10,572 B, 10.36 KiB budget (10,608 B, 36 B); nest 2,217 B, 2.20 KiB budget (2,252 B,
+//     35 B); observability 723 B, 0.74 KiB budget (757 B, 34 B). The growth, 0.14 KiB in the sdk and about
+//     0.1 KiB in the others, is the table of built-ins read once at load that the export-failure callback, the
+//     code reader, the warning sink and the settling of the options now call instead of looking them up.
 //   - 2026-11-23 (sdk and register, PM-granted): sdk 10,250 B measured, 10.04 KiB budget (10,281 B, 31 B of
 //     headroom, rounded up to the KiB column); register 10,415 B, 10.21 KiB budget (10,455 B, 40 B). The growth,
 //     about 0.05 KiB in sdk and 0.06 KiB in register, is the handler that takes the rejection of a promise the
@@ -132,10 +141,10 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
 //   met by shortening the text of a warning.
 const BUDGETS = [
-  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 10.04 * 1024 },
-  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 10.21 * 1024 },
-  { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.09 * 1024 },
-  { name: 'observability (metrics)', path: 'dist/observability/index.mjs', brotli: 0.69 * 1024 }
+  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 10.24 * 1024 },
+  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 10.4 * 1024 },
+  { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.2 * 1024 },
+  { name: 'observability (metrics)', path: 'dist/observability/index.mjs', brotli: 0.74 * 1024 }
 ]
 
 const fmt = (n) => `${(n / 1024).toFixed(2)} kB`

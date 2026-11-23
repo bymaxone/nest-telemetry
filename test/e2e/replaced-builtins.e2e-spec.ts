@@ -27,7 +27,7 @@ afterAll(() => {
  * runs the check while the target is replaced, restores it, and reports only after all are restored.
  */
 const CHILD = `
-const { pollutedNames, guardExports } = require(process.env.BUNDLE)
+const { pollutedNames, guardExports, settleOptions, warnOnExportFailure, exportFailureCount, registerWarningSink, clearWarningSink, describeFailure } = require(process.env.BUNDLE)
 const defineProperty = Object.defineProperty
 const ownKeys = Reflect.ownKeys
 const getDescriptor = Object.getOwnPropertyDescriptor
@@ -62,6 +62,44 @@ const guardCheck = () => {
   delete root.zzplanted
   return out
 }
+// What the option settling must do with one target replaced: keep every option the host gave, a switch that is
+// off, a list, a nested override and a hook included.
+const optionsCheck = () => {
+  const hook = () => undefined
+  const settled = settleOptions({
+    enabled: false,
+    serviceName: 'svc',
+    extraRedactedQueryParams: ['a', 'b'],
+    instrumentations: { overrides: { http: { enabled: false, requestHook: hook, redactedQueryParams: ['q'], nested: { deep: [1, { x: 2 }] } } } }
+  })
+  const tagged = []
+  tagged.note = 'metadata, not an entry'
+  const empty = settleOptions({ extraRedactedQueryParams: tagged }).extraRedactedQueryParams
+  const http = settled.instrumentations && settled.instrumentations.overrides && settled.instrumentations.overrides.http
+  return {
+    enabled: settled.enabled === false ? 1 : 0,
+    name: settled.serviceName === 'svc' ? 1 : 0,
+    list: settled.extraRedactedQueryParams && settled.extraRedactedQueryParams.length === 2 ? 1 : 0,
+    off: http && http.enabled === false ? 1 : 0,
+    hook: http && http.requestHook === hook ? 1 : 0,
+    nested: http && http.nested && http.nested.deep[1].x === 2 ? 1 : 0,
+    tagged: empty && empty.length === 0 ? 1 : 0
+  }
+}
+// What a failed export must do with one target replaced: tell the caller, count the failure and warn once.
+const failureCheck = () => {
+  const out = { done: -1, counted: -1, warned: -1 }
+  const warnings = {}
+  let seen = 0
+  const remove = registerWarningSink((warning) => { warnings[seen] = warning.code; seen = seen + 1; return true })
+  const before = exportFailureCount()
+  const exporter = warnOnExportFailure({ export: (items, done) => done({ code: 1, error: { code: 'ECONNREFUSED' } }) }, 'k')
+  exporter.export([1], (r) => { out.done = r.code })
+  out.counted = exportFailureCount() - before
+  out.warned = seen === 1 && warnings[0] === 'BYMAX_TELEMETRY_EXPORT_FAILED' ? 1 : 0
+  remove()
+  return out
+}
 // A check that reads two built-ins when it runs, to show the harness sees a call.
 const liveCheck = () => {
   Object.hasOwn({}, 'a')
@@ -77,7 +115,8 @@ const groups = [
   ['Symbol.prototype', Symbol.prototype], ['String.prototype', String.prototype], ['String', String],
   ['Number', Number], ['Error', Error], ['Error.prototype', Error.prototype], ['JSON', JSON], ['Math', Math],
   ['Promise', Promise], ['Promise.prototype', Promise.prototype], ['RegExp.prototype', RegExp.prototype],
-  ['Boolean.prototype', Boolean.prototype], ['Number.prototype', Number.prototype], ['globalThis', globalThis]
+  ['Boolean.prototype', Boolean.prototype], ['Number.prototype', Number.prototype], ['globalThis', globalThis],
+  ['performance', performance]
 ]
 for (const [label, group] of groups) {
   for (const key of ownKeys(group)) {
@@ -85,7 +124,7 @@ for (const [label, group] of groups) {
     if (!descriptor.configurable) continue
     const isFunction = typeof descriptor.value === 'function'
     if (!isFunction && descriptor.get === undefined) continue
-    if (group === globalThis && !/^[A-Z]/.test(String(key)) && key !== 'Reflect') continue
+    if (group === globalThis && !/^[A-Z]/.test(String(key)) && key !== 'Reflect' && key !== 'performance') continue
     targets.push({ label: label + '.' + String(key), group, key, descriptor, isFunction })
   }
 }
@@ -110,9 +149,18 @@ const run = (check) => {
 }
 const wrong = (r) => r.threw || r.calls !== 0 || r.out.clean !== 0 || r.out.cleanSent !== 1 || r.out.cleanCode !== 0 ||
   r.out.planted !== 1 || r.out.sent !== 0 || r.out.code !== 1 || r.out.headers !== 7 || r.out.refused !== 1
+// What naming a failed start must do with one target replaced: the code and the package its message names.
+const describeCheck = () => ({
+  named: describeFailure({ code: 'ERR_X', message: 'Cannot find @opentelemetry/sdk-node' }) === 'code ERR_X, package @opentelemetry/sdk-node' ? 1 : 0
+})
+const wrongOptions = (r) => r.threw || r.calls !== 0 || Object.values(r.out).some((v) => v !== 1)
+const wrongFailure = (r) => r.threw || r.calls !== 0 || r.out.done !== 1 || r.out.counted !== 1 || r.out.warned !== 1
+const described = run(describeCheck).filter(wrongOptions).map((r) => r.label)
 const real = run(guardCheck).filter(wrong).map((r) => r.label)
+const options = run(optionsCheck).filter(wrongOptions).map((r) => r.label)
+const failure = run(failureCheck).filter(wrongFailure).map((r) => r.label)
 const control = run(liveCheck).filter((r) => r.calls !== 0).map((r) => r.label)
-log(stringify({ targets: targets.length, wrong: real, control }))
+log(stringify({ targets: targets.length, wrong: real, options, failure, described, control }))
 `
 
 describe('a built-in that something replaces after the library loaded', () => {
@@ -125,9 +173,17 @@ describe('a built-in that something replaces after the library loaded', () => {
     const report = JSON.parse(result.lines[result.lines.length - 1] ?? '{}') as {
       targets: number
       wrong: string[]
+      options: string[]
+      failure: string[]
+      described: string[]
       control: string[]
     }
-    expect(report.wrong).toEqual([])
+    expect({
+      wrong: report.wrong,
+      options: report.options,
+      failure: report.failure,
+      described: report.described
+    }).toEqual({ wrong: [], options: [], failure: [], described: [] })
     expect(report.targets).toBeGreaterThan(300)
     expect(result.code).toBe(0)
   }, 90_000)
