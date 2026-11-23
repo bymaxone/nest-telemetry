@@ -47,7 +47,7 @@ describe('guardExports', () => {
     expect(sent).toEqual([['clean']])
     expect(results[1]?.code).toBe(1)
     expect((results[1]?.error as Error).message).toBe(
-      'The Object.prototype of this process is polluted, so the batch was dropped.'
+      'Object.prototype or a built-in of this process was changed, so the batch was dropped.'
     )
   })
 

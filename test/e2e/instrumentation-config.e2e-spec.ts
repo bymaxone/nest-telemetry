@@ -228,7 +228,7 @@ describe('the configuration handed to the real auto-instrumentations', () => {
           (options as { code?: string } | undefined)?.code === 'BYMAX_TELEMETRY_REALM_POLLUTED'
       )
       expect(refusals).toHaveLength(1)
-      expect(String(refusals[0]?.[0])).toContain('holds 4 name(s)')
+      expect(String(refusals[0]?.[0])).toContain('in 4 name(s)')
       for (const name of names) expect(String(refusals[0]?.[0])).not.toContain(name)
     } finally {
       for (const name of names) {

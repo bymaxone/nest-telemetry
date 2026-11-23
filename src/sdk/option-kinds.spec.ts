@@ -307,6 +307,52 @@ describe('settleOverrides, for a map or an entry whose keys sit on a prototype w
     expect(() => settleOverrides('x', new Settings() as object)).not.toThrow()
   })
 
+  it.each([
+    [
+      'an entry whose class holds a getter',
+      (): object => {
+        class Entry {
+          get enabled(): boolean {
+            return false
+          }
+        }
+        return { http: new Entry() }
+      },
+      'instrumentations.overrides[]'
+    ],
+    [
+      'a map whose class holds a getter',
+      (): object => {
+        class Map_ {
+          get http(): object {
+            return { enabled: false }
+          }
+        }
+        return new Map_()
+      },
+      'x'
+    ],
+    [
+      'an entry whose class holds a getter of a symbol name',
+      (): object => {
+        class Entry {
+          get [Symbol.for('setting')](): boolean {
+            return false
+          }
+        }
+        return { http: new Entry() }
+      },
+      'instrumentations.overrides[]'
+    ]
+  ])('refuses %s, though the getter is not enumerable', (_where, make, option) => {
+    // Scenario: a getter of a class is not enumerable, and the copy of own keys would drop the setting it answers
+    // (`enabled: false`) in silence and leave the instrumentation on; a method is not a setting, a getter is.
+    expect(thrown(() => settleOverrides('x', make()))).toMatchObject({
+      option,
+      message: `The ${option} option must be set on the object itself, not on a prototype, so the start was refused.`
+    })
+  })
+
   it('does not refuse a Proxy whose answer for its prototype is a holder of settings', () => {
     // Scenario: a Proxy is read for what it answers, so what its prototype trap says is not judged.
     const bare = Object.create(null, { pino: { value: {}, enumerable: true } }) as object

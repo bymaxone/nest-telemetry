@@ -5,6 +5,7 @@
 import { runInNewContext } from 'node:vm'
 
 import { GUARDED_BUILTINS, pollutedNames, readBuiltins } from './prototype-guard'
+import { buildRedactedQueryParams } from './redaction'
 
 /** Runs `run` with a descriptor put on the root prototype, and removes or restores it after. */
 function plant(name: string, descriptor: PropertyDescriptor, run: () => void): void {
@@ -159,15 +160,28 @@ describe('pollutedNames', () => {
 })
 
 /** One row per guarded member: the expression of its object, and its name. */
-const MEMBERS: (readonly [number, string, string])[] = GUARDED_BUILTINS.flatMap(
+const MEMBERS: (readonly [number, string, string | symbol])[] = GUARDED_BUILTINS.flatMap(
   ([expression, names], at) =>
-    names.map((name): readonly [number, string, string] => [at, expression, name])
+    names.map((name): readonly [number, string, string | symbol] => [at, expression, name])
 )
+
+/** The members that decision paths reach by iterating, with the object that holds each. */
+const ITERATION: (readonly [string, object, string | symbol])[] = [
+  ['the next of an array iterator', Object.getPrototypeOf([][Symbol.iterator]()) as object, 'next'],
+  ['the iterator of an array', Array.prototype, Symbol.iterator],
+  [
+    'the next of a set iterator',
+    Object.getPrototypeOf(new Set()[Symbol.iterator]()) as object,
+    'next'
+  ],
+  ['the iterator of a set', Set.prototype, Symbol.iterator],
+  ['the add of a set, which new Set(list) calls', Set.prototype, 'add']
+]
 
 /** Runs `run` with a member of a guarded built-in redefined as `descriptor`, then puts the original back. */
 function replacing(
   row: number,
-  name: string,
+  name: string | symbol,
   descriptor: PropertyDescriptor,
   run: () => void
 ): void {
@@ -226,6 +240,46 @@ describe('the built-ins that the SDK calls on a decision path', () => {
     replacing(0, 'map', { value: other, writable: true, configurable: true }, () => {
       counted = pollutedNames()
     })
+    expect(counted).toBeGreaterThan(0)
+  })
+
+  it.each(ITERATION)(
+    'counts %s once it is replaced, the iteration the decision paths do without a call',
+    (_label, target, name) => {
+      // Scenario: a for...of, a spread, a destructuring or new Set(list) on a decision path reaches these members
+      // with no call in the source, so the list of built-in calls cannot see them; replacing one is a change.
+      const original = Object.getOwnPropertyDescriptor(target, name) as PropertyDescriptor
+      let counted = 0
+      Object.defineProperty(target, name, {
+        value: function replaced(): void {},
+        writable: true,
+        configurable: true
+      })
+      try {
+        counted = pollutedNames()
+      } finally {
+        Object.defineProperty(target, name, original)
+      }
+      expect(counted).toBeGreaterThan(0)
+      expect(pollutedNames()).toBe(0)
+    }
+  )
+
+  it('counts the iteration that empties the list of redacted query parameters, before anything is read from it', () => {
+    // Scenario: with the next of an array iterator answering done, buildRedactedQueryParams returns no name at all,
+    // so the query secrets would be exported; the guard counts it, and the start refuses on that count.
+    const iterator = Object.getPrototypeOf([][Symbol.iterator]()) as { next: () => unknown }
+    const original = iterator.next
+    let params = -1
+    let counted = 0
+    iterator.next = (): unknown => ({ done: true, value: undefined })
+    try {
+      params = buildRedactedQueryParams(['x']).length
+      counted = pollutedNames()
+    } finally {
+      iterator.next = original
+    }
+    expect(params).toBe(0)
     expect(counted).toBeGreaterThan(0)
   })
 

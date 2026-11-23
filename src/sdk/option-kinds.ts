@@ -11,6 +11,7 @@ import {
   create,
   entries,
   endsWith,
+  getOwnPropertyDescriptor,
   getPrototypeOf,
   hasOwn,
   isArray,
@@ -18,6 +19,7 @@ import {
   isProxy,
   isRegExp,
   keys,
+  ownKeys,
   rootPrototype,
   toNumber,
   toText
@@ -400,19 +402,39 @@ function detach(value: unknown, seen: { count: number }, depth: number): unknown
 }
 
 /**
+ * Whether a prototype holds a setting that a copy of the own keys of its instance would drop: an enumerable
+ * key, or a getter or a setter, which a class defines without making it enumerable. A method is not a setting.
+ *
+ * @param holder - A prototype of the value, other than the root of this realm.
+ * @returns `true` when the holder has one.
+ */
+function holdsSetting(holder: object): boolean {
+  if (keys(holder).length > 0) return true
+  const names = ownKeys(holder)
+  for (let at = 0; at < names.length; at += 1) {
+    // An accessor has its own `get`, even when it is undefined; a data property has none, and a name planted on
+    // the root prototype must not be read as one.
+    const descriptor = getOwnPropertyDescriptor(holder, names[at] as string | symbol) as object
+    if (hasOwn(descriptor, 'get')) return true
+  }
+  return false
+}
+
+/**
  * Refuses an object whose settings sit on a prototype, which a copy of its own keys would drop in
  * silence. The root prototype of this realm is where a pollution is planted and is ignored, as are the
  * methods of a class, which are not enumerable.
  *
  * @param path - What the error names.
  * @param value - The map or the entry the host passed.
- * @throws {TelemetryOptionError} When a prototype other than the root of this realm has an enumerable key.
+ * @throws {TelemetryOptionError} When a prototype other than the root of this realm has an enumerable key,
+ *   a getter or a setter.
  */
 function refuseAncestorKeys(path: string, value: object): void {
   if (isProxy(value)) return
   let holder: object | null = getPrototypeOf(value)
   for (let hops = 0; holder !== null && hops < MAX_CHAIN; hops++) {
-    if (holder !== rootPrototype && keys(holder).length > 0) {
+    if (holder !== rootPrototype && holdsSetting(holder)) {
       throw new TelemetryOptionError(path, 'set on the object itself, not on a prototype')
     }
     holder = getPrototypeOf(holder)

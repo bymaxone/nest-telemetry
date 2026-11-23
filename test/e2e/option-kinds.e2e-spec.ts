@@ -227,6 +227,35 @@ describe('startTelemetry in the real library, for an option of the wrong kind', 
     expect(error?.message).toContain('not on a prototype')
   })
 
+  it('refuses an entry whose class holds a getter of a setting, which is not enumerable', async () => {
+    // Scenario: `get enabled()` of a class is not an own key and not enumerable, so a copy of the own keys would
+    // drop `enabled: false` in silence and the instrumentation would stay on; the start is refused.
+    class Entry {
+      get enabled(): boolean {
+        return false
+      }
+    }
+    const error = await refusal({ instrumentations: { overrides: { pino: new Entry() } } })
+    expect(error).toMatchObject({
+      code: 'BYMAX_TELEMETRY_OPTION_INVALID',
+      option: 'instrumentations.overrides[]'
+    })
+  })
+
+  it('starts with an entry whose class holds only methods, which are not settings', async () => {
+    // Scenario: a method of a class is not enumerable and not an accessor, so no setting is dropped and the
+    // start goes on.
+    class Entry {
+      enabled = true
+      describe(): string {
+        return 'entry'
+      }
+    }
+    const overrides = { pino: new Entry() } as never
+    const handle = await startTelemetry({ instrumentations: { overrides } })
+    expect(handle.enabled).toBe(true)
+  })
+
   it('starts with an overrides map that is a Proxy, which is read for what it answers', async () => {
     // Scenario: a Proxy is judged by what it answers, so the check for a null-prototype ancestor passes it by.
     const overrides = new Proxy({ pino: { enabled: false } }, {}) as never

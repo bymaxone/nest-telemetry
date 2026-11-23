@@ -1,7 +1,8 @@
 /**
- * @fileoverview Reads the source files and pins, both ways, every direct call of a built-in: a static call on a
- * global and a call of a method that a built-in prototype also has. Each is listed with a class, and a call
- * that is new, or a listing whose call is gone, fails.
+ * @fileoverview Reads the source files and pins, both ways, every direct call of a built-in (a static call on a
+ * global, a call of a method that a built-in prototype also has) and every place that iterates with no call in the
+ * source: a for...of, a spread, a destructuring of an array, new Set or new Map with a list. Each is listed with a
+ * class, and one that is new, or a listing whose site is gone, fails.
  * @layer repository
  */
 import { readFileSync, readdirSync } from 'node:fs'
@@ -11,7 +12,12 @@ import ts from 'typescript'
 
 import { GUARDED_BUILTINS } from './sdk/prototype-guard'
 
-type Entry = { count: number; class: 'guarded' | 'captured' | 'inert'; reason?: string }
+type Entry = {
+  count: number
+  class: 'guarded' | 'captured' | 'inert'
+  reason?: string
+  iterates?: string[]
+}
 
 const ROOT = join(__dirname)
 const INVENTORY = JSON.parse(
@@ -55,6 +61,25 @@ const METHOD_NAMES = new Set(
   ].flatMap((prototype) => Object.getOwnPropertyNames(prototype))
 )
 
+/** What each kind of iteration reaches, as members of the guard's table: the object and the name. */
+const ITERATES: Record<string, readonly (readonly [string, string | symbol])[]> = {
+  array: [
+    ['Array.prototype', Symbol.iterator],
+    ['Object.getPrototypeOf([][Symbol.iterator]())', 'next']
+  ],
+  set: [
+    ['Set.prototype', Symbol.iterator],
+    ['Object.getPrototypeOf(new Set()[Symbol.iterator]())', 'next']
+  ],
+  add: [['Set.prototype', 'add']]
+}
+
+/** The calls that read a list with an iterator of their own. */
+const ITERATING_CALLS = ['static|Object.fromEntries']
+
+/** The constructors that read a list with an iterator when given one. */
+const COLLECTIONS = ['Set', 'Map', 'WeakSet', 'WeakMap']
+
 /** Every non-spec TypeScript file under a directory, as paths relative to the source root. */
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -82,6 +107,22 @@ function callsOf(path: string): Map<string, number> {
       else if (METHOD_NAMES.has(name)) key = `method|.${name}`
       if (key !== undefined) found.set(key, (found.get(key) ?? 0) + 1)
     }
+    let site: string | undefined
+    if (ts.isForOfStatement(node)) site = 'for-of'
+    else if (ts.isSpreadElement(node)) site = 'spread'
+    else if (ts.isArrayBindingPattern(node)) site = 'array-destructure'
+    else if (ts.isYieldExpression(node) && node.asteriskToken !== undefined) site = 'yield*'
+    else if (
+      ts.isNewExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      COLLECTIONS.includes(node.expression.text) &&
+      (node.arguments?.length ?? 0) > 0
+    )
+      site = `new-${node.expression.text}`
+    if (site !== undefined) {
+      const key = `iterate|${site}`
+      found.set(key, (found.get(key) ?? 0) + 1)
+    }
     ts.forEachChild(node, visit)
   }
   visit(file)
@@ -98,8 +139,12 @@ function scanned(): Record<string, number> {
   return all
 }
 
-/** Whether the guard's table holds a call: a static of that global, or a method of any guarded prototype. */
+/**
+ * Whether the guard's table holds a call: a static of that global, or a method of any guarded prototype. An
+ * iteration is not a call; the members it reaches are proved by their own test below.
+ */
 function inTable(kind: string, name: string): boolean {
+  if (kind === 'iterate') return true
   if (kind === 'static') {
     const [owner, member] = name.split('.') as [string, string]
     return GUARDED_BUILTINS.some(
@@ -107,6 +152,11 @@ function inTable(kind: string, name: string): boolean {
     )
   }
   return GUARDED_BUILTINS.some(([, names]) => names.includes(name.slice(1)))
+}
+
+/** Whether the table holds a member: the object, by its expression, and the name. */
+function tableHas(expression: string, name: string | symbol): boolean {
+  return GUARDED_BUILTINS.some(([row, names]) => row === expression && names.includes(name))
 }
 
 describe('the direct calls of a built-in in the sources', () => {
@@ -137,5 +187,52 @@ describe('the direct calls of a built-in in the sources', () => {
         problems.push(`${key}: class`)
     }
     expect(problems).toEqual([])
+  })
+
+  it('names, for each place that iterates, the members of the table it reaches, and each is there', () => {
+    // Scenario: a for...of, a spread, a destructuring or new Set(list) reaches Symbol.iterator, next and add with
+    // no call in the source; a listing of one must say which kind of list it reads, and every member that kind
+    // reaches must be in the table the guard compares with a fresh realm, or a replaced one would go unseen.
+    const problems: string[] = []
+    for (const [key, entry] of Object.entries(INVENTORY)) {
+      const [, kind, name] = key.split('|') as [string, string, string]
+      const iterating = kind === 'iterate' || ITERATING_CALLS.includes(`${kind}|${name}`)
+      if (!iterating) continue
+      if (entry.class !== 'guarded' && entry.class !== 'inert') problems.push(`${key}: class`)
+      if (entry.class !== 'guarded') continue
+      if ((entry.iterates ?? []).length === 0) problems.push(`${key}: no iterates`)
+      for (const list of entry.iterates ?? []) {
+        const members = ITERATES[list]
+        if (members === undefined) problems.push(`${key}: unknown list ${list}`)
+        else
+          for (const [expression, member] of members)
+            if (!tableHas(expression, member))
+              problems.push(`${key}: ${expression} ${String(member)} not in the table`)
+      }
+    }
+    expect(problems).toEqual([])
+  })
+
+  it('references every member of the table from a guarded call or a guarded iteration', () => {
+    // Scenario: a member nothing reaches only costs bytes and a refusal; every one is reached by a call that is
+    // listed as guarded, or by an iteration that names the list it reads.
+    const reached = new Set<string>()
+    for (const [key, entry] of Object.entries(INVENTORY)) {
+      if (entry.class !== 'guarded') continue
+      const [, kind, name] = key.split('|') as [string, string, string]
+      for (const list of entry.iterates ?? [])
+        for (const [expression, member] of ITERATES[list] ?? [])
+          reached.add(`${expression}|${String(member)}`)
+      if (kind === 'static') {
+        const [owner, member] = name.split('.') as [string, string]
+        reached.add(`${owner}|${member}`)
+      } else if (kind === 'method')
+        for (const [expression, names] of GUARDED_BUILTINS)
+          if (names.includes(name.slice(1))) reached.add(`${expression}|${name.slice(1)}`)
+    }
+    const unreached = GUARDED_BUILTINS.flatMap(([expression, names]) =>
+      names.map((member) => `${expression}|${String(member)}`).filter((ref) => !reached.has(ref))
+    )
+    expect(unreached).toEqual([])
   })
 })

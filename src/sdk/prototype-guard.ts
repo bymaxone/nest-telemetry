@@ -11,6 +11,7 @@ import {
   create,
   getOwnPropertyDescriptor,
   getOwnPropertyDescriptors,
+  getPrototypeOf,
   hasOwn,
   ownKeys,
   rootPrototype,
@@ -18,17 +19,30 @@ import {
 } from './primordials'
 
 /** An expression that reads one built-in object in a realm, and the names of it that are compared. */
-type GuardedRow = readonly [string, readonly string[]]
+type GuardedRow = readonly [string, readonly (string | symbol)[]]
 
 /**
- * The built-ins, besides `Object.prototype`, whose named members the SDK calls on a decision path: each row is an
- * expression that reads the object in a realm, and the names of it that are compared with a fresh realm's.
- * A member that the host replaced after this module loaded is counted like a changed name of the root prototype.
+ * The built-ins, besides `Object.prototype`, whose named members the SDK calls on a decision path, by a call or by
+ * iterating (a `for...of`, a spread, a destructuring and `new Set(list)` reach `Symbol.iterator`, `next` and `add`
+ * with no call in the source): each row is an expression that reads the object in a realm, and the names of it that
+ * are compared with a fresh realm's. A member that the host replaced after this module loaded is counted like a
+ * changed name of the root prototype.
  */
 export const GUARDED_BUILTINS: readonly GuardedRow[] = [
   [
     'Array.prototype',
-    ['filter', 'find', 'flatMap', 'includes', 'indexOf', 'map', 'push', 'slice', 'some']
+    [
+      'filter',
+      'find',
+      'flatMap',
+      'includes',
+      'indexOf',
+      'map',
+      'push',
+      'slice',
+      'some',
+      Symbol.iterator
+    ]
   ],
   [
     'String.prototype',
@@ -47,7 +61,7 @@ export const GUARDED_BUILTINS: readonly GuardedRow[] = [
     ]
   ],
   ['Map.prototype', ['get', 'has']],
-  ['Set.prototype', ['has']],
+  ['Set.prototype', ['add', 'has', Symbol.iterator]],
   ['RegExp.prototype', ['test']],
   ['Number.prototype', ['toString']],
   ['Array', ['isArray']],
@@ -55,11 +69,17 @@ export const GUARDED_BUILTINS: readonly GuardedRow[] = [
   ['Number', ['isFinite']],
   ['Object', ['assign', 'create', 'entries', 'fromEntries', 'keys', 'setPrototypeOf', 'values']],
   ['Reflect', ['deleteProperty', 'get', 'set']],
-  ['Symbol', ['for']]
+  ['Symbol', ['for']],
+  ['Object.getPrototypeOf([][Symbol.iterator]())', ['next']],
+  ['Object.getPrototypeOf(new Set()[Symbol.iterator]())', ['next']]
 ]
 
 /** The expression that reads every guarded object of a realm, in the order of {@link GUARDED_BUILTINS}. */
 const EXPRESSION = `[${GUARDED_BUILTINS.map(([expression]) => expression).join(', ')}]`
+
+/** The prototypes of the iterators of an array and of a set, read when this module loads: no name reaches them. */
+const ARRAY_ITERATOR = getPrototypeOf([][Symbol.iterator]()) as object
+const SET_ITERATOR = getPrototypeOf(new Set()[Symbol.iterator]()) as object
 
 /**
  * Reads the guarded objects of this realm, in the order of {@link GUARDED_BUILTINS}, by the names the code that
@@ -80,7 +100,9 @@ export function readBuiltins(): readonly object[] {
     Number,
     Object,
     Reflect,
-    Symbol
+    Symbol,
+    ARRAY_ITERATOR,
+    SET_ITERATOR
   ]
 }
 
@@ -97,7 +119,7 @@ function describeAll(objects: readonly object[]): Record<number, Descriptors> {
     const names = (GUARDED_BUILTINS[at] as GuardedRow)[1]
     const row = create(null) as Descriptors
     for (let each = 0; each < names.length; each += 1) {
-      const name = names[each] as string
+      const name = names[each] as string | symbol
       const descriptor = getOwnPropertyDescriptor(objects[at] as object, name)
       if (descriptor !== undefined) row[name] = descriptor
     }
@@ -285,7 +307,7 @@ function changedBuiltins(
     for (let at = 0; at < GUARDED_BUILTINS.length; at += 1) {
       const names = (GUARDED_BUILTINS[at] as GuardedRow)[1]
       for (let each = 0; each < names.length; each += 1) {
-        const name = names[each] as string
+        const name = names[each] as string | symbol
         const same = unchanged(
           name,
           now[at] as Descriptors,

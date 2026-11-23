@@ -66,7 +66,8 @@ describe('startTelemetry beside a polluted Object.prototype', () => {
           (options as { code?: string } | undefined)?.code === 'BYMAX_TELEMETRY_REALM_POLLUTED'
       )
       expect(refused).toHaveLength(1)
-      expect(String(refused[0]?.[0])).toContain('holds 1 name(s)')
+      expect(String(refused[0]?.[0])).toContain("differs from the engine's in 1 name(s)")
+      expect(String(refused[0]?.[0])).toContain('Object.prototype or a built-in')
       expect(refused[0]?.[1]).toEqual({
         type: 'SecurityWarning',
         code: 'BYMAX_TELEMETRY_REALM_POLLUTED',

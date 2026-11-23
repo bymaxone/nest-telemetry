@@ -27,7 +27,7 @@ afterAll(() => {
  * runs the check while the target is replaced, restores it, and reports only after all are restored.
  */
 const CHILD = `
-const { GUARDED_BUILTINS, pollutedNames, guardExports, settleOptions, warnOnExportFailure, exportFailureCount, registerWarningSink, clearWarningSink, describeFailure } = require(process.env.BUNDLE)
+const { GUARDED_BUILTINS, buildRedactedQueryParams, pollutedNames, guardExports, settleOptions, warnOnExportFailure, exportFailureCount, registerWarningSink, clearWarningSink, describeFailure } = require(process.env.BUNDLE)
 const defineProperty = Object.defineProperty
 const ownKeys = Reflect.ownKeys
 const getDescriptor = Object.getOwnPropertyDescriptor
@@ -108,7 +108,11 @@ const liveCheck = () => {
 }
 
 const targets = []
+const arrayIterator = Object.getPrototypeOf([][Symbol.iterator]())
+const setIterator = Object.getPrototypeOf(new Set()[Symbol.iterator]())
 const groups = [
+  ['ArrayIteratorPrototype', arrayIterator, 'Object.getPrototypeOf([][Symbol.iterator]())'],
+  ['SetIteratorPrototype', setIterator, 'Object.getPrototypeOf(new Set()[Symbol.iterator]())'],
   ['Object', Object], ['Reflect', Reflect], ['Function.prototype', Function.prototype],
   ['Array.prototype', Array.prototype], ['Array', Array], ['Set.prototype', Set.prototype], ['Set', Set],
   ['Map.prototype', Map.prototype], ['WeakMap.prototype', WeakMap.prototype], ['Symbol', Symbol],
@@ -118,14 +122,14 @@ const groups = [
   ['Boolean.prototype', Boolean.prototype], ['Number.prototype', Number.prototype], ['globalThis', globalThis],
   ['performance', performance]
 ]
-for (const [label, group] of groups) {
+for (const [label, group, expression] of groups) {
   for (const key of ownKeys(group)) {
     const descriptor = getDescriptor(group, key)
     if (!descriptor.configurable) continue
     const isFunction = typeof descriptor.value === 'function'
     if (!isFunction && descriptor.get === undefined) continue
     if (group === globalThis && !/^[A-Z]/.test(String(key)) && key !== 'Reflect' && key !== 'performance') continue
-    targets.push({ label: label + '.' + String(key), group, key, descriptor, isFunction })
+    targets.push({ label: label + '.' + String(key), owner: expression ?? label, group, key, descriptor, isFunction })
   }
 }
 
@@ -143,24 +147,57 @@ const run = (check) => {
     const calls = called
     defineProperty(group, key, descriptor)
     delete root.zzplanted
-    results.push({ label: target.label, calls, threw, out })
+    results.push({ label: target.label, owner: target.owner, key, calls, threw, out })
   }
   return results
 }
 // The members the guard compares with a fresh realm: replacing one is a refusal, the family baseline (DEC-213
 // type B). Promise, timers, Date and the others a host wraps by design are not in the table, and still export.
-const guarded = (label) => {
-  const at = label.lastIndexOf('.')
-  const owner = label.slice(0, at)
-  const name = label.slice(at + 1)
-  if (owner === 'globalThis') return GUARDED_BUILTINS.some(([expression]) => expression === name || expression === name + '.prototype')
-  return GUARDED_BUILTINS.some(([expression, names]) => expression === owner && names.includes(name))
+// The members that decision paths reach with no call in the source, by iterating: a for...of, a spread, a
+// destructuring or new Set(list). Named here, apart from the table, so a row that fell out of the table fails.
+const ITERATED = [
+  'ArrayIteratorPrototype.next', 'Array.prototype.Symbol(Symbol.iterator)', 'SetIteratorPrototype.next',
+  'Set.prototype.Symbol(Symbol.iterator)', 'Set.prototype.add'
+]
+const guarded = (r) => {
+  if (ITERATED.includes(r.label)) return true
+  if (r.owner === 'globalThis') return GUARDED_BUILTINS.some(([expression]) => expression === String(r.key) || expression === String(r.key) + '.prototype')
+  return GUARDED_BUILTINS.some(([expression, names]) => expression === r.owner && names.includes(r.key))
 }
-const wrong = (r) => guarded(r.label)
+const wrong = (r) => guarded(r)
   ? r.threw || r.calls !== 0 || r.out.clean === 0 || r.out.cleanSent !== 0 || r.out.cleanCode !== 1 ||
     r.out.planted < 1 || r.out.sent !== 0 || r.out.code !== 1
   : r.threw || r.calls !== 0 || r.out.clean !== 0 || r.out.cleanSent !== 1 || r.out.cleanCode !== 0 ||
     r.out.planted !== 1 || r.out.sent !== 0 || r.out.code !== 1 || r.out.headers !== 7 || r.out.refused !== 1
+// What an iteration that was emptied does to redaction, and what the guard does about it: the list of redacted
+// query parameters comes back empty, so the guard must count it and a wrapped exporter must drop its batch.
+const iterationCases = [
+  ['ArrayIteratorPrototype.next', arrayIterator, 'next', () => ({ done: true })],
+  ['Array.prototype[Symbol.iterator]', Array.prototype, Symbol.iterator, () => ({ next: () => ({ done: true }) })],
+  ['SetIteratorPrototype.next', setIterator, 'next', () => ({ done: true })]
+]
+const iteration = []
+for (const [label, group, key, replacement] of iterationCases) {
+  const descriptor = getDescriptor(group, key)
+  const out = { label, params: -1, counted: -1, sent: -1, code: -1 }
+  class Base {
+    _delegate = { _transport: { _transport: { send: () => undefined, _parameters: { headers: () => 7 } } } }
+    export(items, done) { out.sent = out.sent + 1; done({ code: 0 }) }
+  }
+  class Sub extends Base {}
+  const exporter = new Sub()
+  guardExports(exporter)
+  out.sent = 0
+  defineProperty(group, key, { ...descriptor, value: replacement })
+  try {
+    out.params = buildRedactedQueryParams(['x']).length
+    out.counted = pollutedNames()
+    exporter.export([1], (r) => { out.code = r.code })
+  } finally {
+    defineProperty(group, key, descriptor)
+  }
+  iteration.push(out)
+}
 // What naming a failed start must do with one target replaced: the code and the package its message names.
 const describeCheck = () => ({
   named: describeFailure({ code: 'ERR_X', message: 'Cannot find @opentelemetry/sdk-node' }) === 'code ERR_X, package @opentelemetry/sdk-node' ? 1 : 0
@@ -172,7 +209,7 @@ const real = run(guardCheck).filter(wrong).map((r) => r.label)
 const options = run(optionsCheck).filter(wrongOptions).map((r) => r.label)
 const failure = run(failureCheck).filter(wrongFailure).map((r) => r.label)
 const control = run(liveCheck).filter((r) => r.calls !== 0).map((r) => r.label)
-log(stringify({ targets: targets.length, wrong: real, options, failure, described, control }))
+log(stringify({ targets: targets.length, wrong: real, options, failure, described, control, iteration }))
 `
 
 describe('a built-in that something replaces after the library loaded', () => {
@@ -192,6 +229,7 @@ describe('a built-in that something replaces after the library loaded', () => {
       failure: string[]
       described: string[]
       control: string[]
+      iteration: { label: string; params: number; counted: number; sent: number; code: number }[]
     }
     expect({
       wrong: report.wrong,
@@ -201,6 +239,23 @@ describe('a built-in that something replaces after the library loaded', () => {
     }).toEqual({ wrong: [], options: [], failure: [], described: [] })
     expect(report.targets).toBeGreaterThan(300)
     expect(result.code).toBe(0)
+  }, 90_000)
+
+  it('refuses a batch while an iterator that redaction relies on answers nothing, with the redacted list already empty', async () => {
+    // Scenario: with the next of an array iterator, the iterator of an array or the next of a set iterator
+    // answering done, buildRedactedQueryParams returns no name (the redaction of a query would be skipped), so
+    // the guard must count it and a wrapped exporter must drop its batch with no send.
+    const result = await runInRealProcess(CHILD, { BUNDLE: bundle.file }, 60_000)
+    const report = JSON.parse(result.lines[result.lines.length - 1] ?? '{}') as {
+      iteration: { label: string; params: number; counted: number; sent: number; code: number }[]
+    }
+    expect(report.iteration.map((r) => [r.label, r.params, r.counted > 0, r.sent, r.code])).toEqual(
+      [
+        ['ArrayIteratorPrototype.next', 0, true, 0, 1],
+        ['Array.prototype[Symbol.iterator]', 0, true, 0, 1],
+        ['SetIteratorPrototype.next', 0, true, 0, 1]
+      ]
+    )
   }, 90_000)
 
   it('is seen by the harness when a check does call it, so a clean report means something', async () => {

@@ -78,7 +78,7 @@ describe('a transport behind a guarded exporter', () => {
     const refused = (await inner.send('later', 5)) as { status: string; error: Error }
     expect(refused.status).toBe('failure')
     expect(refused.error.message).toBe(
-      'The Object.prototype of this process is polluted, so the batch was dropped.'
+      'Object.prototype or a built-in of this process was changed, so the batch was dropped.'
     )
     expect(sends).toHaveLength(1)
   })
@@ -312,7 +312,7 @@ describe('a transport behind a guarded exporter', () => {
         return { authorization: 'x' }
       })
       await expect(waiting()).rejects.toThrow(
-        'The Object.prototype of this process is polluted, so the batch was dropped.'
+        'Object.prototype or a built-in of this process was changed, so the batch was dropped.'
       )
     })
 

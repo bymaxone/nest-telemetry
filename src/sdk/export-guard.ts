@@ -32,11 +32,12 @@ const MARK = Symbol.for('@bymax-one/nest-telemetry/export-guard')
 const ARMED = Symbol.for('@bymax-one/nest-telemetry/export-guard/transport')
 
 /** Why a batch is dropped, shared by the check at the export and the one before each request. */
-const DROPPED = 'The Object.prototype of this process is polluted, so the batch was dropped.'
+const DROPPED =
+  'Object.prototype or a built-in of this process was changed, so the batch was dropped.'
 
 /**
  * The error a dropped batch fails with: its own `code` names the cause, so the warning that reports the
- * failed export says the prototype is polluted instead of blaming the collector. The descriptor has no
+ * failed export names the change instead of blaming the collector. The descriptor has no
  * prototype, so a name planted on the root prototype cannot make the definition throw.
  *
  * @returns An error with the message {@link DROPPED} and an own, read-only `code`.
