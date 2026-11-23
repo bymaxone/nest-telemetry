@@ -77,6 +77,38 @@ describe('guardExports', () => {
     }
   })
 
+  it('defines every wrap and mark with a descriptor that a name planted on the root prototype cannot change', () => {
+    // Scenario: an accessor planted on Object.prototype would turn a descriptor literal into an invalid one
+    // (a value beside a getter) and make the definition throw, at the wrap and at each arming of a transport.
+    const sends: unknown[] = []
+    const transport = {
+      send: (data: unknown): Promise<unknown> => {
+        sends.push(data)
+        return Promise.resolve({ status: 'success' })
+      },
+      _parameters: { headers: (): Record<string, string> => ({}) }
+    }
+    class Base {
+      export(_items: unknown, done: Done): void {
+        done({ code: 0 })
+      }
+    }
+    class Sub extends Base {
+      _delegate = { _transport: transport }
+    }
+    const exporter = new Sub()
+    Object.defineProperty(Object.prototype, 'get', { value: () => 1, configurable: true })
+    try {
+      expect(() => guardExports(exporter)).not.toThrow()
+      const results: { code: number }[] = []
+      expect(() => exporter.export(['a'], (result) => results.push(result))).not.toThrow()
+      expect(results).toEqual([{ code: 0 }])
+      expect(Object.getOwnPropertyDescriptor(transport, 'send')?.writable).toBe(true)
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'get')
+    }
+  })
+
   it('wraps a base class once, however many exporters ask, and reaches every exporter that extends it', () => {
     // Scenario: a second exporter of the same base, and a second call for the same one, do not stack a wrapper:
     // one export asks the guard once.

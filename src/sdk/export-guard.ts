@@ -150,19 +150,21 @@ function armTransport(exporter: unknown): void {
   if (transport === undefined || hasOwn(transport, ARMED)) return
   const send = transport.send
   defineProperty(transport, 'send', {
+    __proto__: null,
     configurable: true,
     writable: true,
     value: async function (this: unknown, data: unknown, timeoutMillis: unknown): Promise<unknown> {
       if (pollutedNames() > 0) return { status: 'failure', error: dropped() }
       return apply(send, this, [data, timeoutMillis])
     }
-  })
+  } as PropertyDescriptor)
   const parameters = own(transport, '_parameters') as Record<string, unknown> | undefined
   for (let at = 0; at < PROVIDERS.length; at += 1) {
     const name = PROVIDERS[at] as (typeof PROVIDERS)[number]
     const provider = own(parameters, name)
     if (typeof provider !== 'function') continue
     defineProperty(parameters, name, {
+      __proto__: null,
       configurable: true,
       writable: true,
       enumerable: true,
@@ -170,9 +172,9 @@ function armTransport(exporter: unknown): void {
         if (pollutedNames() > 0) throw dropped()
         return refuseIfPolluted(apply(provider, this, args))
       }
-    })
+    } as PropertyDescriptor)
   }
-  defineProperty(transport, ARMED, { value: true })
+  defineProperty(transport, ARMED, { __proto__: null, value: true } as PropertyDescriptor)
 }
 
 /**
@@ -189,6 +191,7 @@ export function guardExports(exporter: object): void {
   }
   const original = base.export
   defineProperty(base, 'export', {
+    __proto__: null,
     configurable: true,
     writable: true,
     value: function (
@@ -203,6 +206,6 @@ export function guardExports(exporter: object): void {
       armTransport(this)
       apply(original, this, [items, done])
     }
-  })
-  defineProperty(base, MARK, { value: true })
+  } as PropertyDescriptor)
+  defineProperty(base, MARK, { __proto__: null, value: true } as PropertyDescriptor)
 }
