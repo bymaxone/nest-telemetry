@@ -403,7 +403,8 @@ function detach(value: unknown, seen: { count: number }, depth: number): unknown
 
 /**
  * Whether a prototype holds a setting that a copy of the own keys of its instance would drop: an enumerable
- * key, or a getter or a setter, which a class defines without making it enumerable. A method is not a setting.
+ * key, or a getter or a setter, which a class defines without making it enumerable. A method is not a setting, and the
+ * accessor `__proto__` of the root prototype of another realm is not one.
  *
  * @param holder - A prototype of the value, other than the root of this realm.
  * @returns `true` when the holder has one.
@@ -414,8 +415,10 @@ function holdsSetting(holder: object): boolean {
   for (let at = 0; at < names.length; at += 1) {
     // An accessor has its own `get`, even when it is undefined; a data property has none, and a name planted on
     // the root prototype must not be read as one.
-    const descriptor = getOwnPropertyDescriptor(holder, names[at] as string | symbol) as object
-    if (hasOwn(descriptor, 'get')) return true
+    const name = names[at] as string | symbol
+    // The root prototype of another realm owns the accessor `__proto__`, and a map made there is no class.
+    if (name === '__proto__') continue
+    if (hasOwn(getOwnPropertyDescriptor(holder, name) as object, 'get')) return true
   }
   return false
 }

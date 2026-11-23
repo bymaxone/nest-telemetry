@@ -3,6 +3,7 @@
  * and the copies of a list and of a map.
  * @layer sdk
  */
+import { runInNewContext } from 'node:vm'
 import {
   MAX_OPTION_ENTRIES,
   TelemetryOptionError,
@@ -305,6 +306,13 @@ describe('settleOverrides, for a map or an entry whose keys sit on a prototype w
       pino: { enabled: false }
     })
     expect(() => settleOverrides('x', new Settings() as object)).not.toThrow()
+  })
+
+  it('accepts a map and an entry made in another realm, whose Object.prototype owns the accessor __proto__', () => {
+    // Scenario: a plain object from vm.runInNewContext has that realm's root prototype as its parent, which owns
+    // the non-enumerable accessor `__proto__`; it is the root of a realm and not a class, so it is not a setting.
+    const map = runInNewContext('({ http: { enabled: false } })') as object
+    expect(settleOverrides('x', map)).toEqual({ http: { enabled: false } })
   })
 
   it.each([

@@ -3,6 +3,7 @@
  * anything, names the option, and never repeats the value it was given.
  * @layer e2e
  */
+import { runInNewContext } from 'node:vm'
 import { ignorePaths, shutdownTelemetry, startTelemetry } from '@bymax-one/nest-telemetry'
 import type { TelemetryOptions } from '@bymax-one/nest-telemetry'
 
@@ -252,6 +253,14 @@ describe('startTelemetry in the real library, for an option of the wrong kind', 
       }
     }
     const overrides = { pino: new Entry() } as never
+    const handle = await startTelemetry({ instrumentations: { overrides } })
+    expect(handle.enabled).toBe(true)
+  })
+
+  it('starts with an overrides map made in another realm', async () => {
+    // Scenario: a plain object of vm.runInNewContext has that realm's root prototype as its parent, which owns the
+    // accessor `__proto__`; it is no class, so the map is read as written and the start goes on.
+    const overrides = runInNewContext('({ pino: { enabled: false } })') as never
     const handle = await startTelemetry({ instrumentations: { overrides } })
     expect(handle.enabled).toBe(true)
   })
