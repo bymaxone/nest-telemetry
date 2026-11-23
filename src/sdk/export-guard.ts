@@ -90,7 +90,7 @@ function innermostTransport(exporter: unknown): Transport | undefined {
     : undefined
 }
 
-/** Takes the rejection of a promise that the guard dropped. */
+/** Takes the outcome of a promise that the guard dropped, so neither a rejection nor a value is passed on. */
 function ignore(): void {}
 
 /**
@@ -104,9 +104,10 @@ function ignore(): void {}
 function refuseIfPolluted(answer: unknown): unknown {
   // Before anything is read from the answer: reading its `then` could run a getter that a polluted root prototype holds.
   if (pollutedNames() > 0) {
-    // A promise that is dropped must not end the host as an unhandled rejection, and nothing may be read from it
-    // to find out: the slot says whether it is one.
-    if (isPromise(answer)) apply(promiseThen, answer, [undefined, ignore])
+    // A promise that is dropped must not end the host as an unhandled rejection, whether it rejects or fulfils (a
+    // value passed on would be read for a then), and nothing may be read from it to find out: the slot says whether
+    // it is one.
+    if (isPromise(answer)) apply(promiseThen, answer, [ignore, ignore])
     throw new ErrorClass(DROPPED)
   }
   if (
