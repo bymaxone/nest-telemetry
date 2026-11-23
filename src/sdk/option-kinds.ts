@@ -61,6 +61,7 @@ const isIndex = (key: string): boolean =>
  */
 function hasIndexKey(list: object): boolean {
   const own = keys(list)
+  // Stryker disable next-line EqualityOperator: one step past the end reads `undefined`, which `isIndex` rejects, so the result is the same
   for (let at = 0; at < own.length; at += 1) {
     if (isIndex(own[at] as string)) return true
   }
