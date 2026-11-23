@@ -26,8 +26,7 @@ heading here.
   library read once when it loaded.
 - **A built-in that the library's own checks rely on, replaced after it loaded, now counts as a pollution.** The
   check of the process compared only `Object.prototype` with a fresh realm. It now also compares the members of the
-  built-ins that the guard, the export wrap and the option settling call, with what a `for...of`, a spread, a
-  destructuring and `new Set(list)` reach and no call shows (the iterators of an array and of a set, and `Set.prototype.add`): one that is replaced, deleted or swapped for a function of another
+  built-ins that the guard, the export wrap and the option settling call: one that is replaced, deleted or swapped for a function of another
   realm counts one, so the start answers with the disabled handle and an export drops its batch, and a check that
   cannot read them counts one rather than zero. `Promise`, its `then`, `catch` and `finally`, timers, `Date`,
   `EventEmitter`, `http`, `fetch` and `process` are not compared: tracing agents and context managers wrap them by
