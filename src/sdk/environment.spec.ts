@@ -414,3 +414,16 @@ describe('a variable of the environment that is not a string', () => {
     expect(readTelemetryEnvironment({ OTEL_SERVICE_NAME: 'api' }).serviceName).toBe('api')
   })
 })
+
+describe('a variable that only a prototype with no prototype holds', () => {
+  it('is refused, naming the env option, and not dropped in silence', () => {
+    // Scenario: the host's variable on a parent with no prototype is theirs, so the start fails and names
+    // the option to set it on, as it does for the other options.
+    const parent = Object.create(null, {
+      OTEL_SERVICE_NAME: { value: 'api', enumerable: true }
+    }) as object
+    expect(() => readTelemetryEnvironment(Object.create(parent) as NodeJS.ProcessEnv)).toThrow(
+      expect.objectContaining({ option: 'env' })
+    )
+  })
+})

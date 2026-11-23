@@ -67,6 +67,9 @@ describe('warnOnExportFailure', () => {
       detail: ''
     })
     expect(emitWarning.mock.calls[0]?.[0]).toContain('ECONNREFUSED')
+    const text = emitWarning.mock.calls[0]?.[0] as string
+    expect(text).toContain('Check that the collector is reachable')
+    expect(text).not.toContain('Object.prototype')
   })
 
   it('says the prototype is polluted, not that the collector is down, when the guard dropped the batch', () => {

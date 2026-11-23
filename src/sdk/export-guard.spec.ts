@@ -51,7 +51,7 @@ describe('guardExports', () => {
     )
   })
 
-  it('gives the dropped batch an own code that names the pollution, even when a setter and a read-only code are planted', () => {
+  it('gives the dropped batch an own code that names the pollution, even when a setter for code and a property named get are planted', () => {
     // Scenario: the error of a dropped batch carries the code that lets the failure warning name the
     // cause; the code is defined, not assigned, so a planted setter or descriptor name cannot stop it.
     const { make } = exporters()
@@ -78,8 +78,9 @@ describe('guardExports', () => {
   })
 
   it('defines every wrap and mark with a descriptor that a name planted on the root prototype cannot change', () => {
-    // Scenario: an accessor planted on Object.prototype would turn a descriptor literal into an invalid one
-    // (a value beside a getter) and make the definition throw, at the wrap and at each arming of a transport.
+    // Scenario: a property named get planted on Object.prototype is read as the getter of a descriptor
+    // literal, which then holds a value beside a getter and is invalid, so the definition would throw at
+    // the wrap and at each arming of a transport.
     const sends: unknown[] = []
     const transport = {
       send: (data: unknown): Promise<unknown> => {
