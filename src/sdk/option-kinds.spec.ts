@@ -361,6 +361,33 @@ describe('settleOverrides, for a map or an entry whose keys sit on a prototype w
     })
   })
 
+  it('accepts a map with no prototype made in another realm', () => {
+    // Scenario: Object.create(null) of another realm has no parent at all, so there is nothing to hold a setting.
+    const map = runInNewContext(
+      'Object.assign(Object.create(null), { http: { enabled: false } })'
+    ) as object
+    expect(settleOverrides('x', map)).toEqual({ http: { enabled: false } })
+  })
+
+  it.each([
+    [
+      'a class of another realm that holds a getter',
+      'class Entry { get enabled() { return false } }; ({ http: new Entry() })',
+      'instrumentations.overrides[]'
+    ],
+    [
+      'the root prototype of another realm with an enumerable key planted on it',
+      'Object.prototype.enabled = false; ({ http: {} })',
+      'x'
+    ]
+  ])('refuses %s, as one of this realm', (_where, source, option) => {
+    // Scenario: skipping the accessor `__proto__` of a foreign root must not hide a setting that a class of that
+    // realm, or a key planted there, holds: they are refused as in this realm.
+    expect(thrown(() => settleOverrides('x', runInNewContext(source) as object))).toMatchObject({
+      option
+    })
+  })
+
   it('does not refuse a Proxy whose answer for its prototype is a holder of settings', () => {
     // Scenario: a Proxy is read for what it answers, so what its prototype trap says is not judged.
     const bare = Object.create(null, { pino: { value: {}, enumerable: true } }) as object
