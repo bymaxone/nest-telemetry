@@ -159,6 +159,17 @@ describe('pollutedNames', () => {
   })
 })
 
+type GuardModule = typeof import('./prototype-guard')
+
+/** A copy of the module, loaded when this is called, so the test that asks for it is the one that reads its table. */
+async function loadGuard(): Promise<GuardModule> {
+  let loaded: GuardModule | undefined
+  await jest.isolateModulesAsync(async () => {
+    loaded = await import('./prototype-guard')
+  })
+  return loaded as GuardModule
+}
+
 /** One row per guarded member: the expression of its object, and its name. */
 const MEMBERS: (readonly [number, string, string | symbol])[] = GUARDED_BUILTINS.flatMap(
   ([expression, names], at) =>
@@ -264,6 +275,35 @@ describe('the built-ins that the SDK calls on a decision path', () => {
       expect(pollutedNames()).toBe(0)
     }
   )
+
+  it('counts every member of the table, in a copy of the module that this test loads', async () => {
+    // Scenario: the table is read when the module loads, so a copy loaded here is the one this test depends on; a
+    // row with a wrong name or object cannot be replaced and fails here, and a row that lost its names is seen by
+    // the number of members of each row, the one thing a sweep over the rows cannot see.
+    const guard = await loadGuard()
+    expect(guard.GUARDED_BUILTINS.map(([, names]) => names.length)).toEqual([
+      10, 11, 2, 3, 1, 1, 1, 1, 1, 7, 3, 1, 1, 1
+    ])
+    guard.GUARDED_BUILTINS.forEach(([, names], row) => {
+      names.forEach((name) => {
+        const target = guard.readBuiltins()[row] as object
+        const original = Object.getOwnPropertyDescriptor(target, name) as PropertyDescriptor
+        Object.defineProperty(target, name, {
+          value: function replaced(): void {},
+          writable: true,
+          configurable: true
+        })
+        let counted = 0
+        try {
+          counted = guard.pollutedNames()
+        } finally {
+          Object.defineProperty(target, name, original)
+        }
+        expect(counted).toBeGreaterThan(0)
+      })
+    })
+    expect(guard.pollutedNames()).toBe(0)
+  })
 
   it('counts the iteration that empties the list of redacted query parameters, before anything is read from it', () => {
     // Scenario: with the next of an array iterator answering done, buildRedactedQueryParams returns no name at all,

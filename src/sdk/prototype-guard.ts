@@ -118,6 +118,7 @@ function describeAll(objects: readonly object[]): Record<number, Descriptors> {
   for (let at = 0; at < GUARDED_BUILTINS.length; at += 1) {
     const names = (GUARDED_BUILTINS[at] as GuardedRow)[1]
     const row = create(null) as Descriptors
+    // Stryker disable next-line EqualityOperator: one step past the row reads a name that no guarded object owns, so no descriptor is kept and nothing changes.
     for (let each = 0; each < names.length; each += 1) {
       const name = names[each] as string | symbol
       const descriptor = getOwnPropertyDescriptor(objects[at] as object, name)
@@ -306,6 +307,7 @@ function changedBuiltins(
     const now = describeAll(readBuiltins())
     for (let at = 0; at < GUARDED_BUILTINS.length; at += 1) {
       const names = (GUARDED_BUILTINS[at] as GuardedRow)[1]
+      // Stryker disable next-line EqualityOperator: one step past the row compares a name that neither realm owns, so it is the same on both sides and nothing is counted.
       for (let each = 0; each < names.length; each += 1) {
         const name = names[each] as string | symbol
         const same = unchanged(

@@ -401,6 +401,17 @@ describe('settleOverrides, for a map or an entry whose keys sit on a prototype w
     })
   })
 
+  it('refuses a parent with no prototype that holds a getter of a setting, whatever the name', () => {
+    // Scenario: only the name `__proto__` is skipped on a holder with no prototype; a getter named `enabled` there
+    // is a setting that a copy of the own keys would drop in silence, so it is refused.
+    const holder = Object.create(null, { enabled: { get: (): boolean => false } }) as object
+    expect(
+      thrown(() => settleOverrides('x', { http: Object.create(holder) as object }))
+    ).toMatchObject({
+      option: 'instrumentations.overrides[]'
+    })
+  })
+
   it('does not refuse a Proxy whose answer for its prototype is a holder of settings', () => {
     // Scenario: a Proxy is read for what it answers, so what its prototype trap says is not judged.
     const bare = Object.create(null, { pino: { value: {}, enumerable: true } }) as object

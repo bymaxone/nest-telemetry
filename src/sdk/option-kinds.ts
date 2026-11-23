@@ -435,6 +435,7 @@ function holdsSetting(holder: object): boolean {
 function refuseAncestorKeys(path: string, value: object): void {
   if (isProxy(value)) return
   let holder: object | null = getPrototypeOf(value)
+  // Stryker disable next-line EqualityOperator: requireObject refuses a chain of MAX_CHAIN prototypes before this walk starts, so the walk never reaches the hop that the bound would add.
   for (let hops = 0; holder !== null && hops < MAX_CHAIN; hops++) {
     if (holder !== rootPrototype && holdsSetting(holder)) {
       throw new TelemetryOptionError(path, 'set on the object itself, not on a prototype')
