@@ -19,9 +19,10 @@ export interface Collector {
 /**
  * Starts a receiver on an ephemeral loopback port.
  *
+ * @param failFirst - How many of the first requests are answered `503`, which an exporter retries.
  * @returns The running receiver.
  */
-export async function startCollector(): Promise<Collector> {
+export async function startCollector(failFirst = 0): Promise<Collector> {
   const bodies: string[] = []
   const headers: IncomingHttpHeaders[] = []
   const server: Server = createServer((request, response) => {
@@ -33,6 +34,7 @@ export async function startCollector(): Promise<Collector> {
       bodies.push(data)
       headers.push(request.headers)
       response.setHeader('content-type', 'application/json')
+      if (bodies.length <= failFirst) response.statusCode = 503
       response.end('{}')
     })
   })

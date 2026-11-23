@@ -86,7 +86,8 @@ describe('span redaction through the real SDK', () => {
     expect(collector.bodies.join('\n')).toContain(SECRET)
     expect(emitWarning).toHaveBeenCalledWith(expect.stringContaining('URL redaction is disabled'), {
       type: 'SecurityWarning',
-      code: 'BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED'
+      code: 'BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED',
+      detail: ''
     })
   })
 })

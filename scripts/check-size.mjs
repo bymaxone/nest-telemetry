@@ -34,6 +34,19 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
+//   - 2026-11-22 (sdk and register, PM-granted): sdk 10,200 B measured, 10.00 KiB budget (10,240 B, 40 B of
+//     headroom, rounded up to the KiB column); register 10,353 B, 10.14 KiB budget (10,383 B, 30 B). The growth,
+//     about 0.07 KiB in each, is the second check after a provider of the transport has answered, which awaits an
+//     answer that is a promise and returns any other answer as it is.
+//   - 2026-11-22 (sdk and register, PM-granted): sdk 10,125 B measured, 9.92 KiB budget (10,158 B, 33 B of
+//     headroom, rounded up to the KiB column); register 10,287 B, 10.08 KiB budget (10,322 B, 35 B). The growth,
+//     about 0.33 KiB in each, is the check before every request attempt of an exporter's transport: the walk to the
+//     transport, the wrapped send and the wrapped header, metadata and credentials providers.
+//   - 2026-11-22 (sdk, register and nest, PM-granted): sdk 9,783 B measured, 9.59 KiB budget (9,820 B, 37 B of
+//     headroom, rounded up to the KiB column); register 9,938 B, 9.74 KiB budget (9,974 B, 36 B); nest 2,107 B,
+//     2.09 KiB budget (2,140 B, 33 B). The growth, about 0.17 KiB in sdk, 0.18 KiB in register and 0.05 KiB in nest, is
+//     the built-ins that the pollution guard and the export wrap read once when the module loads, the loops that
+//     replace their iterators, and the helper that gives every process warning an own detail.
 //   - 2026-11-22 (sdk and register, PM-granted): sdk 9,608 B measured, 9.42 KiB budget (9,646 B, 38 B of
 //     headroom); register 9,758 B, 9.56 KiB budget (9,789 B, 31 B). The growth, about 0.05 KiB in sdk and none in
 //     register, is the fresh realm built when the module loads, with its retry, and the count of one for a realm
@@ -115,9 +128,9 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
 //   met by shortening the text of a warning.
 const BUDGETS = [
-  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 9.42 * 1024 },
-  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 9.56 * 1024 },
-  { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.04 * 1024 },
+  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 10.0 * 1024 },
+  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 10.14 * 1024 },
+  { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.09 * 1024 },
   { name: 'observability (metrics)', path: 'dist/observability/index.mjs', brotli: 0.69 * 1024 }
 ]
 

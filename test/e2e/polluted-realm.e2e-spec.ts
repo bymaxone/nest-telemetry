@@ -42,6 +42,7 @@ const plant = (names) => {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 process.on('warning', (warning) => {
   if (warning.code === 'BYMAX_TELEMETRY_REALM_POLLUTED') console.log(JSON.stringify({ warning: warning.message, detail: warning.detail }))
+  if (warning.code === 'BYMAX_TELEMETRY_EXPORT_FAILED') console.log(JSON.stringify({ failed: { text: warning.message, ownDetail: Object.getOwnPropertyDescriptor(warning, 'detail')?.value } }))
 })
 // Hidden before the library loads: not enumerable, so the bundle's export helper still loads.
 for (const [name, value] of Object.entries(JSON.parse(process.env.PLANT_HIDDEN || '{}'))) {
@@ -52,8 +53,9 @@ const { trace } = require('@opentelemetry/api')
 for (const [name, value] of Object.entries(JSON.parse(process.env.PLANT_READONLY || '{}'))) {
   Object.defineProperty(Object.prototype, name, { value, enumerable: false, configurable: true, writable: false })
 }
-// Planted after the library is loaded: a bundle's own export helper walks its exports with for-in, so an
-// enumerable name planted before the load stops it from loading at all.
+// Planted after the library is loaded: the bundle this suite builds (no tsup config, so no tree shaking) walks its
+// exports with for-in, so an enumerable name planted before the load stops that bundle from loading. The
+// published dist has no such helper and loads either way; the guard then refuses the start, as for any other name.
 plant(JSON.parse(process.env.PLANT || '{}'))
 ;(async () => {
   const pending = startTelemetry({ serviceName: 'host-api', env: { OTEL_BSP_SCHEDULE_DELAY: '200' } })
@@ -87,6 +89,7 @@ async function runChild(environment: Record<string, string>): Promise<{
   warning?: string
   detail?: string
   done?: boolean
+  failed?: { text: string; ownDetail?: string }
   code: number | null
 }> {
   const result = await runInRealProcess(
@@ -100,6 +103,7 @@ async function runChild(environment: Record<string, string>): Promise<{
     warning?: string
     detail?: string
     done?: boolean
+    failed?: { text: string; ownDetail?: string }
     code: number | null
   }
 }
@@ -199,6 +203,19 @@ describe('a name that only the root prototype of the process holds, in a real pr
     expect(joined).toContain('"before"')
     expect(joined).not.toContain('"after"')
     for (const headers of collector.headers) expect(headers['x-planted']).toBeUndefined()
+    expect(answer.done).toBe(true)
+    expect(answer.code).toBe(0)
+  }, 60_000)
+
+  it('prints no planted detail, and does not throw, when a warning is emitted after a name was planted', async () => {
+    // Scenario: the export-failed warning is emitted after the start, with detail and ctor planted on the root
+    // prototype: the warning owns an empty detail, which Node prints in place of the planted one, so nothing planted
+    // is printed or read from the options, and the process ends normally.
+    const answer = await runChild({
+      PLANT_AFTER: JSON.stringify({ detail: 'SECRET-PLANTED', ctor: 'SECRET-CTOR' })
+    })
+    expect(answer.failed?.ownDetail).toBe('')
+    expect(JSON.stringify(answer.failed)).not.toContain('SECRET')
     expect(answer.done).toBe(true)
     expect(answer.code).toBe(0)
   }, 60_000)

@@ -7,6 +7,7 @@
  * registry symbol, as they share the handle. With no sink registered a warning is emitted as a
  * process warning.
  */
+import { emitWarning } from './emit-warning'
 
 /** A warning the library reports. */
 export interface TelemetryWarning {
@@ -70,5 +71,5 @@ export function reportWarning(warning: TelemetryWarning): void {
  * @param warning - The warning.
  */
 export function emitAsProcessWarning(warning: TelemetryWarning): void {
-  process.emitWarning(warning.text, { type: 'Warning', code: warning.code })
+  emitWarning(warning.text, { type: 'Warning', code: warning.code })
 }

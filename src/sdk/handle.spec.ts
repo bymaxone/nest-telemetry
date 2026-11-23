@@ -214,7 +214,8 @@ describe('createHandle shutdown deadline', () => {
       expect.stringContaining('did not finish within 5000 ms'),
       {
         type: 'Warning',
-        code: CODE
+        code: CODE,
+        detail: ''
       }
     )
   })

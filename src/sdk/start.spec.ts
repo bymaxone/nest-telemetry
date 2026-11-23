@@ -219,7 +219,8 @@ describe('startTelemetry', () => {
       expect(emitWarning).toHaveBeenCalledTimes(1)
       expect(emitWarning).toHaveBeenCalledWith(expect.stringContaining('No service name is set'), {
         type: 'Warning',
-        code: 'BYMAX_TELEMETRY_SERVICE_NAME_MISSING'
+        code: 'BYMAX_TELEMETRY_SERVICE_NAME_MISSING',
+        detail: ''
       })
       clearHandle()
       emitWarning.mockClear()
@@ -365,7 +366,8 @@ describe('startTelemetry', () => {
         expect.stringContaining('the options of this call were ignored'),
         {
           type: 'Warning',
-          code: IGNORED
+          code: IGNORED,
+          detail: ''
         }
       )
       expect(mockNodeSdk).toHaveBeenCalledTimes(1)
@@ -396,7 +398,8 @@ describe('startTelemetry', () => {
       expect(emitWarning).toHaveBeenCalledTimes(1)
       expect(emitWarning).toHaveBeenCalledWith(expect.any(String), {
         type: 'Warning',
-        code: IGNORED
+        code: IGNORED,
+        detail: ''
       })
     })
 
@@ -420,7 +423,8 @@ describe('startTelemetry', () => {
         expect.stringContaining('does not stop the running SDK'),
         {
           type: 'Warning',
-          code: IGNORED
+          code: IGNORED,
+          detail: ''
         }
       )
       expect(emitWarning.mock.calls[0]?.[0]).toContain('shutdownTelemetry()')
@@ -439,7 +443,8 @@ describe('startTelemetry', () => {
         expect.stringContaining('does not stop the running SDK'),
         {
           type: 'Warning',
-          code: IGNORED
+          code: IGNORED,
+          detail: ''
         }
       )
     })
@@ -456,7 +461,8 @@ describe('startTelemetry', () => {
         expect.stringContaining('the options of this call were ignored'),
         {
           type: 'Warning',
-          code: IGNORED
+          code: IGNORED,
+          detail: ''
         }
       )
       expect(currentHandle()).toBe(running)
@@ -498,7 +504,8 @@ describe('startTelemetry', () => {
       expect(emitWarning).toHaveBeenCalledTimes(1)
       expect(emitWarning).toHaveBeenCalledWith(expect.any(String), {
         type: 'Warning',
-        code: 'BYMAX_TELEMETRY_RESTART_UNSUPPORTED'
+        code: 'BYMAX_TELEMETRY_RESTART_UNSUPPORTED',
+        detail: ''
       })
       expect(mockNodeSdk).toHaveBeenCalledTimes(1)
     })
@@ -532,7 +539,7 @@ describe('startTelemetry', () => {
       expect(emitWarning).toHaveBeenCalledTimes(1)
       expect(emitWarning).toHaveBeenCalledWith(
         expect.stringContaining('cannot start again after it was shut down'),
-        { type: 'Warning', code: 'BYMAX_TELEMETRY_RESTART_UNSUPPORTED' }
+        { type: 'Warning', code: 'BYMAX_TELEMETRY_RESTART_UNSUPPORTED', detail: '' }
       )
       expect(mockNodeSdk).toHaveBeenCalledTimes(1)
     })
@@ -567,7 +574,8 @@ describe('startTelemetry', () => {
       config.exporter.export([], () => undefined)
       expect(emitWarning).toHaveBeenCalledWith(expect.stringContaining('otlp-http traces'), {
         type: 'Warning',
-        code: 'BYMAX_TELEMETRY_EXPORT_FAILED'
+        code: 'BYMAX_TELEMETRY_EXPORT_FAILED',
+        detail: ''
       })
     })
   })
@@ -589,7 +597,7 @@ describe('startTelemetry', () => {
       expect(emitWarning).toHaveBeenCalledTimes(1)
       expect(emitWarning).toHaveBeenCalledWith(
         expect.stringContaining('OTEL_BSP_SCHEDULE_DELAY is above 2147483647 ms'),
-        { type: 'Warning', code: 'BYMAX_TELEMETRY_BSP_VALUE_IGNORED' }
+        { type: 'Warning', code: 'BYMAX_TELEMETRY_BSP_VALUE_IGNORED', detail: '' }
       )
     })
   })

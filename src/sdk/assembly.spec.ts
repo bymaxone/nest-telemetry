@@ -429,7 +429,7 @@ describe('warnAboutUnsafeOptions', () => {
     expect(emitWarning).toHaveBeenCalledTimes(1)
     expect(emitWarning).toHaveBeenCalledWith(
       'URL redaction is disabled: url.query, url.full, http.url and http.target are exported as recorded.',
-      { type: 'SecurityWarning', code: 'BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED' }
+      { type: 'SecurityWarning', code: 'BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED', detail: '' }
     )
   })
 
@@ -439,7 +439,7 @@ describe('warnAboutUnsafeOptions', () => {
     expect(emitWarning).toHaveBeenCalledTimes(1)
     expect(emitWarning).toHaveBeenCalledWith(
       'Host id redaction is disabled: host.id, the machine identifier, is exported in the resource, and it identifies the machine to every collector and backend.',
-      { type: 'SecurityWarning', code: 'BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED' }
+      { type: 'SecurityWarning', code: 'BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED', detail: '' }
     )
   })
 
@@ -449,7 +449,7 @@ describe('warnAboutUnsafeOptions', () => {
     expect(emitWarning).toHaveBeenCalledTimes(1)
     expect(emitWarning).toHaveBeenCalledWith(
       'Redis argument redaction is disabled: command arguments, EVAL and EVALSHA payloads included, are exported in db.query.text.',
-      { type: 'SecurityWarning', code: 'BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED' }
+      { type: 'SecurityWarning', code: 'BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED', detail: '' }
     )
   })
 
@@ -459,7 +459,7 @@ describe('warnAboutUnsafeOptions', () => {
     expect(emitWarning).toHaveBeenCalledTimes(1)
     expect(emitWarning).toHaveBeenCalledWith(
       'Process command-line redaction is disabled: process.command_args, process.command_line and process.command are exported in the resource, and command-line arguments can carry secrets.',
-      { type: 'SecurityWarning', code: 'BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED' }
+      { type: 'SecurityWarning', code: 'BYMAX_TELEMETRY_UNSAFE_REDACTION_DISABLED', detail: '' }
     )
   })
 
@@ -490,7 +490,7 @@ describe('warnAboutMissingServiceName', () => {
     expect(emitWarning).toHaveBeenCalledTimes(1)
     expect(emitWarning).toHaveBeenCalledWith(
       'No service name is set, so spans are exported as unknown_service:node. Set OTEL_SERVICE_NAME or the serviceName option.',
-      { type: 'Warning', code: 'BYMAX_TELEMETRY_SERVICE_NAME_MISSING' }
+      { type: 'Warning', code: 'BYMAX_TELEMETRY_SERVICE_NAME_MISSING', detail: '' }
     )
   })
 
@@ -751,11 +751,11 @@ describe('warnAboutOversizedTimers', () => {
     expect(emitWarning).toHaveBeenCalledTimes(2)
     expect(emitWarning).toHaveBeenCalledWith(
       'OTEL_BSP_SCHEDULE_DELAY is above 2147483647 ms, which a timer cannot hold, so the default applies. Set a value up to 2147483647.',
-      { type: 'Warning', code: 'BYMAX_TELEMETRY_BSP_VALUE_IGNORED' }
+      { type: 'Warning', code: 'BYMAX_TELEMETRY_BSP_VALUE_IGNORED', detail: '' }
     )
     expect(emitWarning).toHaveBeenCalledWith(
       expect.stringContaining('OTEL_BSP_EXPORT_TIMEOUT is above 2147483647 ms'),
-      { type: 'Warning', code: 'BYMAX_TELEMETRY_BSP_VALUE_IGNORED' }
+      { type: 'Warning', code: 'BYMAX_TELEMETRY_BSP_VALUE_IGNORED', detail: '' }
     )
   })
 })

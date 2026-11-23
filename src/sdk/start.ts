@@ -27,6 +27,7 @@ import {
   warnAboutUnsafeOptions
 } from './assembly'
 import type { InstrumentationInputs, ServiceIdentity } from './assembly'
+import { emitWarning } from './emit-warning'
 import { readRatioSampler, readSamplerNearMiss, readTelemetryEnvironment } from './environment'
 import type { TelemetryEnvironment } from './environment'
 import { warnOnExportFailure } from './export-failure'
@@ -67,15 +68,10 @@ const DISABLED_HANDLE: TelemetryHandle = {
 function refusesPollution(): boolean {
   const polluted = pollutedNames()
   if (polluted === 0) return false
-  try {
-    process.emitWarning(
-      `Telemetry did not start: the Object.prototype of this process holds ${polluted} name(s) that the engine does not define, or holds them changed, and the SDK and its dependencies would read them as settings. Nothing is exported. Remove them, or start telemetry before they are added.`,
-      // An own detail: the warning is an ordinary object, so a `detail` planted on the root prototype would print.
-      { type: 'SecurityWarning', code: 'BYMAX_TELEMETRY_REALM_POLLUTED', detail: '' }
-    )
-  } catch {
-    // A warning that cannot be built, a read-only name on the root prototype, must not turn the refusal into a throw.
-  }
+  emitWarning(
+    `Telemetry did not start: the Object.prototype of this process holds ${polluted} name(s) that the engine does not define, or holds them changed, and the SDK and its dependencies would read them as settings. Nothing is exported. Remove them, or start telemetry before they are added.`,
+    { type: 'SecurityWarning', code: 'BYMAX_TELEMETRY_REALM_POLLUTED' }
+  )
   return true
 }
 
@@ -118,7 +114,7 @@ export async function startTelemetry(options: TelemetryOptions = {}): Promise<Te
     return joined
   }
   if (hasStopped()) {
-    process.emitWarning(RESTART_MESSAGE, {
+    emitWarning(RESTART_MESSAGE, {
       type: 'Warning',
       code: 'BYMAX_TELEMETRY_RESTART_UNSUPPORTED'
     })

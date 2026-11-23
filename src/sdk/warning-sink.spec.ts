@@ -29,7 +29,8 @@ describe('reportWarning', () => {
     expect(emitWarning).toHaveBeenCalledTimes(1)
     expect(emitWarning).toHaveBeenCalledWith(warning.text, {
       type: 'Warning',
-      code: 'BYMAX_TELEMETRY_EXPORT_FAILED'
+      code: 'BYMAX_TELEMETRY_EXPORT_FAILED',
+      detail: ''
     })
   })
 

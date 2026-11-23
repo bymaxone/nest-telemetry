@@ -70,7 +70,8 @@ describe('startTelemetry beside a polluted Object.prototype', () => {
       expect(refused[0]?.[1]).toEqual({
         type: 'SecurityWarning',
         code: 'BYMAX_TELEMETRY_REALM_POLLUTED',
-        detail: ''
+        detail: '',
+        ctor: undefined
       })
       // Refused before anything else runs: not even the warning about a service name that is not set.
       expect(emitWarning.mock.calls).toHaveLength(1)
@@ -80,9 +81,9 @@ describe('startTelemetry beside a polluted Object.prototype', () => {
     }
   })
 
-  it('hands the warning an own, empty detail, so a planted one is not shown', async () => {
-    // Scenario: process.emitWarning reads detail from the options it is given, which would inherit a planted
-    // one and show it; the options of the refusal have no such name, so the warning carries the count only.
+  it('hands the warning an own, empty detail and an own ctor, so a planted one is not shown', async () => {
+    // Scenario: process.emitWarning reads detail and ctor from the options it is given, which would inherit a
+    // planted one and show it; the options of the refusal own both, undefined, so the warning carries the count only.
     const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
     Object.defineProperty(Object.prototype, 'detail', {
       value: 'SECRET-PLANTED',
@@ -92,9 +93,11 @@ describe('startTelemetry beside a polluted Object.prototype', () => {
     })
     try {
       await startTelemetry({ env: {} })
-      const options = emitWarning.mock.calls[0]?.[1] as { detail?: string; code?: string }
-      expect(options.code).toBe('BYMAX_TELEMETRY_REALM_POLLUTED')
-      expect(options.detail).toBe('')
+      const options = emitWarning.mock.calls[0]?.[1] as object
+      expect(Object.hasOwn(options, 'detail')).toBe(true)
+      expect(Object.hasOwn(options, 'ctor')).toBe(true)
+      expect((options as { detail?: string }).detail).toBe('')
+      expect((options as { code?: string }).code).toBe('BYMAX_TELEMETRY_REALM_POLLUTED')
       expect(String(emitWarning.mock.calls[0]?.[0])).not.toContain('SECRET-PLANTED')
     } finally {
       delete (Object.prototype as unknown as Record<string, unknown>)['detail']
