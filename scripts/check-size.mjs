@@ -34,6 +34,10 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
+//   - 2026-11-23 (sdk and register, PM-granted): sdk 10,250 B measured, 10.04 KiB budget (10,281 B, 31 B of
+//     headroom, rounded up to the KiB column); register 10,415 B, 10.21 KiB budget (10,455 B, 40 B). The growth,
+//     about 0.05 KiB in sdk and 0.06 KiB in register, is the handler that takes the rejection of a promise the
+//     guard drops, with the two built-ins it needs read when the module loads.
 //   - 2026-11-22 (sdk and register, PM-granted): sdk 10,200 B measured, 10.00 KiB budget (10,240 B, 40 B of
 //     headroom, rounded up to the KiB column); register 10,353 B, 10.14 KiB budget (10,383 B, 30 B). The growth,
 //     about 0.07 KiB in each, is the second check after a provider of the transport has answered, which awaits an
@@ -128,8 +132,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
 //   met by shortening the text of a warning.
 const BUDGETS = [
-  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 10.0 * 1024 },
-  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 10.14 * 1024 },
+  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 10.04 * 1024 },
+  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 10.21 * 1024 },
   { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.09 * 1024 },
   { name: 'observability (metrics)', path: 'dist/observability/index.mjs', brotli: 0.69 * 1024 }
 ]

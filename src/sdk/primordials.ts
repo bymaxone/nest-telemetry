@@ -8,6 +8,7 @@
  * nothing. Everything the guard and the wrap use is read here, and they use no method of a prototype, no
  * iterator and no collection: the guard walks arrays by index and keeps its names on an object with no prototype.
  */
+import { types } from 'node:util'
 import { runInNewContext } from 'node:vm'
 
 /** `Object.create`. */
@@ -42,3 +43,9 @@ export const rootPrototype = Object.prototype
 
 /** `vm.runInNewContext`, which builds the fresh realm to compare with. */
 export const runInFreshRealm = runInNewContext
+
+/** `util.types.isPromise`, which reads the internal slot of a promise and no property of it. */
+export const isPromise = types.isPromise
+
+/** `Promise.prototype.then`, to attach a handler to a promise that the guard drops. */
+export const promiseThen = Promise.prototype.then
