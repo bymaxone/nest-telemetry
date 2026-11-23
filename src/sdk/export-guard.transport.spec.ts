@@ -332,16 +332,37 @@ describe('a transport behind a guarded exporter', () => {
 
     it('hands a synchronous answer back as it is, and refuses it when the provider itself planted a name', () => {
       // Scenario: a synchronous provider stays synchronous (gRPC reads its metadata and credentials that way), and
-      // an object whose then is not a function, null and a text are not waited for.
+      // an object whose then is not a function, a function that has a then, null and a text are not waited for.
       const plain = { then: 'not a function' }
       expect(armed(() => plain)()).toBe(plain)
       expect(armed(() => null)()).toBeNull()
       expect(armed(() => 'text')()).toBe('text')
+      const callable = Object.assign(() => 1, { then: (): undefined => undefined })
+      expect(armed(() => callable)()).toBe(callable)
       const planting = armed(() => {
         polluted.mockReturnValue(1)
         return 'answer'
       })
       expect(() => planting()).toThrow('so the batch was dropped')
+    })
+
+    it('refuses before it reads anything from the answer, so a getter named then is never run', () => {
+      // Scenario: a polluted root prototype can give an answer a getter called then; the check comes first, so the
+      // refusal is thrown and the getter is not run.
+      let reads = 0
+      const answer = {}
+      Object.defineProperty(answer, 'then', {
+        get: (): undefined => {
+          reads += 1
+          return undefined
+        }
+      })
+      const planting = armed(() => {
+        polluted.mockReturnValue(1)
+        return answer
+      })
+      expect(() => planting()).toThrow('so the batch was dropped')
+      expect(reads).toBe(0)
     })
   })
 })

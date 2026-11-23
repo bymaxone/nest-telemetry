@@ -90,13 +90,15 @@ function innermostTransport(exporter: unknown): Transport | undefined {
 
 /**
  * Checks again once a provider has answered: a provider the host supplied can wait, and a name planted while it
- * did would be read by the request that follows. An answer that is not a promise is checked at once and handed
- * back as it is, so a synchronous provider stays synchronous.
+ * did would be read by the request that follows. The check comes before anything is read from the answer, and an
+ * answer that is not a promise is handed back as it is, so a synchronous provider stays synchronous.
  *
  * @param answer - What the provider returned.
  * @returns The answer, or a promise of it that rejects when the prototype is polluted by then.
  */
 function refuseIfPolluted(answer: unknown): unknown {
+  // Before anything is read from the answer: reading its `then` could run a getter that a polluted root prototype holds.
+  if (pollutedNames() > 0) throw new ErrorClass(DROPPED)
   if (
     typeof answer === 'object' &&
     answer !== null &&
@@ -108,7 +110,6 @@ function refuseIfPolluted(answer: unknown): unknown {
       return value
     })()
   }
-  if (pollutedNames() > 0) throw new ErrorClass(DROPPED)
   return answer
 }
 
