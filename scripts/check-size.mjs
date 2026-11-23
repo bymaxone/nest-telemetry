@@ -34,13 +34,13 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
-//   - 2026-11-23 (sdk, register and the sdk CommonJS bundle, PM-granted at the measured head plus 64 B; PR C, the audit
-//     correction): sdk 11,360 B measured, 11.16 KiB budget (11,428 B, 68 B of headroom); register 11,518 B, 11.32 KiB
-//     budget (11,592 B, 74 B: 11.31 KiB would leave 63 B, so it is rounded up); sdk CommonJS 11,391 B, 11.19 KiB budget
-//     (11,458 B, 67 B). The growth over the entry below, about 110 B in each, is the rows for the iterators of an array
+//   - 2026-11-23 (sdk, register and the sdk CommonJS bundle, PM-granted at about the measured size plus 64 B):
+//     sdk 11,357 B measured, 11.16 KiB budget (11,428 B, 71 B of headroom); register 11,519 B, 11.32 KiB budget
+//     (11,592 B, 73 B: 11.31 KiB would leave 62 B, so it is rounded up); sdk CommonJS 11,400 B, 11.19 KiB budget
+//     (11,458 B, 58 B). The growth over the entry below, about 110 B in each, is the rows for the iterators of an array
 //     and of a set, `Set.prototype.add` and the two prototypes that the load captures, the check of an accessor on a
 //     prototype of an override, and the new texts of the warnings.
-//   - 2026-11-23 (sdk, register and the sdk CommonJS bundle, PM-granted; PR C, the type B baseline): sdk 11,242 B
+//   - 2026-11-23 (sdk, register and the sdk CommonJS bundle, PM-granted; the table of guarded built-ins): sdk 11,242 B
 //     measured, 11.01 KiB budget (11,274 B, 32 B of headroom); register 11,397 B, 11.16 KiB budget (11,428 B, 31 B);
 //     sdk CommonJS 11,288 B, 11.06 KiB budget (11,325 B, 37 B). The growth, about 0.55 KiB in each, is the table of the
 //     built-ins that the guard, the export wrap and the option settling call, the descriptors read from this realm

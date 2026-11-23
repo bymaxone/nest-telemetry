@@ -151,8 +151,8 @@ const run = (check) => {
   }
   return results
 }
-// The members the guard compares with a fresh realm: replacing one is a refusal, the family baseline (DEC-213
-// type B). Promise, timers, Date and the others a host wraps by design are not in the table, and still export.
+// The members the guard compares with a fresh realm: replacing one is a refusal, whatever the root prototype
+// holds. Promise, timers, Date and the others a host wraps by design are not in the table, and still export.
 // The members that decision paths reach with no call in the source, by iterating: a for...of, a spread, a
 // destructuring or new Set(list). Named here, apart from the table, so a row that fell out of the table fails.
 const ITERATED = [
@@ -217,10 +217,9 @@ describe('a built-in that something replaces after the library loaded', () => {
     // Scenario: every function and getter of the global objects, and each global constructor, is replaced in turn
     // after the bundle loaded; with a name planted the guard still counts it and the wrap still drops the batch
     // with no send, an exporter wrapped after the replacement is guarded too, and the replacement is never
-    // called. Triage of the flip (DEC-213 type B, the family baseline): a replaced member of the guard's table
-    // (Array, String, Map, Set, RegExp and Number prototypes, and the statics of Object, JSON, Reflect, Symbol,
-    // Number and Array) now refuses even on a clean prototype; every other target, Promise, timers and Date
-    // included, is wrapped by hosts by design and still exports.
+    // called. A replaced member of the guard's table (Array, String, Map, Set, RegExp and Number prototypes, and
+    // the statics of Object, JSON, Reflect, Symbol, Number and Array) refuses even on a clean prototype; every
+    // other target, Promise, timers and Date included, is wrapped by hosts by design and still exports.
     const result = await runInRealProcess(CHILD, { BUNDLE: bundle.file }, 60_000)
     const report = JSON.parse(result.lines[result.lines.length - 1] ?? '{}') as {
       targets: number
