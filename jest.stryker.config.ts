@@ -18,7 +18,14 @@ import base from './jest.config.ts'
  */
 const config: Config = {
   ...base,
-  testEnvironment: '@stryker-mutator/jest-runner/jest-env/node'
+  testEnvironment: '@stryker-mutator/jest-runner/jest-env/node',
+  // The built-in call scan parses the text of src/**/*.ts. Inside the Stryker sandbox that text
+  // is instrumented, so its call counts can never match the inventory. The scan runs no code and
+  // kills no mutant; `pnpm test` and CI still run it against the real source.
+  testPathIgnorePatterns: [
+    ...(base.testPathIgnorePatterns ?? ['/node_modules/']),
+    '/builtin-calls\\.spec\\.ts$'
+  ]
 }
 
 export default config
