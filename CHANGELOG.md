@@ -26,7 +26,7 @@ heading here.
   library read once when it loaded.
 - **A map or an entry of `instrumentations.overrides` whose settings sit on a prototype with no prototype is refused.**
   The copy read own keys only, so `enabled: false` held by such an ancestor was dropped in silence, as the other options
-  already refuse it. The start fails with `BYMAX_TELEMETRY_OPTION_INVALID`, naming `instrumentations.overrides[]`.
+  already refuse it. The start fails with `BYMAX_TELEMETRY_OPTION_INVALID`, naming `instrumentations.overrides` for a map and `instrumentations.overrides[]` for an entry.
 - **The warning for a batch dropped by the pollution guard says why.** It told the host to check that the collector
   was reachable, though the collector was never contacted. The dropped batch now fails with the code
   `BYMAX_TELEMETRY_REALM_POLLUTED`, and the warning names the prototype.
