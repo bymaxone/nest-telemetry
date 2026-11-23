@@ -47,9 +47,12 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
     globalThis.Promise = class extends Original {}
   }
   const slow = Number(process.env.SLOW_HEADERS || 0)
+  let unhandled = 0
+  process.on('unhandledRejection', () => { unhandled += 1 })
+  const headers = slow ? async () => { await sleep(slow); return { 'x-host': 'yes' } } : undefined
   const exporter = new OTLPTraceExporter({
     url: process.env.ENDPOINT + '/v1/traces',
-    ...(slow ? { headers: async () => { await sleep(slow); return { 'x-host': 'yes' } } } : {})
+    ...(headers ? { headers } : {})
   })
   guardExports(exporter)
   const ended = []
@@ -62,7 +65,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
   if (process.env.PLANT_AT === 'now') Object.prototype.planted = 'x'
   else if (process.env.PLANT_AT) setTimeout(() => { Object.prototype.planted = 'x' }, Number(process.env.PLANT_AT))
   await sleep(Number(process.env.WAIT))
-  console.log(JSON.stringify({ results, errors }))
+  await sleep(100)
+  console.log(JSON.stringify({ results, errors, unhandled }))
 })()
 `
 
@@ -72,7 +76,7 @@ async function run(
   wait: number,
   wrapPromise = false,
   slowHeaders = 0
-): Promise<{ results: number[]; errors: (string | null)[] }> {
+): Promise<{ results: number[]; errors: (string | null)[]; unhandled: number }> {
   const result = await runInRealProcess(
     CHILD,
     {
@@ -88,6 +92,7 @@ async function run(
   return JSON.parse(result.lines[result.lines.length - 1] ?? '{}') as {
     results: number[]
     errors: (string | null)[]
+    unhandled: number
   }
 }
 
@@ -132,6 +137,37 @@ describe('a name planted after the check of an export, in a real process', () =>
     expect(planted.errors).toEqual([
       'The Object.prototype of this process is polluted, so the batch was dropped.'
     ])
+  }, 60_000)
+
+  it('drops the batch without an unhandled rejection when a provider plants a name and returns a promise that rejects', async () => {
+    // Scenario: a provider that the transport calls directly plants a name while it runs and returns a promise
+    // that rejects; the guard refuses the answer, and the promise it drops is given a handler, so the process
+    // sees no unhandled rejection and lives to report. The refusal is still the error the caller gets.
+    collector = await startCollector()
+    const child = `
+const { guardExports } = require(process.env.BUNDLE)
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+;(async () => {
+  let unhandled = 0
+  process.on('unhandledRejection', () => { unhandled += 1 })
+  class Base { _delegate = { _transport: { send: () => undefined, _parameters: { headers: () => { Object.prototype.planted = 'x'; return Promise.reject(new Error('headers failed')) } } } }
+    export(items, done) { done({ code: 0 }) } }
+  class Sub extends Base {}
+  const exporter = new Sub()
+  guardExports(exporter)
+  exporter.export([], () => undefined)
+  let refusal = null
+  try { exporter._delegate._transport._parameters.headers() } catch (error) { refusal = error.message }
+  await sleep(300)
+  console.log(JSON.stringify({ refusal, unhandled }))
+})()
+`
+    const result = await runInRealProcess(child, { BUNDLE: bundle.file }, 30_000)
+    expect(JSON.parse(result.lines[result.lines.length - 1] ?? '{}')).toEqual({
+      refusal: 'The Object.prototype of this process is polluted, so the batch was dropped.',
+      unhandled: 0
+    })
+    expect(result.code).toBe(0)
   }, 60_000)
 
   it('retries a 503 on a clean prototype, and sends no retry when a name is planted during the back-off', async () => {
@@ -226,41 +262,70 @@ describe('a name planted after the check of an export, in a real process', () =>
       delete (Object.prototype as unknown as Record<string, unknown>)['plantedWhileWaiting']
     }
   })
+})
 
-  it('hands a synchronous answer of a provider back as it is, and refuses it when the provider planted a name', () => {
-    // Scenario: a transport whose providers are synchronous (a gRPC one reads its metadata that way) keeps them
-    // synchronous: null, a text and an object with no then come back as they are, and an answer given after the
-    // provider itself planted a name is refused.
-    const wrapped = (provider: () => unknown): (() => unknown) => {
-      class Plain {
-        _delegate = { _transport: { send: () => undefined, _parameters: { metadata: provider } } }
-        export(_items: unknown, done: (result: { code: number }) => void): void {
-          done({ code: 0 })
-        }
-      }
-      class Other extends Plain {}
-      const other = new Other()
-      guardExports(other)
-      other.export([], () => undefined)
-      return other._delegate._transport._parameters.metadata as () => unknown
+/** Plants a name on the root prototype, as a pollution does. */
+function plant(): void {
+  Object.defineProperty(Object.prototype, 'plantedByTheProvider', {
+    value: 'x',
+    enumerable: true,
+    configurable: true,
+    writable: true
+  })
+}
+
+/** Removes the name `plant` put there. */
+function unplant(): void {
+  delete (Object.prototype as unknown as Record<string, unknown>)['plantedByTheProvider']
+}
+
+/** An exporter whose transport holds one metadata provider, as a gRPC one does, armed by an export; returns it as wrapped. */
+function wrapped(provider: () => unknown): () => unknown {
+  class Plain {
+    _delegate = { _transport: { send: () => undefined, _parameters: { metadata: provider } } }
+    export(_items: unknown, done: (result: { code: number }) => void): void {
+      done({ code: 0 })
     }
+  }
+  class Other extends Plain {}
+  const other = new Other()
+  guardExports(other)
+  other.export([], () => undefined)
+  return other._delegate._transport._parameters.metadata as () => unknown
+}
+
+describe('the providers of a transport that answer synchronously, in this process', () => {
+  it('hands the answer back as it is: null, a text and an object with no then', () => {
+    // Scenario: a transport whose providers are synchronous (a gRPC one reads its metadata that way) keeps them
+    // synchronous: nothing is waited for and nothing is changed.
     const plain = { then: 'no' }
     expect(wrapped(() => plain)()).toBe(plain)
     expect(wrapped(() => null)()).toBeNull()
     expect(wrapped(() => 'text')()).toBe('text')
-    const planting = wrapped(() => {
-      Object.defineProperty(Object.prototype, 'plantedByTheProvider', {
-        value: 'x',
-        enumerable: true,
-        configurable: true,
-        writable: true
-      })
-      return 'answer'
-    })
+  })
+
+  it('refuses an answer given after the provider planted a name, and takes the rejection of a promise it drops', async () => {
+    // Scenario: a provider that plants a name while it runs is refused; when it returns a promise that rejects, the
+    // promise is given a handler, so the refusal is not followed by an unhandled rejection.
+    const unhandled = jest.fn()
+    process.on('unhandledRejection', unhandled)
     try {
+      const planting = wrapped(() => {
+        plant()
+        return 'answer'
+      })
       expect(() => planting()).toThrow('so the batch was dropped')
+      unplant()
+      const rejecting = wrapped(() => {
+        plant()
+        return Promise.reject(new Error('provider failed'))
+      })
+      expect(() => rejecting()).toThrow('so the batch was dropped')
     } finally {
-      delete (Object.prototype as unknown as Record<string, unknown>)['plantedByTheProvider']
+      process.off('unhandledRejection', unhandled)
+      unplant()
     }
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(unhandled).not.toHaveBeenCalled()
   })
 })

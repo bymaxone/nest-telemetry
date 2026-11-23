@@ -346,6 +346,32 @@ describe('a transport behind a guarded exporter', () => {
       expect(() => planting()).toThrow('so the batch was dropped')
     })
 
+    it('takes the rejection of a promise it drops, and never calls the then of an answer that is not a promise', async () => {
+      // Scenario: a provider that pollutes the prototype and returns a rejecting promise is refused without the
+      // promise becoming an unhandled rejection; an answer that only looks like a promise has its then left alone.
+      const unhandled = jest.fn()
+      process.on('unhandledRejection', unhandled)
+      try {
+        const rejecting = armed(() => {
+          polluted.mockReturnValue(1)
+          return Promise.reject(new Error('provider failed'))
+        })
+        expect(() => rejecting()).toThrow('so the batch was dropped')
+        await new Promise((resolve) => setImmediate(resolve))
+        expect(unhandled).not.toHaveBeenCalled()
+      } finally {
+        process.off('unhandledRejection', unhandled)
+      }
+      polluted.mockReturnValue(0)
+      const then = jest.fn()
+      const lookalike = armed(() => {
+        polluted.mockReturnValue(1)
+        return { then }
+      })
+      expect(() => lookalike()).toThrow('so the batch was dropped')
+      expect(then).not.toHaveBeenCalled()
+    })
+
     it('refuses before it reads anything from the answer, so a getter named then is never run', () => {
       // Scenario: a polluted root prototype can give an answer a getter called then; the check comes first, so the
       // refusal is thrown and the getter is not run.

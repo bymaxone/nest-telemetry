@@ -15,7 +15,9 @@ import {
   ErrorClass,
   getOwnPropertyDescriptor,
   getPrototypeOf,
-  hasOwn
+  hasOwn,
+  isPromise,
+  promiseThen
 } from './primordials'
 import { pollutedNames } from './prototype-guard'
 
@@ -88,6 +90,9 @@ function innermostTransport(exporter: unknown): Transport | undefined {
     : undefined
 }
 
+/** Takes the rejection of a promise that the guard dropped. */
+function ignore(): void {}
+
 /**
  * Checks again once a provider has answered: a provider the host supplied can wait, and a name planted while it
  * did would be read by the request that follows. The check comes before anything is read from the answer, and an
@@ -98,7 +103,12 @@ function innermostTransport(exporter: unknown): Transport | undefined {
  */
 function refuseIfPolluted(answer: unknown): unknown {
   // Before anything is read from the answer: reading its `then` could run a getter that a polluted root prototype holds.
-  if (pollutedNames() > 0) throw new ErrorClass(DROPPED)
+  if (pollutedNames() > 0) {
+    // A promise that is dropped must not end the host as an unhandled rejection, and nothing may be read from it
+    // to find out: the slot says whether it is one.
+    if (isPromise(answer)) apply(promiseThen, answer, [undefined, ignore])
+    throw new ErrorClass(DROPPED)
+  }
   if (
     typeof answer === 'object' &&
     answer !== null &&
