@@ -354,3 +354,76 @@ describe('readTelemetryEnvironment', () => {
     }
   })
 })
+
+describe('a variable of the environment that is not a string', () => {
+  const NON_STRINGS = [5, true, null, {}, [], () => 'x', Symbol('x'), 10n] as const
+  const READ_BY_TELEMETRY_ENVIRONMENT = [
+    'OTEL_SDK_DISABLED',
+    'OTEL_SERVICE_NAME',
+    'OTEL_BSP_MAX_QUEUE_SIZE',
+    'OTEL_BSP_SCHEDULE_DELAY',
+    'OTEL_BSP_EXPORT_TIMEOUT',
+    'OTEL_BSP_MAX_EXPORT_BATCH_SIZE',
+    'OTEL_NODE_RESOURCE_DETECTORS',
+    'OTEL_METRICS_EXPORTER',
+    'OTEL_LOGS_EXPORTER'
+  ]
+
+  it.each(READ_BY_TELEMETRY_ENVIRONMENT)(
+    'is ignored by readTelemetryEnvironment for %s',
+    (name) => {
+      // Scenario: a host `env` object can hold any value, and process.env never holds one that is not a
+      // string; a number, a boolean, an object or a symbol is as good as no variable, and it does not throw.
+      const clean = readTelemetryEnvironment({})
+      for (const value of NON_STRINGS) {
+        const source = { [name]: value } as unknown as NodeJS.ProcessEnv
+        expect(readTelemetryEnvironment(source)).toEqual(clean)
+      }
+    }
+  )
+
+  it.each(['OTEL_TRACES_SAMPLER', 'OTEL_TRACES_SAMPLER_ARG'])(
+    'is ignored by readRatioSampler for %s',
+    (name) => {
+      // Scenario: the sampler name or its argument given as a non-string reads as unset.
+      const base: Record<string, string> = { OTEL_TRACES_SAMPLER: 'traceidratio' }
+      const clean = readRatioSampler(base as NodeJS.ProcessEnv)
+      for (const value of NON_STRINGS) {
+        const source = { ...base, [name]: value } as unknown as NodeJS.ProcessEnv
+        const read = readRatioSampler(source)
+        expect(read?.arg === undefined || typeof read.arg === 'string').toBe(true)
+        expect(read === undefined || typeof read.name === 'string').toBe(true)
+        if (name === 'OTEL_TRACES_SAMPLER_ARG') expect(read).toEqual({ ...clean, arg: undefined })
+        else expect(read).toBeUndefined()
+      }
+    }
+  )
+
+  it('is ignored by readSamplerNearMiss for OTEL_TRACES_SAMPLER', () => {
+    // Scenario: a sampler name that is not a string is not a near miss of any name, and does not throw.
+    for (const value of NON_STRINGS) {
+      const source = { OTEL_TRACES_SAMPLER: value } as unknown as NodeJS.ProcessEnv
+      expect(readSamplerNearMiss(source)).toBeUndefined()
+    }
+  })
+
+  it('still reads a string, an empty string and a variable of the host env', () => {
+    // Scenario: the control: the rule drops only what is not text.
+    expect(readTelemetryEnvironment({ OTEL_SDK_DISABLED: ' TRUE ' }).sdkDisabled).toBe(true)
+    expect(readTelemetryEnvironment({ OTEL_SERVICE_NAME: '' }).serviceName).toBeUndefined()
+    expect(readTelemetryEnvironment({ OTEL_SERVICE_NAME: 'api' }).serviceName).toBe('api')
+  })
+})
+
+describe('a variable that only a prototype with no prototype holds', () => {
+  it('is refused, naming the env option, and not dropped in silence', () => {
+    // Scenario: the host's variable on a parent with no prototype is theirs, so the start fails and names
+    // the option to set it on, as it does for the other options.
+    const parent = Object.create(null, {
+      OTEL_SERVICE_NAME: { value: 'api', enumerable: true }
+    }) as object
+    expect(() => readTelemetryEnvironment(Object.create(parent) as NodeJS.ProcessEnv)).toThrow(
+      expect.objectContaining({ option: 'env' })
+    )
+  })
+})

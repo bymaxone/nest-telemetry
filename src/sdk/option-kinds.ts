@@ -358,8 +358,11 @@ function detach(value: unknown, seen: { count: number }, depth: number): unknown
   const prototype = getPrototypeOf(value) as object | null
   if (!list && prototype !== null && getPrototypeOf(prototype) !== null) return value
   seen.count += 1
-  if (depth > MAX_NESTING || seen.count > MAX_VALUES) {
+  if (depth > MAX_NESTING) {
     throw new TelemetryOptionError(OVERRIDE_PATH, 'nested at most 16 levels deep')
+  }
+  if (seen.count > MAX_VALUES) {
+    throw new TelemetryOptionError(OVERRIDE_PATH, 'at most 10,000 objects and lists in all')
   }
   if (list) {
     if (value.length > MAX_OPTION_ENTRIES) {
@@ -397,6 +400,30 @@ function detach(value: unknown, seen: { count: number }, depth: number): unknown
 }
 
 /**
+ * Refuses an object whose settings sit on a prototype with no prototype, which a copy of its own keys
+ * would drop in silence. The root prototype of this realm is where a pollution is planted and is ignored,
+ * as are the methods of a class, which are not enumerable.
+ *
+ * @param path - What the error names.
+ * @param value - The map or the entry the host passed.
+ * @throws {TelemetryOptionError} When a prototype with no prototype, other than the root of this realm,
+ *   has an enumerable key.
+ */
+function refuseAncestorKeys(path: string, value: object): void {
+  if (isProxy(value)) return
+  let holder: object | null = getPrototypeOf(value)
+  for (let hops = 0; holder !== null && hops < MAX_CHAIN; hops++) {
+    if (getPrototypeOf(holder) === null && holder !== rootPrototype && keys(holder).length > 0) {
+      throw new TelemetryOptionError(
+        path,
+        'set on the object itself, not on a prototype that has no prototype'
+      )
+    }
+    holder = getPrototypeOf(holder)
+  }
+}
+
+/**
  * Copies one entry of `overrides` into a plain object, reading each own key once. The settings that
  * decide what leaves the host, and the ones that run host code, are checked by kind: the boolean
  * switches `enabled` and `disableLogSending`, the list `redactedQueryParams`, and every hook.
@@ -407,6 +434,7 @@ function detach(value: unknown, seen: { count: number }, depth: number): unknown
  *   more than {@link MAX_OPTION_ENTRIES} settings.
  */
 function settleOverrideEntry(entry: object): Record<string, unknown> {
+  refuseAncestorKeys(OVERRIDE_PATH, entry)
   const settings = entries(entry)
   if (settings.length > MAX_OPTION_ENTRIES) {
     throw new TelemetryOptionError(
@@ -450,6 +478,7 @@ export function settleOverrides(
 ): Record<string, Record<string, unknown>> | undefined {
   const map = requireObject(option, value)
   if (map === undefined) return undefined
+  refuseAncestorKeys(option, map)
   const pairs = entries(map)
   if (pairs.length > MAX_OPTION_ENTRIES) {
     throw new TelemetryOptionError(option, `an object of at most ${MAX_OPTION_ENTRIES} entries`)

@@ -9,6 +9,9 @@
  */
 import { apply, reflectGet, regExpExec, toObject, toText } from './primordials'
 
+/** The code of a batch that was dropped because the prototype of the process is polluted. */
+export const POLLUTED_CODE = 'BYMAX_TELEMETRY_REALM_POLLUTED'
+
 /** What a code may look like to be named: an upper-case token, never free text. */
 const CODE_TOKEN = /^[A-Z0-9_]{1,40}$/
 

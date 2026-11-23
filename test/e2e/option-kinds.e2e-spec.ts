@@ -127,7 +127,7 @@ describe('startTelemetry in the real library, for an option of the wrong kind', 
     [
       'holding more than 10,000 objects and lists',
       () => Array.from({ length: 11 }, () => Array.from({ length: 999 }, () => ({}))),
-      'nested at most 16 levels deep'
+      'at most 10,000 objects and lists in all'
     ],
     [
       'a list of more than 1000 entries',
@@ -194,6 +194,31 @@ describe('startTelemetry in the real library, for an option of the wrong kind', 
     )
     const unsafe = Object.create(Object.create(null, { exportHostId: { value: true } })) as object
     expect((await refusal({ unsafe }))?.message).toContain('unsafe.exportHostId')
+  })
+
+  it('refuses an overrides map or entry whose settings only a prototype with no prototype holds', async () => {
+    // Scenario: `enabled: false` held by a null-prototype ancestor of the map or of an entry would be dropped
+    // by a copy of own keys, so a real start is refused naming the option, and nothing is started.
+    const entryParent = Object.create(null, {
+      enabled: { value: false, enumerable: true }
+    }) as object
+    const mapParent = Object.create(null, {
+      pino: { value: { enabled: false }, enumerable: true }
+    }) as object
+    expect(
+      (await refusal({ instrumentations: { overrides: { pino: Object.create(entryParent) } } }))
+        ?.message
+    ).toContain('The instrumentations.overrides[] option must be set on the object itself')
+    expect(
+      (await refusal({ instrumentations: { overrides: Object.create(mapParent) } }))?.message
+    ).toContain('The instrumentations.overrides option must be set on the object itself')
+  })
+
+  it('starts with an overrides map that is a Proxy, which is read for what it answers', async () => {
+    // Scenario: a Proxy is judged by what it answers, so the check for a null-prototype ancestor passes it by.
+    const overrides = new Proxy({ pino: { enabled: false } }, {}) as never
+    const handle = await startTelemetry({ instrumentations: { overrides } })
+    expect(handle.enabled).toBe(true)
   })
 
   it('starts nothing for a refused call, and a later call starts', async () => {

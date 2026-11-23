@@ -51,6 +51,65 @@ describe('guardExports', () => {
     )
   })
 
+  it('gives the dropped batch an own code that names the pollution, even when a setter for code and a property named get are planted', () => {
+    // Scenario: the error of a dropped batch carries the code that lets the failure warning name the
+    // cause; the code is defined, not assigned, so a planted setter or descriptor name cannot stop it.
+    const { make } = exporters()
+    const exporter = make()
+    guardExports(exporter)
+    polluted.mockReturnValue(1)
+    Object.defineProperty(Object.prototype, 'code', {
+      configurable: true,
+      set(_value: unknown): void {
+        void _value
+      }
+    })
+    Object.defineProperty(Object.prototype, 'get', { configurable: true, value: () => 'x' })
+    try {
+      let seen: unknown
+      exporter.export([], (result) => (seen = result.error))
+      expect(Object.getOwnPropertyDescriptor(seen, 'code')?.value).toBe(
+        'BYMAX_TELEMETRY_REALM_POLLUTED'
+      )
+    } finally {
+      delete (Object.prototype as Record<string, unknown>).code
+      delete (Object.prototype as Record<string, unknown>).get
+    }
+  })
+
+  it('defines every wrap and mark with a descriptor that a name planted on the root prototype cannot change', () => {
+    // Scenario: a property named get planted on Object.prototype is read as the getter of a descriptor
+    // literal, which then holds a value beside a getter and is invalid, so the definition would throw at
+    // the wrap and at each arming of a transport.
+    const sends: unknown[] = []
+    const transport = {
+      send: (data: unknown): Promise<unknown> => {
+        sends.push(data)
+        return Promise.resolve({ status: 'success' })
+      },
+      _parameters: { headers: (): Record<string, string> => ({}) }
+    }
+    class Base {
+      export(_items: unknown, done: Done): void {
+        done({ code: 0 })
+      }
+    }
+    class Sub extends Base {
+      _delegate = { _transport: transport }
+    }
+    const exporter = new Sub()
+    Object.defineProperty(Object.prototype, 'get', { value: () => 1, configurable: true })
+    try {
+      expect(() => guardExports(exporter)).not.toThrow()
+      const results: { code: number }[] = []
+      expect(() => exporter.export(['a'], (result) => results.push(result))).not.toThrow()
+      expect(results).toEqual([{ code: 0 }])
+      expect(Object.getOwnPropertyDescriptor(transport, 'send')?.writable).toBe(true)
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'get')
+    }
+  })
+
   it('wraps a base class once, however many exporters ask, and reaches every exporter that extends it', () => {
     // Scenario: a second exporter of the same base, and a second call for the same one, do not stack a wrapper:
     // one export asks the guard once.

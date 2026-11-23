@@ -78,7 +78,7 @@ describe('the configuration handed to the instrumentations', () => {
   it.each([
     [HTTP, ['headersToSpanAttributes']],
     ['@opentelemetry/instrumentation-grpc', ['metadataToSpanAttributes']],
-    ['@opentelemetry/instrumentation-aws-lambda', ['lambdaHandler']],
+    ['@opentelemetry/instrumentation-aws-lambda', ['lambdaHandler', 'lambdaStartTime']],
     ['@opentelemetry/instrumentation-socket.io', ['emitIgnoreEventList', 'onIgnoreEventList']],
     [
       '@opentelemetry/instrumentation-redis',
@@ -343,7 +343,7 @@ describe('a setting that the host nests in an override', () => {
         Array.from({ length: 89 + extra }, () => ({})) as never
       )
     expect(() => settle(total(0))).not.toThrow()
-    expect(refused(total(1)).message).toContain('nested at most 16 levels deep')
+    expect(refused(total(1)).message).toContain('at most 10,000 objects and lists in all')
     const members = (count: number): number[] => Array.from({ length: count }, () => 0)
     const keys = (count: number): object =>
       Object.fromEntries(members(count).map((_zero, index) => [`k${index}`, 0]))

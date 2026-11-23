@@ -16,10 +16,13 @@ import { readOwnOrClass } from './option-kinds'
  *
  * @param source - The environment.
  * @param name - The variable name.
- * @returns The value, or `undefined` when the environment has no such variable of its own.
+ * @returns The value, or `undefined` when the environment has no such variable of its own or holds
+ * something other than text there: a host `env` object can carry any value, and the process
+ * environment never carries one that is not a string.
  */
 function read(source: NodeJS.ProcessEnv, name: string): string | undefined {
-  return readOwnOrClass(source, name, 'env') as string | undefined
+  const value = readOwnOrClass(source, name, 'env')
+  return typeof value === 'string' ? value : undefined
 }
 
 /** Batch-span-processor tuning, present only for the variables that hold a usable value. */

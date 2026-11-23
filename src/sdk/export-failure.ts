@@ -13,7 +13,7 @@
  * be reported by writing a record that exports as logs and can fail in turn.
  */
 
-import { codeOf } from './error-code'
+import { codeOf, POLLUTED_CODE } from './error-code'
 import { apply, clockNow, clockOwner, reflectGet, reflectSet } from './primordials'
 import { reportWarning } from './warning-sink'
 
@@ -78,7 +78,10 @@ export function warnOnExportFailure<E extends ObservableExporter>(
             const code = codeOf(result.error)
             reportWarning({
               code: 'BYMAX_TELEMETRY_EXPORT_FAILED',
-              text: `Exporting spans failed (${kind}, code ${code}), so the batch was dropped. This warning repeats at most once a minute. Check that the collector is reachable.`,
+              text:
+                code === POLLUTED_CODE
+                  ? `Exporting spans was refused (${kind}, code ${code}), so the batch was dropped. Something added a property to Object.prototype after the start; the collector was not contacted. This warning repeats at most once a minute.`
+                  : `Exporting spans failed (${kind}, code ${code}), so the batch was dropped. This warning repeats at most once a minute. Check that the collector is reachable.`,
               fields: { kind, code }
             })
           } catch {

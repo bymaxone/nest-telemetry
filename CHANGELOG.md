@@ -10,6 +10,13 @@ heading here.
 
 ## [Unreleased]
 
+### Planned for the next minor
+
+- **Export the option error class** with `code` and `option` typed in the declarations, so a host can test for
+  it. It is a public addition, so it waits for a minor release.
+
+## [1.0.13] - 2026-11-23
+
 ### Fixed
 
 - **A built-in that code replaces after the library loaded can no longer lose a warning or a host option.** The
@@ -17,11 +24,36 @@ heading here.
   was told and the `BYMAX_TELEMETRY_EXPORT_FAILED` warning was lost. The settling of the start options did the same,
   so a replaced one dropped host options such as `enabled: false` in silence. Both paths now call the built-ins the
   library read once when it loaded.
+- **A map or an entry of `instrumentations.overrides` whose settings sit on a prototype with no prototype is refused.**
+  The copy read own keys only, so `enabled: false` held by such an ancestor was dropped in silence, as the other options
+  already refuse it. The start fails with `BYMAX_TELEMETRY_OPTION_INVALID`, naming `instrumentations.overrides` for a map and `instrumentations.overrides[]` for an entry.
+- **The warning for a batch dropped by the pollution guard says why.** It told the host to check that the collector
+  was reachable, though the collector was never contacted. The dropped batch now fails with the code
+  `BYMAX_TELEMETRY_REALM_POLLUTED`, and the warning names the prototype.
+- **An `OTEL_*` value of a host `env` object that is not a string is ignored.** Each variable the library reads
+  went straight to `.trim()`, `.split()` or a number conversion, so `env: { OTEL_SERVICE_NAME: 5 }` threw a
+  `TypeError` at start, and a number or a boolean was read as if it were the text it converts to. A value that is not
+  a string is now read as no variable, for every variable the library reads. The process environment never holds
+  one, so nothing changes for it.
+- **The Lambda start time is read while the instrumentation is built.** The AWS Lambda instrumentation reads
+  `lambdaStartTime` as well as `lambdaHandler` when it is built, so it is an own undefined key like the handler name.
+- **The refusal for too many values in a nested setting says so.** The limit of 10,000 objects and lists in one
+  setting had the message of the limit of 16 levels; it now says `at most 10,000 objects and lists in all`.
 
-### Planned for the next minor
+### Documentation
 
-- **Export the option error class** with `code` and `option` typed in the declarations, so a host can test for
-  it. It is a public addition, so it waits for a minor release.
+- **The README states what the pollution guard does not cover**: a `detail` or `code` defined as an accessor or
+  read-only (the start is disabled with no warning), an exporter built from another copy of the OpenTelemetry
+  packages (not wrapped), and an options object whose prototype is the host's own (read as a class chain).
+- **The README says the limits on a nested override setting are new in 1.0.12** (16 levels, 10,000 objects and lists,
+  1000 entries to a list or an object), so a host that nested more than that finds the refusal documented.
+
+### Apply to a derived backend
+
+Nothing to change. A setting nested in an override beyond those limits fails at start with
+`BYMAX_TELEMETRY_OPTION_INVALID`, as it does since 1.0.12. A host `env` object that held a number, a boolean or an object for one of the `OTEL_*` names now
+reads that variable as unset instead of throwing or converting it. An `instrumentations.overrides` map or entry whose
+settings sit on a prototype with no prototype now fails at start instead of losing them.
 
 ## [1.0.12] - 2026-11-21
 
@@ -577,6 +609,7 @@ First release.
 - Verification from the packed tarball: real `node --import` processes in a CommonJS and a native-ESM
   application, with planted secrets absent from the exported body and negative controls.
 
+[1.0.13]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.13
 [1.0.12]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.12
 [1.0.11]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.11
 [1.0.10]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.10

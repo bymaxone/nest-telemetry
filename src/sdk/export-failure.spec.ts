@@ -67,6 +67,24 @@ describe('warnOnExportFailure', () => {
       detail: ''
     })
     expect(emitWarning.mock.calls[0]?.[0]).toContain('ECONNREFUSED')
+    const text = emitWarning.mock.calls[0]?.[0] as string
+    expect(text).toContain('Check that the collector is reachable')
+    expect(text).not.toContain('Object.prototype')
+  })
+
+  it('says the prototype is polluted, not that the collector is down, when the guard dropped the batch', () => {
+    // Scenario: a name was added to Object.prototype after a clean start; the guard drops every batch
+    // with the code of the pollution and the warning must name that, not blame the collector.
+    const double = fakeExporter()
+    double.next = {
+      code: FAILED,
+      error: Object.assign(new Error('dropped'), { code: 'BYMAX_TELEMETRY_REALM_POLLUTED' })
+    }
+    warnOnExportFailure(double.exporter, 'otlp-http traces')
+    exportOnce(double.exporter)
+    const text = emitWarning.mock.calls[0]?.[0] as string
+    expect(text).toContain('Object.prototype')
+    expect(text).not.toContain('collector is reachable')
   })
 
   it('stays silent when the export succeeds', () => {

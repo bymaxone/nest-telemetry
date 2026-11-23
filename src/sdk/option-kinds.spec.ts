@@ -224,6 +224,95 @@ describe('settleOverrides, for the settings of an entry', () => {
   })
 })
 
+describe('settleOverrides, for a map or an entry whose keys sit on a prototype with no prototype', () => {
+  const base = (): object =>
+    Object.assign(Object.create(null) as object, { pino: { enabled: false } })
+  const entryBase = (): object => Object.assign(Object.create(null) as object, { enabled: false })
+
+  it.each([
+    ['the map', () => Object.create(base()) as object, 'x'],
+    [
+      'an entry of the map',
+      () => ({ pino: Object.create(entryBase()) as object }),
+      'instrumentations.overrides[]'
+    ],
+    [
+      'a class chain ending in one',
+      () => Object.create(Object.create(base()) as object) as object,
+      'x'
+    ]
+  ])('refuses %s, so a setting is not dropped in silence', (_where, make, option) => {
+    // Scenario: the keys of an own-keys copy miss a setting that only a null-prototype ancestor holds,
+    // so the host's `enabled: false` would be lost; the start is refused with a fixed path instead.
+    expect(thrown(() => settleOverrides('x', make()))).toMatchObject({
+      option,
+      message: `The ${option} option must be set on the object itself, not on a prototype that has no prototype, so the start was refused.`
+    })
+  })
+
+  it('honours the same map and entry written as own keys', () => {
+    // Scenario: the control for the rows above: the host's own keys are copied.
+    expect(settleOverrides('x', { pino: { enabled: false } })).toEqual({ pino: { enabled: false } })
+  })
+
+  it('does not refuse a map whose chain ends in the root prototype of this realm', () => {
+    // Scenario: the root prototype is where a pollution is planted and it is ignored, as for the options.
+    const polluted = Object.create(Object.prototype) as object
+    expect(settleOverrides('x', polluted)).toEqual({})
+  })
+
+  it('does not refuse a map that has an empty prototype with no prototype', () => {
+    // Scenario: an ancestor with no keys holds no setting, so nothing is dropped.
+    expect(settleOverrides('x', Object.create(Object.create(null) as object) as object)).toEqual({})
+  })
+
+  it('does not refuse a map whose chain ends in a root prototype that holds an enumerable name', () => {
+    // Scenario: a pollution planted on the root prototype of this realm is enumerable, and it is the one
+    // holder with no prototype that is ignored, so the map is read and nothing is refused.
+    Object.defineProperty(Object.prototype, 'plantedName', {
+      configurable: true,
+      enumerable: true,
+      value: 1
+    })
+    try {
+      expect(settleOverrides('x', Object.create(Object.prototype) as object)).toEqual({})
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'plantedName')
+    }
+  })
+
+  it('does not refuse a map whose parent has a prototype of its own, whatever the parent holds', () => {
+    // Scenario: only a holder with no prototype is the case that is refused; an ordinary parent object
+    // is not, so a parent that holds a name and has a prototype leaves the start going.
+    const parent = Object.create({}, { pino: { value: { enabled: true }, enumerable: true } })
+    expect(() => settleOverrides('x', Object.create(parent) as object)).not.toThrow()
+  })
+
+  it('does not refuse a Proxy whose answer for its prototype is a holder of settings', () => {
+    // Scenario: a Proxy is read for what it answers, so what its prototype trap says is not judged.
+    const bare = Object.create(null, { pino: { value: {}, enumerable: true } }) as object
+    const proxy = new Proxy({}, { getPrototypeOf: () => bare })
+    expect(settleOverrides('x', proxy)).toEqual({})
+  })
+
+  it('walks at most the bound of prototypes when an ancestor answers differently the second time', () => {
+    // Scenario: a chain that was short when it was checked and is endless when it is read again is
+    // ended at the bound, so the start does not hang, and each hop reads the prototype twice at most.
+    let calls = 0
+    const loop: object = new Proxy(
+      {},
+      {
+        getPrototypeOf: () => {
+          calls += 1
+          return calls <= 1 ? null : loop
+        }
+      }
+    )
+    expect(settleOverrides('x', Object.create(loop) as object)).toEqual({})
+    expect(calls).toBeLessThanOrEqual(1 + 2 * 100)
+  })
+})
+
 describe('settleOverrides, for a key named __proto__', () => {
   it.each([
     ['a setting of an entry', '{"pino":{"__proto__":{"enabled":true}}}'],
