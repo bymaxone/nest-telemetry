@@ -88,3 +88,12 @@ export const toText = String
 
 /** `RegExp.prototype.exec`, called through {@link apply}: `test` looks `exec` up again when it runs. */
 export const regExpExec = RegExp.prototype.exec
+
+/** `Number`, which turns a value into a number. */
+export const toNumber = Number
+
+/** `performance.now`, called through {@link apply} on {@link clockOwner}. */
+export const clockNow = performance.now
+
+/** The `performance` object that {@link clockNow} belongs to, as it was when this module loaded. */
+export const clockOwner = performance

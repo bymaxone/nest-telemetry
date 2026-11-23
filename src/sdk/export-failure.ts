@@ -14,7 +14,7 @@
  */
 
 import { codeOf } from './error-code'
-import { apply, reflectGet, reflectSet } from './primordials'
+import { apply, clockNow, clockOwner, reflectGet, reflectSet } from './primordials'
 import { reportWarning } from './warning-sink'
 
 /** What an export hands its callback: `code` is 0 for success, anything else is a failure. */
@@ -60,7 +60,7 @@ const SUCCESS = 0
 export function warnOnExportFailure<E extends ObservableExporter>(
   exporter: E,
   kind: string,
-  clock: () => number = () => performance.now()
+  clock: () => number = () => apply(clockNow, clockOwner, []) as number
 ): E {
   const original = exporter.export
   let lastWarning = -Infinity

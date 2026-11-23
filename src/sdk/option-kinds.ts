@@ -18,7 +18,9 @@ import {
   isProxy,
   isRegExp,
   keys,
-  rootPrototype
+  rootPrototype,
+  toNumber,
+  toText
 } from './primordials'
 
 /** The kinds that Node tells apart and that never hold the settings of a host. */
@@ -48,7 +50,8 @@ const BRANDS = [
  * @param key - An own key of a list.
  * @returns `true` for `'0'` up to `'4294967294'`.
  */
-const isIndex = (key: string): boolean => String(Number(key) >>> 0) === key && key !== '4294967295'
+const isIndex = (key: string): boolean =>
+  toText(toNumber(key) >>> 0) === key && key !== '4294967295'
 
 /**
  * Whether a list holds an own key that is an index, by index of the key list.

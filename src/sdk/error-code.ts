@@ -44,7 +44,8 @@ export function describeFailure(error: unknown): string {
   const code = `code ${codeOf(error)}`
   try {
     const message: unknown = reflectGet(toObject(error), 'message')
-    const named = typeof message === 'string' ? PACKAGE.exec(message)?.[0] : undefined
+    const named =
+      typeof message === 'string' ? apply(regExpExec, PACKAGE, [message])?.[0] : undefined
     return named === undefined ? code : `${code}, package ${named}`
   } catch {
     return code
