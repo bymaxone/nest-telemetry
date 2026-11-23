@@ -26,17 +26,14 @@ heading here.
   library read once when it loaded.
 - **A built-in that the library's own checks rely on, replaced after it loaded, now counts as a pollution.** The
   check of the process compared only `Object.prototype` with a fresh realm. It now also compares the members of the
-  built-ins that the guard, the export wrap and the option settling call (the methods of `Array`, `String`, `Map`,
-  `Set`, `RegExp` and `Number` prototypes, and the statics of `Array`, `JSON`,
-  `Number`, `Object`, `Reflect` and `Symbol`): one that is replaced, deleted or swapped for a function of another
+  built-ins that the guard, the export wrap and the option settling call: one that is replaced, deleted or swapped for a function of another
   realm counts one, so the start answers with the disabled handle and an export drops its batch, and a check that
   cannot read them counts one rather than zero. `Promise`, its `then`, `catch` and `finally`, timers, `Date`,
   `EventEmitter`, `http`, `fetch` and `process` are not compared: tracing agents and context managers wrap them by
   design, and no decision to drop or to send awaits through anything but a native promise. The warning text still
   says `Object.prototype`.
 - **A map or an entry of `instrumentations.overrides` whose settings sit on a prototype is refused.**
-  The copy read own keys only, so `enabled: false` held by a parent object (`Object.create({ enabled: false })`, or one with
-  no prototype) was dropped in silence, and the instrumentation stayed on. The root prototype of the realm, where a
+  The copy read own keys only, so `enabled: false` held by a parent object (`Object.create({ enabled: false })`) was dropped in silence, and the instrumentation stayed on. The root prototype of the realm, where a
   pollution is planted, and the methods of a class, which are not enumerable, are not a setting. The start fails with `BYMAX_TELEMETRY_OPTION_INVALID`, naming `instrumentations.overrides` for a map and `instrumentations.overrides[]` for an entry.
 - **The warning for a batch dropped by the pollution guard says why.** It told the host to check that the collector
   was reachable, though the collector was never contacted. The dropped batch now fails with the code
