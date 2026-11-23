@@ -14,6 +14,7 @@
  */
 
 import { codeOf } from './error-code'
+import { apply, reflectGet, reflectSet } from './primordials'
 import { reportWarning } from './warning-sink'
 
 /** What an export hands its callback: `code` is 0 for success, anything else is a failure. */
@@ -40,7 +41,7 @@ const COUNT_KEY = Symbol.for('@bymax-one/nest-telemetry/export-failures')
  * @returns The number of failed exports since the process started.
  */
 export function exportFailureCount(): number {
-  const count = Reflect.get(globalThis, COUNT_KEY)
+  const count = reflectGet(globalThis, COUNT_KEY)
   return typeof count === 'number' ? count : 0
 }
 
@@ -61,29 +62,32 @@ export function warnOnExportFailure<E extends ObservableExporter>(
   kind: string,
   clock: () => number = () => performance.now()
 ): E {
-  const original = exporter.export.bind(exporter)
-  let lastWarning = Number.NEGATIVE_INFINITY
+  const original = exporter.export
+  let lastWarning = -Infinity
   exporter.export = (spans, done): void => {
-    original(spans, (result) => {
-      if (result.code !== SUCCESS) {
-        // Counted before the warning window, so a collector that stays down keeps counting.
-        Reflect.set(globalThis, COUNT_KEY, exportFailureCount() + 1)
-      }
-      if (result.code !== SUCCESS && clock() - lastWarning >= WINDOW_MS) {
-        lastWarning = clock()
-        try {
-          const code = codeOf(result.error)
-          reportWarning({
-            code: 'BYMAX_TELEMETRY_EXPORT_FAILED',
-            text: `Exporting spans failed (${kind}, code ${code}), so the batch was dropped. This warning repeats at most once a minute. Check that the collector is reachable.`,
-            fields: { kind, code }
-          })
-        } catch {
-          // A diagnostic never changes what the SDK is told about the export.
+    apply(original, exporter, [
+      spans,
+      (result: ExportOutcome): void => {
+        if (result.code !== SUCCESS) {
+          // Counted before the warning window, so a collector that stays down keeps counting.
+          reflectSet(globalThis, COUNT_KEY, exportFailureCount() + 1)
         }
+        if (result.code !== SUCCESS && clock() - lastWarning >= WINDOW_MS) {
+          lastWarning = clock()
+          try {
+            const code = codeOf(result.error)
+            reportWarning({
+              code: 'BYMAX_TELEMETRY_EXPORT_FAILED',
+              text: `Exporting spans failed (${kind}, code ${code}), so the batch was dropped. This warning repeats at most once a minute. Check that the collector is reachable.`,
+              fields: { kind, code }
+            })
+          } catch {
+            // A diagnostic never changes what the SDK is told about the export.
+          }
+        }
+        done(result)
       }
-      done(result)
-    })
+    ])
   }
   return exporter
 }

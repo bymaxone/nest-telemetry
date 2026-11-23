@@ -7,6 +7,7 @@
  * therefore never includes either: a failure is named by a short code and, for a start that failed
  * for want of a package, by the OpenTelemetry package the message names.
  */
+import { apply, reflectGet, regExpExec, toObject, toText } from './primordials'
 
 /** What a code may look like to be named: an upper-case token, never free text. */
 const CODE_TOKEN = /^[A-Z0-9_]{1,40}$/
@@ -24,10 +25,10 @@ const PACKAGE = /@opentelemetry\/[a-z0-9-]+/
  */
 export function codeOf(error: unknown): string {
   try {
-    const code: unknown = Reflect.get(Object(error), 'code')
+    const code: unknown = reflectGet(toObject(error), 'code')
     if (typeof code !== 'string' && typeof code !== 'number') return 'UNKNOWN'
-    const text = String(code)
-    return CODE_TOKEN.test(text) ? text : 'UNKNOWN'
+    const text = toText(code)
+    return apply(regExpExec, CODE_TOKEN, [text]) ? text : 'UNKNOWN'
   } catch {
     return 'UNKNOWN'
   }
@@ -42,7 +43,7 @@ export function codeOf(error: unknown): string {
 export function describeFailure(error: unknown): string {
   const code = `code ${codeOf(error)}`
   try {
-    const message: unknown = Reflect.get(Object(error), 'message')
+    const message: unknown = reflectGet(toObject(error), 'message')
     const named = typeof message === 'string' ? PACKAGE.exec(message)?.[0] : undefined
     return named === undefined ? code : `${code}, package ${named}`
   } catch {

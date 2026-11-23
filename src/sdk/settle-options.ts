@@ -12,6 +12,7 @@ import {
   requireString,
   settleStringList
 } from './option-kinds'
+import { create, entries } from './primordials'
 import type { TelemetryOptions } from './types'
 
 /**
@@ -44,8 +45,11 @@ export function settleOptions(options: TelemetryOptions): TelemetryOptions {
   }
   // No prototype: a key the call did not give stays absent when the start reads it, whatever the root
   // prototype of the realm carries.
-  return Object.assign(
-    Object.create(null) as TelemetryOptions,
-    Object.fromEntries(Object.entries(settled).filter(([, value]) => isGiven(value)))
-  )
+  const given = create(null) as Record<string, unknown>
+  const pairs = entries(settled)
+  for (let at = 0; at < pairs.length; at += 1) {
+    const pair = pairs[at] as [string, unknown]
+    if (isGiven(pair[1])) given[pair[0]] = pair[1]
+  }
+  return given as TelemetryOptions
 }

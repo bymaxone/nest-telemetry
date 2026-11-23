@@ -27,7 +27,7 @@ afterAll(() => {
  * runs the check while the target is replaced, restores it, and reports only after all are restored.
  */
 const CHILD = `
-const { pollutedNames, guardExports } = require(process.env.BUNDLE)
+const { pollutedNames, guardExports, settleOptions, warnOnExportFailure, exportFailureCount, registerWarningSink, clearWarningSink } = require(process.env.BUNDLE)
 const defineProperty = Object.defineProperty
 const ownKeys = Reflect.ownKeys
 const getDescriptor = Object.getOwnPropertyDescriptor
@@ -60,6 +60,40 @@ const guardCheck = () => {
   exporter.export([1], (r) => { out.code = r.code })
   try { exporter._delegate._transport._transport._parameters.headers(); out.refused = 0 } catch (error) { out.refused = 1 }
   delete root.zzplanted
+  return out
+}
+// What the option settling must do with one target replaced: keep every option the host gave, a switch that is
+// off, a list, a nested override and a hook included.
+const optionsCheck = () => {
+  const hook = () => undefined
+  const settled = settleOptions({
+    enabled: false,
+    serviceName: 'svc',
+    extraRedactedQueryParams: ['a', 'b'],
+    instrumentations: { overrides: { http: { enabled: false, requestHook: hook, redactedQueryParams: ['q'], nested: { deep: [1, { x: 2 }] } } } }
+  })
+  const http = settled.instrumentations && settled.instrumentations.overrides && settled.instrumentations.overrides.http
+  return {
+    enabled: settled.enabled === false ? 1 : 0,
+    name: settled.serviceName === 'svc' ? 1 : 0,
+    list: settled.extraRedactedQueryParams && settled.extraRedactedQueryParams.length === 2 ? 1 : 0,
+    off: http && http.enabled === false ? 1 : 0,
+    hook: http && http.requestHook === hook ? 1 : 0,
+    nested: http && http.nested && http.nested.deep[1].x === 2 ? 1 : 0
+  }
+}
+// What a failed export must do with one target replaced: tell the caller, count the failure and warn once.
+const failureCheck = () => {
+  const out = { done: -1, counted: -1, warned: -1 }
+  const warnings = {}
+  let seen = 0
+  const remove = registerWarningSink((warning) => { warnings[seen] = warning.code; seen = seen + 1; return true })
+  const before = exportFailureCount()
+  const exporter = warnOnExportFailure({ export: (items, done) => done({ code: 1, error: { code: 'ECONNREFUSED' } }) }, 'k', () => 1e9)
+  exporter.export([1], (r) => { out.done = r.code })
+  out.counted = exportFailureCount() - before
+  out.warned = seen === 1 && warnings[0] === 'BYMAX_TELEMETRY_EXPORT_FAILED' ? 1 : 0
+  remove()
   return out
 }
 // A check that reads two built-ins when it runs, to show the harness sees a call.
@@ -110,9 +144,13 @@ const run = (check) => {
 }
 const wrong = (r) => r.threw || r.calls !== 0 || r.out.clean !== 0 || r.out.cleanSent !== 1 || r.out.cleanCode !== 0 ||
   r.out.planted !== 1 || r.out.sent !== 0 || r.out.code !== 1 || r.out.headers !== 7 || r.out.refused !== 1
+const wrongOptions = (r) => r.threw || r.calls !== 0 || Object.values(r.out).some((v) => v !== 1)
+const wrongFailure = (r) => r.threw || r.calls !== 0 || r.out.done !== 1 || r.out.counted !== 1 || r.out.warned !== 1
 const real = run(guardCheck).filter(wrong).map((r) => r.label)
+const options = run(optionsCheck).filter(wrongOptions).map((r) => r.label)
+const failure = run(failureCheck).filter(wrongFailure).map((r) => r.label)
 const control = run(liveCheck).filter((r) => r.calls !== 0).map((r) => r.label)
-log(stringify({ targets: targets.length, wrong: real, control }))
+log(stringify({ targets: targets.length, wrong: real, options, failure, control }))
 `
 
 describe('a built-in that something replaces after the library loaded', () => {
@@ -125,9 +163,13 @@ describe('a built-in that something replaces after the library loaded', () => {
     const report = JSON.parse(result.lines[result.lines.length - 1] ?? '{}') as {
       targets: number
       wrong: string[]
+      options: string[]
+      failure: string[]
       control: string[]
     }
     expect(report.wrong).toEqual([])
+    expect(report.options).toEqual([])
+    expect(report.failure).toEqual([])
     expect(report.targets).toBeGreaterThan(300)
     expect(result.code).toBe(0)
   }, 90_000)

@@ -8,6 +8,7 @@
  * process warning.
  */
 import { emitWarning } from './emit-warning'
+import { reflectDelete, reflectGet, reflectSet } from './primordials'
 
 /** A warning the library reports. */
 export interface TelemetryWarning {
@@ -33,17 +34,17 @@ const SINK_KEY = Symbol.for('@bymax-one/nest-telemetry/warning-sink')
  *   since stays in place.
  */
 export function registerWarningSink(sink: WarningSink): () => void {
-  Reflect.set(globalThis, SINK_KEY, sink)
+  reflectSet(globalThis, SINK_KEY, sink)
   return () => {
-    if (Reflect.get(globalThis, SINK_KEY) === sink) {
-      Reflect.deleteProperty(globalThis, SINK_KEY)
+    if (reflectGet(globalThis, SINK_KEY) === sink) {
+      reflectDelete(globalThis, SINK_KEY)
     }
   }
 }
 
 /** Removes whatever sink is registered, for a test harness. */
 export function clearWarningSink(): void {
-  Reflect.deleteProperty(globalThis, SINK_KEY)
+  reflectDelete(globalThis, SINK_KEY)
 }
 
 /**
@@ -55,7 +56,7 @@ export function clearWarningSink(): void {
  */
 export function reportWarning(warning: TelemetryWarning): void {
   try {
-    const sink = Reflect.get(globalThis, SINK_KEY) as WarningSink | undefined
+    const sink = reflectGet(globalThis, SINK_KEY) as WarningSink | undefined
     if (sink?.(warning) === true) {
       return
     }
