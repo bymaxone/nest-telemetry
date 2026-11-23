@@ -388,6 +388,19 @@ describe('settleOverrides, for a map or an entry whose keys sit on a prototype w
     })
   })
 
+  it('refuses a class whose prototype defines a getter named __proto__, which is not the accessor of a root', () => {
+    // Scenario: only a holder with no prototype, the root of a realm, owns the accessor `__proto__` by right; a
+    // class that defines one holds an inherited accessor like any other and is refused as one.
+    class Entry {
+      get ['__proto__'](): object {
+        return { enabled: false }
+      }
+    }
+    expect(thrown(() => settleOverrides('x', { http: new Entry() }))).toMatchObject({
+      option: 'instrumentations.overrides[]'
+    })
+  })
+
   it('does not refuse a Proxy whose answer for its prototype is a holder of settings', () => {
     // Scenario: a Proxy is read for what it answers, so what its prototype trap says is not judged.
     const bare = Object.create(null, { pino: { value: {}, enumerable: true } }) as object
