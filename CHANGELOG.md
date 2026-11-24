@@ -26,15 +26,14 @@ heading here.
   library read once when it loaded.
 - **A built-in that the library's own checks rely on, replaced after it loaded, now counts as a pollution.** The
   check of the process compared only `Object.prototype` with a fresh realm. It now also compares the members of the
-  built-ins that the guard, the export wrap and the option settling call: one that is replaced, deleted or swapped for a function of another
+  built-ins the library calls: one that is replaced, deleted or swapped for a function of another
   realm counts one, so the start answers with the disabled handle and an export drops its batch, and a check that
-  cannot read them counts one rather than zero. `Promise`, its `then`, `catch` and `finally` (apart from `Promise[Symbol.species]` and the
-  `constructor` of `Promise.prototype`, which are compared), timers, `Date`, `EventEmitter`, `http`, `fetch` and `process` are not compared: tracing agents and context managers wrap them by
-  design, and no decision to drop or to send awaits through anything but a native promise. The warning says that `Object.prototype` or a
+  cannot read them counts one rather than zero. What tracing agents and context managers wrap by
+  design, such as timers, `http`, `fetch` and the methods of `Promise.prototype`, is not compared, and no decision to drop or to send awaits through anything but a native promise. The warning says that `Object.prototype` or a
   built-in was changed, with a count and never a name.
 - **A map or an entry of `instrumentations.overrides` whose settings sit on a prototype is refused.**
   The copy read own keys only, so `enabled: false` held by a parent object (`Object.create({ enabled: false })`) was dropped in silence, and the instrumentation stayed on. The root prototype of the realm, where a
-  pollution is planted, and the methods of a class are not a setting, but a getter or a setter of a class is, since it is not enumerable and the copy would drop what it answers. The start fails with `BYMAX_TELEMETRY_OPTION_INVALID`, naming `instrumentations.overrides` for a map and `instrumentations.overrides[]` for an entry.
+  pollution is planted, and the methods of a class are not a setting, but a getter or a setter of a class is, since it is not enumerable and the copy would drop what it answers. The start fails with `BYMAX_TELEMETRY_OPTION_INVALID`.
 - **The warning for a batch dropped by the pollution guard says why.** It told the host to check that the collector
   was reachable, though the collector was never contacted. The dropped batch now fails with the code
   `BYMAX_TELEMETRY_REALM_POLLUTED`, and the warning names the change.
@@ -71,8 +70,7 @@ heading here.
 - **The README states what the pollution guard does not cover**: a `detail` or `code` defined as an accessor or
   read-only (the start is disabled with no warning), an exporter built from another copy of the OpenTelemetry
   packages (not wrapped), and an options object whose prototype is the host's own (read as a class chain).
-- **The README says the limits on a nested override setting are new in 1.0.12** (16 levels, 10,000 objects and lists,
-  1000 entries to a list or an object), so a host that nested more than that finds the refusal documented.
+- **The README says the limits on a nested override setting are new in 1.0.12**, so a host that nested more than that finds the refusal documented.
 
 - **The docs state the threat model.** `SECURITY.md` says that code running in the same process is trusted, as in
   Node, and that the guards are best-effort hardening and not a security boundary.
