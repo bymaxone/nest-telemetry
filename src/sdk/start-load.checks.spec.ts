@@ -80,7 +80,7 @@ describe('the checks of the process while the packages load', () => {
     expect(two).toBe(one)
   })
 
-  it('rejects with the reason of a package that failed to load, once', async () => {
+  it('rejects with the reason of a package that failed to load', async () => {
     // Scenario: one import refuses; its reason reaches the caller, and the start is answered by it alone.
     jest.doMock('@opentelemetry/sdk-trace', () => {
       throw new Error('missing peer')
