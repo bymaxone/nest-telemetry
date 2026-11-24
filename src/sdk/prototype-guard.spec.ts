@@ -415,4 +415,66 @@ describe('the built-ins that the SDK calls on a decision path', () => {
     }
     expect(pollutedNames()).toBe(before)
   })
+
+  describe('a Promise that was changed before this copy loaded', () => {
+    /** Loads a fresh copy of the guard while `prepare` has changed the process, and counts before it restores it. */
+    function countedAfterLoad(prepare: () => () => void): number {
+      let count = -1
+      jest.isolateModules(() => {
+        const restore = prepare()
+        try {
+          count = (
+            jest.requireActual('./prototype-guard') as typeof import('./prototype-guard')
+          ).pollutedNames()
+        } finally {
+          restore()
+        }
+      })
+      return count
+    }
+
+    const slot = (): PropertyDescriptor =>
+      Object.getOwnPropertyDescriptor(Promise.prototype, 'constructor') as PropertyDescriptor
+
+    it('counts a constructor of Promise.prototype that was set before the load, which the copy then captures', () => {
+      // Scenario: a host sets the slot to its own function before a copy loads (the nest bundle loads after the
+      // preload); the copy captures it, and the count still names the change because it is not the engine's Promise.
+      const original = slot()
+      const count = countedAfterLoad(() => {
+        Object.defineProperty(Promise.prototype, 'constructor', {
+          ...original,
+          value: function Host(): void {}
+        })
+        return () => Object.defineProperty(Promise.prototype, 'constructor', original)
+      })
+      expect(count).toBeGreaterThan(0)
+    })
+
+    it('counts a constructor that links back to the prototype but reads as another function', () => {
+      // Scenario: the planted function takes `Promise.prototype` as its own `prototype`, so the slot and the link both
+      // agree; its text is not the engine's.
+      const original = slot()
+      const count = countedAfterLoad(() => {
+        const host = function Host(): void {}
+        host.prototype = Promise.prototype
+        Object.defineProperty(Promise.prototype, 'constructor', { ...original, value: host })
+        return () => Object.defineProperty(Promise.prototype, 'constructor', original)
+      })
+      expect(count).toBeGreaterThan(0)
+    })
+
+    it('counts nothing for a global Promise that a host replaced with a subclass before the load', () => {
+      // Scenario: a zone or Bluebird style host replaces `globalThis.Promise` before load; the engine's prototype is
+      // untouched, so the process is not polluted and the start is not refused forever.
+      const real = globalThis.Promise
+      class Zoneish extends (real as unknown as new (executor: () => void) => object) {}
+      const count = countedAfterLoad(() => {
+        globalThis.Promise = Zoneish as unknown as PromiseConstructor
+        return () => {
+          globalThis.Promise = real
+        }
+      })
+      expect(count).toBe(0)
+    })
+  })
 })

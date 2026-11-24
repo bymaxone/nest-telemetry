@@ -112,8 +112,9 @@ function innermostTransport(exporter: unknown): Transport | undefined {
  * did would be read by the request that follows. An answer that is not a promise is handed back as it is, so a
  * synchronous provider stays synchronous.
  *
- * A promise is consumed with `Promise.prototype.then` as it was when this module loaded, and settled by a promise
- * of this module's own: no `await`, no `then` looked up on the answer, no constructor read for a species. The
+ * A promise of the host's is waited for with a native `await` and never written to, and the answer is settled by a
+ * promise of this module's own with its own `constructor`: a `then` or a species that something replaced is not
+ * read. A wait that cannot be made refuses the answer. The
  * check is the last thing before the value is resolved, with nothing between them, because resolving reads a `then`
  * on the value, and a `then` planted on a root prototype that erases itself when read would otherwise be read
  * after the check passed.
@@ -191,13 +192,12 @@ function guardedSend(
         }
         try {
           const sent = apply(send, this, [data, timeoutMillis])
-          // A promise is consumed with the `then` this module loaded, so a `then` that something replaced cannot
-          // settle this result.
+          // A dependency's promise is waited for natively after it took an own constructor, so a `then` that
+          // something replaced cannot settle this result.
           // Checked again right before the value is resolved, which reads a `then` on it.
           const settle = (value: unknown): void =>
             resolve(pollutedNames() > 0 ? refusedResult() : value)
           if (!isPromise(sent)) settle(sent)
-          // The promise is a dependency's: it takes an own constructor first, so a replaced one is never read.
           else absorbOwned(sent, settle, reject)
         } catch (error) {
           reject(error)

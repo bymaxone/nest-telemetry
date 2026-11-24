@@ -11,6 +11,7 @@ import {
   clearHandle,
   clearPendingStart,
   createHandle,
+  currentHandle,
   registerHandle,
   setPendingStart,
   shutdownTelemetry
@@ -194,12 +195,47 @@ function transportOf(exporter: OTLPTraceExporter): {
 }
 
 describe('a start beside a promise of a host that cannot be consumed', () => {
-  it('answers a start that joins a promise of a host, whose constructor throws, with the disabled handle', async () => {
+  it('rejects a start that joins a promise of a host, whose constructor throws, with a typed error', async () => {
     // Scenario: the start in progress is a promise of another copy whose constructor throws when a then reads it; it
-    // cannot be consumed, so the call is refused instead of reading anything from it.
+    // cannot be consumed, so the call fails typed like every other wait that cannot be made, and reads nothing.
     setPendingStart(unconsumablePromise<never>(() => undefined))
-    const handle = await startTelemetry({ env: {} })
-    expect(handle.enabled).toBe(false)
+    await expect(startTelemetry({ env: {} })).rejects.toMatchObject({
+      code: 'BYMAX_TELEMETRY_REALM_POLLUTED'
+    })
+  })
+
+  it('pins the pending start before it is published, so a host accessor on the slot cannot forge the answer', async () => {
+    // Scenario: a host accessor on the pending-start slot pins a constructor and a then on the promise it is handed,
+    // and freezes it; the promise already holds its own read-only constructor, so the pin throws and the call does
+    // not resolve the forged handle.
+    const key = Symbol.for('@bymax-one/nest-telemetry/pending-start')
+    const forged = Object.freeze({ forged: true, enabled: true, shutdown: () => Promise.resolve() })
+    let held: unknown
+    Object.defineProperty(globalThis, key, {
+      configurable: true,
+      get: () => held,
+      set(promise: Promise<unknown>) {
+        held = promise
+        Object.defineProperty(promise, 'constructor', { value: Object })
+        Object.defineProperty(promise, 'then', {
+          value: (res: (v: unknown) => void) => res(forged)
+        })
+        Object.freeze(promise)
+      }
+    })
+    try {
+      const answered = await startTelemetry({ serviceName: 's', env: {} }).then(
+        (handle) => (handle as unknown as { forged?: boolean }).forged === true,
+        () => false
+      )
+      expect(answered).toBe(false)
+    } finally {
+      Reflect.deleteProperty(globalThis, key)
+    }
+    for (let waited = 0; currentHandle() === undefined && waited < 100; waited += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    await shutdownTelemetry()
   })
 
   it('rejects with a typed error when the flush of a stopping handle cannot be consumed', async () => {
@@ -220,9 +256,13 @@ describe('a start beside a promise of a host that cannot be consumed', () => {
     // Scenario: a name is planted by the start of the real SDK; the answer is the disabled handle, and the SDK that
     // just started and registered is stopped, so nothing is left running with no handle to stop it.
     plantOnStart = true
-    jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    const warn = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
     const handle = await startTelemetry({ env: {} })
     expect(handle.enabled).toBe(false)
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('did not start'),
+      expect.objectContaining({ code: 'BYMAX_TELEMETRY_REALM_POLLUTED' })
+    )
     Reflect.deleteProperty(Object.prototype, 'zzPlantedOnStart')
     await shutdownTelemetry()
     clearHandle()

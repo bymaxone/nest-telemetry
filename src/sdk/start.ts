@@ -80,11 +80,20 @@ freeze(DISABLED_HANDLE)
 function refusesPollution(): boolean {
   const polluted = pollutedNames()
   if (polluted === 0) return false
+  warnPolluted(polluted)
+  return true
+}
+
+/**
+ * Says that telemetry did not start because the process is polluted.
+ *
+ * @param polluted - How many names differ from the engine's.
+ */
+function warnPolluted(polluted: number): void {
   emitWarning(
     `Telemetry did not start: Object.prototype or a built-in the SDK calls differs from the engine's in ${polluted} name(s) (added, missing or changed), and the SDK and its dependencies would read or call them. Nothing is exported. Undo the change, or start telemetry before it is made.`,
     { type: 'SecurityWarning', code: 'BYMAX_TELEMETRY_REALM_POLLUTED' }
   )
-  return true
 }
 
 /**
@@ -186,7 +195,7 @@ function proceed(
   if (joined !== undefined) {
     warnAboutIgnoredOptions(settled)
     const take = (handle: unknown): void => answer(resolve, handle as TelemetryHandle)
-    if (!absorbHost(joined, take, reject)) resolve(DISABLED_HANDLE)
+    if (!absorbHost(joined, take, reject)) reject(unconsumable())
     return
   }
   if (hasStopped()) {
@@ -200,7 +209,8 @@ function proceed(
     resolve(DISABLED_HANDLE)
     return
   }
-  const start = boot(settled, env)
+  // Pinned before it is published: a host accessor on the slot would otherwise see the promise with no own constructor.
+  const start = ownConstructor(boot(settled, env))
   setPendingStart(start)
   // The pending start is cleared by a handler of ours, not by `finally`, which would look up `then` on the promise.
   absorbOwned(start, clearPendingStart, clearPendingStart)
@@ -231,8 +241,8 @@ interface LoadedPackages {
  * Loads the OpenTelemetry packages a start needs, the five of them at once, and hands them over when the last one
  * arrived.
  *
- * A native promise is consumed with `Promise.prototype.then` as `primordials` loaded it, so nothing is awaited
- * and no `Promise.all`, `then` or constructor that something replaced afterwards can decide what the start gets:
+ * Each import is waited for natively after it took an own constructor, and no `Promise.all`, `then` or
+ * constructor that something replaced afterwards can decide what the start gets:
  * a result array handed to `Promise.all` is read for a `then`, which an object that a polluted prototype holds
  * answers. A handler is attached to every import before any of them settles, so none can end the host as an
  * unhandled rejection. The check comes last before the packages are handed over, with nothing between.
@@ -426,9 +436,11 @@ function boot(options: TelemetryOptions, env: TelemetryEnvironment): Promise<Tel
         sdk.start()
         const handle = createHandle(() => sdk.shutdown(), shutdownTimeoutMs)
         registerHandle(handle)
-        if (pollutedNames() > 0) {
+        const turned = pollutedNames()
+        if (turned > 0) {
           // The process turned polluted while the SDK was built: the answer is the disabled handle, so nothing could
           // stop the SDK that just started. It is stopped here, and its outcome is nobody's.
+          warnPolluted(turned)
           absorbOwned(handle.shutdown(), ignore, ignore)
           resolve(DISABLED_HANDLE)
           return

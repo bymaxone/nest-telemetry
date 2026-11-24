@@ -16,15 +16,18 @@ heading here.
   through `Promise.all` and an `await`, and a guarded export awaited the provider answer and the send. A
   `Promise.all` replaced after load, a `then` on `Object.prototype` that erases itself after one read, or a replaced
   `then` with a constructor that is put back could hand back a forged `NodeSDK` or forged headers while the checks
-  passed. The decisions now consume native promises with the `then` the library read when it loaded, settle through
-  a native promise from the intrinsic constructor, and check the process immediately before they settle. A `then` on
+  passed. The decisions now wait for native promises with a native `await`, settle through a native promise from the
+  engine's own constructor, and check the process immediately before they settle. A `then` on
   `Array.prototype` or `Function.prototype`, and a changed `constructor` of `Promise.prototype`, which every `then`
   reads for a species, count as a pollution like one on `Object.prototype`; a promise the library made gets its own
   `constructor`, and a promise a host made is never written to. The handle of a started SDK has no prototype, and
   the check is the last thing before a promise of the library resolves with a handle or a send result. A refusal
-  of a start answers with the disabled handle, and a refusal of a send fails the export. A wait on a promise of a host
-  that cannot be made, because its `constructor` was replaced, is refused instead of going on. The handles the library returns are frozen. The loads of the packages are not part of this claim: see the
-  known limit on `import()`.
+  of a start at boot answers with the disabled handle, and a refusal of a send fails the export. A wait on a promise
+  of a host that cannot be made, because its `constructor` was replaced, is refused instead of going on: a start, a
+  `shutdown` and `shutdownTelemetry` then reject with `BYMAX_TELEMETRY_REALM_POLLUTED`. A boot that finds the process
+  polluted after the SDK started stops that SDK, warns with the same code and answers with the disabled handle. The
+  handles the library returns are frozen. The loads of the packages are not part of this claim: see the known limit
+  on `import()`.
 
 ### Known limits
 
@@ -32,6 +35,9 @@ heading here.
   `Promise.prototype.then`. A host that replaces `then`, swaps a module namespace and puts `then` back can have a
   package of its own built; module resolution belongs to the host, which can also replace a module through loader
   hooks or `require.cache`, so the library does not claim to close this route.
+- The check compares the engine's `Promise` with a fresh realm's, and the library takes it from the engine, but a
+  host that changes `Promise.prototype.constructor` to something that reads like the engine's own `Promise` before
+  the library loads is not told apart.
 - A host provider that resolves a plain object reads a `then` planted on `Object.prototype` itself, before the
   library sees the value; the library cannot close that from its side.
 - The OpenTelemetry and OTLP exporter internals read statics and `then` on their own, outside the decisions above.

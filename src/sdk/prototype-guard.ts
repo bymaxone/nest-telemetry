@@ -137,6 +137,7 @@ function describeAll(objects: readonly object[]): Record<number, Descriptors> {
 interface Pristine {
   readonly descriptors: Readonly<Record<string | symbol, PropertyDescriptor>>
   readonly sourceOf: (value: unknown) => string
+  readonly promiseSource: string
   readonly targets: Readonly<Record<number, Descriptors>>
 }
 
@@ -160,11 +161,18 @@ function build(): Pristine | undefined {
     const made = runInFreshRealm(
       '({ descriptors: Object.getOwnPropertyDescriptors(Object.prototype), ' +
         'sourceOf: (value) => Function.prototype.toString.call(value), ' +
+        'promiseSource: Function.prototype.toString.call(Promise), ' +
         `objects: ${EXPRESSION} })`
-    ) as { descriptors: Descriptors; sourceOf: Pristine['sourceOf']; objects: readonly object[] }
+    ) as {
+      descriptors: Descriptors
+      sourceOf: Pristine['sourceOf']
+      promiseSource: string
+      objects: readonly object[]
+    }
     return {
       descriptors: made.descriptors,
       sourceOf: made.sourceOf,
+      promiseSource: made.promiseSource,
       targets: describeAll(made.objects)
     }
   } catch {
@@ -295,7 +303,7 @@ export function pollutedNames(): number {
     found +
     changedBuiltins(pristine.targets, sourceOf) +
     thenOnSiblings() +
-    promiseConstructorChanged()
+    promiseConstructorChanged(pristine)
   )
 }
 
@@ -312,13 +320,25 @@ function thenOnSiblings(): number {
 
 /**
  * Counts a change of the `constructor` slot of `Promise.prototype`, which every `then` reads for a species: it must
- * still be the data property that holds the promise constructor this module loaded with.
+ * still be the data property that holds the engine's own `Promise`. What this module captured is not enough, since a
+ * value planted before it loaded would be captured as well; the constructor has to read as the `Promise` of a fresh
+ * realm and be the one whose `prototype` is the prototype that was checked.
  *
+ * @param fresh - What the fresh realm holds.
  * @returns Zero when untouched, one otherwise.
  */
-function promiseConstructorChanged(): number {
+function promiseConstructorChanged(fresh: Pristine): number {
   const slot = getOwnPropertyDescriptor(promisePrototype, 'constructor')
-  return slot !== undefined && hasOwn(slot, 'value') && slot.value === NativePromise ? 0 : 1
+  const link = getOwnPropertyDescriptor(NativePromise, 'prototype')
+  return slot !== undefined &&
+    hasOwn(slot, 'value') &&
+    slot.value === NativePromise &&
+    link !== undefined &&
+    hasOwn(link, 'value') &&
+    link.value === promisePrototype &&
+    fresh.sourceOf(NativePromise) === fresh.promiseSource
+    ? 0
+    : 1
 }
 
 /**

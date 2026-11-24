@@ -74,13 +74,24 @@ export const runInFreshRealm = runInNewContext
 /** `util.types.isPromise`, which reads the internal slot of a promise and no property of it. */
 export const isPromise = types.isPromise
 
+/** A promise the engine built from its own intrinsic, whatever `globalThis.Promise` is: where the intrinsic is read from. */
+const engineSample = (async (): Promise<undefined> => undefined)()
+
 /**
- * The `Promise` intrinsic, to build the promises the guard settles itself. It is taken from the promise of an `async`
- * function, which the engine builds from the intrinsic, so a `globalThis.Promise` that was replaced before this module
- * loaded is not the one used.
+ * `Promise.prototype` as the engine holds it, read from a promise an `async` function built, and not from the
+ * `Promise` global: a host that replaced the global before this module loaded changes neither. Its `constructor` is
+ * what a `then` reads for a species, and the guard requires it to be untouched.
  */
-export const NativePromise = (async (): Promise<undefined> => undefined)()
-  .constructor as PromiseConstructor
+export const promisePrototype = getPrototypeOf(engineSample) as Promise<unknown>
+
+/**
+ * The `Promise` constructor that {@link promisePrototype} holds, to build the promises the guard settles itself. It is
+ * read as the data property of the engine's prototype, so a getter there never runs. A value planted there before
+ * this module loaded is captured too, and the guard refuses a constructor that is not the engine's: see
+ * `promiseConstructorChanged`.
+ */
+export const NativePromise = getOwnPropertyDescriptor(promisePrototype, 'constructor')
+  ?.value as PromiseConstructor
 
 /** `Object.freeze`, so a handle handed to the host cannot be given a `then` or a replaced `shutdown`. */
 export const freeze = Object.freeze
@@ -111,6 +122,3 @@ export const clockNow = performance.now
 
 /** The `performance` object that {@link clockNow} belongs to, as it was when this module loaded. */
 export const clockOwner = performance
-
-/** `Promise.prototype`, whose `constructor` a `then` reads for a species and the guard requires to be untouched. */
-export const promisePrototype = Promise.prototype
