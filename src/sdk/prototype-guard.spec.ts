@@ -373,4 +373,20 @@ describe('the built-ins that the SDK calls on a decision path', () => {
       )
     }
   })
+
+  it('counts a then on Array.prototype or Function.prototype, one each, and nothing once it is gone', () => {
+    // Scenario: a value that is an array or a function and is resolved into a promise is read for a then, so one
+    // planted on either prototype is as unsafe as one on Object.prototype; each is counted once, and the count
+    // returns to zero when the name is removed.
+    for (const target of [Array.prototype, Function.prototype] as object[]) {
+      expect(pollutedNames()).toBe(0)
+      Object.defineProperty(target, 'then', { value: () => undefined, configurable: true })
+      try {
+        expect(pollutedNames()).toBe(1)
+      } finally {
+        delete (target as Record<string, unknown>)['then']
+      }
+      expect(pollutedNames()).toBe(0)
+    }
+  })
 })

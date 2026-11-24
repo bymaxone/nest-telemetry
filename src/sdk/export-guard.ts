@@ -15,9 +15,11 @@ import {
   defineProperty,
   ErrorClass,
   getOwnPropertyDescriptor,
+  create,
   getPrototypeOf,
   hasOwn,
   isPromise,
+  NativePromise,
   promiseThen
 } from './primordials'
 import { pollutedNames } from './prototype-guard'
@@ -110,8 +112,14 @@ function ignore(): void {}
 
 /**
  * Checks again once a provider has answered: a provider the host supplied can wait, and a name planted while it
- * did would be read by the request that follows. The check comes before anything is read from the answer, and an
- * answer that is not a promise is handed back as it is, so a synchronous provider stays synchronous.
+ * did would be read by the request that follows. An answer that is not a promise is handed back as it is, so a
+ * synchronous provider stays synchronous.
+ *
+ * A promise is consumed with `Promise.prototype.then` as it was when this module loaded, and settled by a promise
+ * of this module's own: no `await`, no `then` looked up on the answer, no constructor read for a species. The
+ * check is the last thing before the value is resolved, with nothing between them, because resolving reads a `then`
+ * on the value, and a `then` planted on a root prototype that erases itself when read would otherwise be read
+ * after the check passed.
  *
  * @param answer - What the provider returned.
  * @returns The answer, or a promise of it that rejects when the prototype is polluted by then.
@@ -125,18 +133,41 @@ function refuseIfPolluted(answer: unknown): unknown {
     if (isPromise(answer)) apply(promiseThen, answer, [ignore, ignore])
     throw dropped()
   }
+  const native = isPromise(answer)
   if (
-    typeof answer === 'object' &&
-    answer !== null &&
-    typeof (answer as PromiseLike<unknown>).then === 'function'
+    !native &&
+    !(
+      typeof answer === 'object' &&
+      answer !== null &&
+      typeof (answer as PromiseLike<unknown>).then === 'function'
+    )
   ) {
-    return (async (): Promise<unknown> => {
-      const value = await answer
-      if (pollutedNames() > 0) throw dropped()
-      return value
-    })()
+    return answer
   }
-  return answer
+  return new NativePromise<unknown>((resolve, reject) => {
+    // A thenable that is not a promise is adopted by a promise of ours, so the one that is consumed is a native one.
+    const source = native ? answer : new NativePromise<unknown>((adopt) => adopt(answer))
+    apply(promiseThen, source, [
+      (value: unknown): void => {
+        if (pollutedNames() > 0) reject(dropped())
+        else resolve(value)
+      },
+      reject
+    ])
+  })
+}
+
+/**
+ * The result of a send that the guard refused: an object with no prototype, so that resolving a promise with it
+ * reads no `then` from the root prototype.
+ *
+ * @returns The failed result.
+ */
+function refusedResult(): unknown {
+  const result = create(null) as Record<string, unknown>
+  result['status'] = 'failure'
+  result['error'] = dropped()
+  return result
 }
 
 /**
@@ -154,9 +185,24 @@ function armTransport(exporter: unknown): void {
     __proto__: null,
     configurable: true,
     writable: true,
-    value: async function (this: unknown, data: unknown, timeoutMillis: unknown): Promise<unknown> {
-      if (pollutedNames() > 0) return { status: 'failure', error: dropped() }
-      return apply(send, this, [data, timeoutMillis])
+    value: function (this: unknown, data: unknown, timeoutMillis: unknown): Promise<unknown> {
+      // No `async`: returning from one resolves a promise with the value, which reads a `then` on it. The check comes
+      // last before the refused result is resolved, and the result has no prototype to read one from.
+      return new NativePromise<unknown>((resolve, reject) => {
+        if (pollutedNames() > 0) {
+          resolve(refusedResult())
+          return
+        }
+        try {
+          const sent = apply(send, this, [data, timeoutMillis])
+          // A promise is consumed with the `then` this module loaded, so a `then` that something replaced cannot
+          // settle this result.
+          if (isPromise(sent)) apply(promiseThen, sent, [resolve, reject])
+          else resolve(sent)
+        } catch (error) {
+          reject(error)
+        }
+      })
     }
   } as PropertyDescriptor)
   const parameters = own(transport, '_parameters') as Record<string, unknown> | undefined

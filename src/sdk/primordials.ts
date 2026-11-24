@@ -77,6 +77,15 @@ export const isPromise = types.isPromise
 /** `Promise.prototype.then`, to attach a handler to a promise that the guard drops. */
 export const promiseThen = Promise.prototype.then
 
+/** `Promise`, to build the promises the guard settles itself, as it was when this module loaded. */
+export const NativePromise = Promise
+
+/** `Array.prototype`, whose `then` the guard requires to be absent. */
+export const arrayPrototype = Array.prototype
+
+/** `Function.prototype`, whose `then` the guard requires to be absent. */
+export const functionPrototype = Function.prototype
+
 /** `String.prototype.endsWith`, called through {@link apply}. */
 export const endsWith = String.prototype.endsWith
 

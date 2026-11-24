@@ -10,6 +10,24 @@ heading here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The start and the export no longer let a forged promise result decide.** The start awaited the five packages
+  through `Promise.all` and an `await`, and a guarded export awaited the provider answer and the send. A
+  `Promise.all` replaced after load, a `then` on `Object.prototype` that erases itself after one read, or a replaced
+  `then` with a constructor that is put back could hand back a forged `NodeSDK` or forged headers while the checks
+  passed. The decisions now consume native promises with the `then` the library read when it loaded, settle through
+  a native promise from the intrinsic constructor, and check the process immediately before they settle. A `then` on
+  `Array.prototype` or `Function.prototype` counts as a pollution like one on `Object.prototype`. A refusal fails
+  closed: the disabled handle at start, a failed export at send.
+
+### Known limits
+
+- A host provider that resolves a plain object reads a `then` planted on `Object.prototype` itself, before the
+  library sees the value; the library cannot close that from its side.
+- The OpenTelemetry and OTLP exporter internals read statics and `then` on their own, outside the decisions above.
+- A `then` that is planted and erased again between the check at entry and the settling is not seen.
+
 ### Planned for the next minor
 
 - **Export the option error class** with `code` and `option` typed in the declarations, so a host can test for

@@ -54,6 +54,9 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
     url: process.env.ENDPOINT + '/v1/traces',
     ...(headers ? { headers } : {})
   })
+  if (process.env.SEND_THROWS === '1') {
+    exporter._delegate._transport._transport.send = () => { throw new Error('send threw') }
+  }
   guardExports(exporter)
   const ended = []
   const collect = { onStart() {}, onEnd: (span) => ended.push(span), forceFlush: () => Promise.resolve(), shutdown: () => Promise.resolve() }
@@ -75,7 +78,8 @@ async function run(
   plantAt: string,
   wait: number,
   wrapPromise = false,
-  slowHeaders = 0
+  slowHeaders = 0,
+  sendThrows = false
 ): Promise<{ results: number[]; errors: (string | null)[]; unhandled: number }> {
   const result = await runInRealProcess(
     CHILD,
@@ -85,7 +89,8 @@ async function run(
       PLANT_AT: plantAt,
       WAIT: String(wait),
       WRAP_PROMISE: wrapPromise ? '1' : '0',
-      SLOW_HEADERS: String(slowHeaders)
+      SLOW_HEADERS: String(slowHeaders),
+      SEND_THROWS: sendThrows ? '1' : '0'
     },
     30_000
   )
@@ -329,4 +334,14 @@ describe('the providers of a transport that answer synchronously, in this proces
     await new Promise((resolve) => setImmediate(resolve))
     expect(unhandled).not.toHaveBeenCalled()
   })
+
+  it('reports the export as failed, with the reason, when the transport throws before it returns a promise', async () => {
+    // Scenario: a send that throws synchronously is a failed attempt: no request reaches the collector and the
+    // callback of the export is told, with the reason of the throw.
+    collector = await startCollector()
+    const thrown = await run('', 1500, false, 0, true)
+    expect(collector.bodies).toHaveLength(0)
+    expect(thrown.results).toEqual([1])
+    expect(thrown.errors).toEqual(['send threw'])
+  }, 60_000)
 })

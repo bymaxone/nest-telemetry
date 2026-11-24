@@ -8,9 +8,11 @@
  * one telemetry can trust with its data. The count is all that is ever reported, never a name or a value.
  */
 import {
+  arrayPrototype,
   create,
   getOwnPropertyDescriptor,
   getOwnPropertyDescriptors,
+  functionPrototype,
   getPrototypeOf,
   hasOwn,
   ownKeys,
@@ -287,7 +289,18 @@ export function pollutedNames(): number {
   for (let at = 0; at < total; at += 1) {
     if (!unchanged(names[at] as string | symbol, now, descriptors, sourceOf, loaded)) found += 1
   }
-  return found + changedBuiltins(pristine.targets, sourceOf)
+  return found + changedBuiltins(pristine.targets, sourceOf) + thenOnSiblings()
+}
+
+/**
+ * Counts the prototypes next to the root that hold a `then`: a value that is an array or a function and is
+ * resolved into a promise would be read for it, as an object is read through `Object.prototype`, whose own
+ * names are compared above.
+ *
+ * @returns Zero, one or two.
+ */
+function thenOnSiblings(): number {
+  return (hasOwn(arrayPrototype, 'then') ? 1 : 0) + (hasOwn(functionPrototype, 'then') ? 1 : 0)
 }
 
 /**

@@ -42,6 +42,7 @@ import {
   setPendingStart
 } from './handle'
 import type { RunningHandle } from './handle'
+import { apply, create, isPromise, NativePromise, promiseThen } from './primordials'
 import { pollutedNames } from './prototype-guard'
 import { createUrlQueryRedactor } from './redaction'
 import { selectResourceDetectors } from './resource-detectors'
@@ -147,19 +148,76 @@ interface LoadedPackages {
 }
 
 /**
- * Loads the OpenTelemetry packages a start needs.
+ * Loads the OpenTelemetry packages a start needs, the five of them at once, and hands them over when the last one
+ * arrived.
  *
- * @returns The loaded packages.
+ * A native promise is consumed with `Promise.prototype.then` as `primordials` loaded it, so nothing is awaited
+ * and no `Promise.all`, `then` or constructor that something replaced afterwards can decide what the start gets:
+ * a result array handed to `Promise.all` is read for a `then`, which an object that a polluted prototype holds
+ * answers. A handler is attached to every import before any of them settles, so none can end the host as an
+ * unhandled rejection. The check comes last before the packages are handed over, with nothing between.
+ *
+ * @param done - Called once with the packages, or with `undefined` when the load cannot be trusted.
+ * @param fail - Called once with the first reason an import was refused.
  */
-async function loadPackages(): Promise<LoadedPackages> {
-  const [sdkNode, sdkTrace, autoInstrumentations, exporter, resources] = await Promise.all([
+function loadPackages(
+  done: (packages: LoadedPackages | undefined) => void,
+  fail: (reason: unknown) => void
+): void {
+  const imports = [
     import('@opentelemetry/sdk-node'),
     import('@opentelemetry/sdk-trace'),
     import('@opentelemetry/auto-instrumentations-node'),
     import('@opentelemetry/exporter-trace-otlp-http'),
     import('@opentelemetry/resources')
-  ])
-  return { sdkNode, sdkTrace, autoInstrumentations, exporter, resources }
+  ] as const
+  const modules = create(null) as Record<number, unknown>
+  let waiting = imports.length
+  let over = false
+  const settle = (): void => {
+    // Only reached when every import answered, so no refusal or untrusted import has settled the load before.
+    over = true
+    done(pollutedNames() > 0 ? undefined : (named(modules) as LoadedPackages))
+  }
+  for (let at = 0; at < imports.length; at += 1) {
+    const source = imports[at]
+    if (!isPromise(source)) {
+      // Not a promise of the engine's: there is nothing to trust a value from. The others still get their handler.
+      if (!over) {
+        over = true
+        done(undefined)
+      }
+      continue
+    }
+    apply(promiseThen, source, [
+      (module: unknown): void => {
+        modules[at] = module
+        waiting -= 1
+        if (waiting === 0) settle()
+      },
+      (reason: unknown): void => {
+        if (over) return
+        over = true
+        fail(reason)
+      }
+    ])
+  }
+}
+
+/**
+ * Names the five packages that {@link loadPackages} kept by position.
+ *
+ * @param modules - The packages by position.
+ * @returns The packages by name.
+ */
+function named(modules: Record<number, unknown>): unknown {
+  const result = create(null) as Record<string, unknown>
+  result['sdkNode'] = modules[0]
+  result['sdkTrace'] = modules[1]
+  result['autoInstrumentations'] = modules[2]
+  result['exporter'] = modules[3]
+  result['resources'] = modules[4]
+  return result
 }
 
 /** The options that are read once for the whole start. */
@@ -255,32 +313,42 @@ function buildSdk(
  * @param env - The parsed environment.
  * @returns The handle of the started SDK.
  */
-async function boot(
-  options: TelemetryOptions,
-  env: TelemetryEnvironment
-): Promise<TelemetryHandle> {
-  // Read once for the whole start, each field once: a getter, on the option or on a field of it, could
-  // answer differently each time, and the warning about a turned-off redaction, the SDK build and the
-  // instrumentation config must all see the same values.
-  const unsafe = settleUnsafe(options.unsafe)
-  const instrumentations = settleInstrumentations(options.instrumentations)
-  const service = settleService(options)
-  warnAboutUnsafeOptions({ unsafe })
-  warnAboutMissingServiceName(service, env)
-  warnAboutOversizedTimers(env)
-  warnAboutSamplerName(readSamplerNearMiss())
-  warnAboutSamplerRatio(readRatioSampler())
-  warnAboutMissingWinstonTransport(instrumentations.sendLogs ?? planSignals(env).sendLogs)
-  // Read before the SDK starts: an option that throws when read must not leave a started SDK that no
-  // handle can stop.
-  const shutdownTimeoutMs = options.shutdownTimeoutMs
-  const packages = await loadPackages()
-  // Checked again, with no await between it and the build: a name planted while the packages loaded, and removed
-  // before the first export, would otherwise be read by the SDK and its exporters when they are built.
-  if (refusesPollution()) return DISABLED_HANDLE
-  const sdk = buildSdk(packages, options, env, { instrumentations, unsafe, service })
-  sdk.start()
-  const handle = createHandle(() => sdk.shutdown(), shutdownTimeoutMs)
-  registerHandle(handle)
-  return handle
+function boot(options: TelemetryOptions, env: TelemetryEnvironment): Promise<TelemetryHandle> {
+  return new NativePromise<TelemetryHandle>((resolve, reject) => {
+    // Read once for the whole start, each field once: a getter, on the option or on a field of it, could
+    // answer differently each time, and the warning about a turned-off redaction, the SDK build and the
+    // instrumentation config must all see the same values.
+    const unsafe = settleUnsafe(options.unsafe)
+    const instrumentations = settleInstrumentations(options.instrumentations)
+    const service = settleService(options)
+    warnAboutUnsafeOptions({ unsafe })
+    warnAboutMissingServiceName(service, env)
+    warnAboutOversizedTimers(env)
+    warnAboutSamplerName(readSamplerNearMiss())
+    warnAboutSamplerRatio(readRatioSampler())
+    warnAboutMissingWinstonTransport(instrumentations.sendLogs ?? planSignals(env).sendLogs)
+    // Read before the SDK starts: an option that throws when read must not leave a started SDK that no
+    // handle can stop.
+    const shutdownTimeoutMs = options.shutdownTimeoutMs
+    // No `await`: the continuation is a callback of the load, so the packages reach it as the load handed them and no
+    // promise that something replaced can stand in for it, and the check inside the load is the last before the build.
+    loadPackages((packages) => {
+      try {
+        // Checked again, with no await between it and the build: a name planted while the packages loaded, and
+        // removed before the first export, would otherwise be read by the SDK and its exporters when they are built.
+        // `packages` is `undefined` when the load itself could not be trusted, and that is a refusal too.
+        if (refusesPollution() || packages === undefined) {
+          resolve(DISABLED_HANDLE)
+          return
+        }
+        const sdk = buildSdk(packages, options, env, { instrumentations, unsafe, service })
+        sdk.start()
+        const handle = createHandle(() => sdk.shutdown(), shutdownTimeoutMs)
+        registerHandle(handle)
+        resolve(handle)
+      } catch (error) {
+        reject(error)
+      }
+    }, reject)
+  })
 }

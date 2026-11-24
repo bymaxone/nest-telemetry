@@ -342,11 +342,6 @@
     "class": "guarded",
     "iterates": ["array"]
   },
-  "src/sdk/start.ts|iterate|array-destructure": {
-    "count": 1,
-    "class": "guarded",
-    "iterates": ["array"]
-  },
   "src/sdk/start.ts|iterate|spread": {
     "count": 1,
     "class": "guarded",
@@ -368,11 +363,6 @@
   "src/sdk/start.ts|static|Object.create": {
     "count": 1,
     "class": "guarded"
-  },
-  "src/sdk/start.ts|static|Promise.all": {
-    "count": 1,
-    "class": "inert",
-    "reason": "Wrapper-prone, so not in the guard's table: it only sequences the start or the shutdown, or builds a resolved promise, and decides nothing about what is exported or redacted; the export decision awaits native promises and reads no then."
   },
   "src/sdk/start.ts|static|Promise.allSettled": {
     "count": 1,
