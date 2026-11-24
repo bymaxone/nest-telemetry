@@ -63,6 +63,10 @@ These are not vulnerabilities in `@bymax-one/nest-telemetry` itself:
 - Self-XSS, social engineering, denial of service via legitimate authenticated load
 - Theoretical attacks without a practical demonstration
 
+## Threat model: same-process code
+
+Code that runs in the same process as this library is trusted, as it is in Node itself. The guards against a polluted `Object.prototype`, a replaced built-in or a forged promise are best-effort hardening that catches accidents and common mistakes. They are not a security boundary, and a report that needs code already running in the process to defeat them is out of scope. Their limits are listed in the README and the CHANGELOG.
+
 ## Security best practices for consumers
 
 Pin the package to an exact version in production, verify the publish provenance (`npm audit signatures`), and subscribe to the repository's security advisories so you receive notifications when a CVE is published.

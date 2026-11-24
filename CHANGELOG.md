@@ -28,6 +28,10 @@ heading here.
   polluted after the SDK started stops that SDK, warns with the same code and answers with the disabled handle. The
   handles the library returns are frozen. The loads of the packages are not part of this claim: see the known limit
   on `import()`.
+- **The preload waits for the start on a promise of its own.** A `constructor` and a `then` planted for a single read
+  while the SDK starts could forge the handle the preload awaited and skip the registration of the flush on exit.
+- **The docs state the threat model.** `SECURITY.md` says that code running in the same process is trusted, as in
+  Node, and that the guards are best-effort hardening and not a security boundary.
 
 ### Known limits
 
