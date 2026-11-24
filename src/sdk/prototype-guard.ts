@@ -74,6 +74,7 @@ export const GUARDED_BUILTINS: readonly GuardedRow[] = [
   ['Object', ['assign', 'create', 'entries', 'fromEntries', 'keys', 'setPrototypeOf', 'values']],
   ['Reflect', ['deleteProperty', 'get', 'set']],
   ['Symbol', ['for']],
+  ['Promise', [Symbol.species]],
   ['Object.getPrototypeOf([][Symbol.iterator]())', ['next']],
   ['Object.getPrototypeOf(new Set()[Symbol.iterator]())', ['next']]
 ]
@@ -105,6 +106,7 @@ export function readBuiltins(): readonly object[] {
     Object,
     Reflect,
     Symbol,
+    NativePromise,
     ARRAY_ITERATOR,
     SET_ITERATOR
   ]

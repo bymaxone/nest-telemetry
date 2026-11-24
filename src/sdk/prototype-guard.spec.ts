@@ -282,7 +282,7 @@ describe('the built-ins that the SDK calls on a decision path', () => {
     // the number of members of each row, the one thing a sweep over the rows cannot see.
     const guard = await loadGuard()
     expect(guard.GUARDED_BUILTINS.map(([, names]) => names.length)).toEqual([
-      10, 11, 2, 3, 1, 1, 1, 1, 1, 7, 3, 1, 1, 1
+      10, 11, 2, 3, 1, 1, 1, 1, 1, 7, 3, 1, 1, 1, 1
     ])
     guard.GUARDED_BUILTINS.forEach(([, names], row) => {
       names.forEach((name) => {
@@ -487,5 +487,31 @@ describe('the built-ins that the SDK calls on a decision path', () => {
       })
       expect(count).toBe(0)
     })
+  })
+})
+
+describe('Promise[Symbol.species] in the baseline', () => {
+  const species = Object.getOwnPropertyDescriptor(Promise, Symbol.species) as PropertyDescriptor
+
+  it('counts a species getter that answers with a fake constructor, and a throwing one', () => {
+    // Scenario: a persistent species getter makes every `then` a dependency calls build a promise from a constructor the
+    // host chose, so a realm check that ignores it passes while the answer is forged; a throwing getter breaks the
+    // `then` before a reaction is attached. Both must count, and the count must go back when the getter is restored.
+    const counted: number[] = []
+    try {
+      Object.defineProperty(Promise, Symbol.species, { configurable: true, get: () => Object })
+      counted.push(pollutedNames())
+      Object.defineProperty(Promise, Symbol.species, {
+        configurable: true,
+        get: () => {
+          throw new Error('species')
+        }
+      })
+      counted.push(pollutedNames())
+    } finally {
+      Object.defineProperty(Promise, Symbol.species, species)
+    }
+    expect(counted.every((count) => count > 0)).toBe(true)
+    expect(pollutedNames()).toBe(0)
   })
 })
