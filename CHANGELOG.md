@@ -16,7 +16,7 @@ heading here.
   through `Promise.all` and an `await`, and a guarded export awaited the provider answer and the send. A
   `Promise.all` replaced after load, a `then` on `Object.prototype` that erases itself after one read, or a replaced
   `then` with a constructor that is put back could hand back a forged `NodeSDK` or forged headers while the checks
-  passed. The decisions now wait for a promise of the library with a native `await` after it took an own `constructor`, wait for a promise of a host through the `then` captured at load, settle through a native promise from the
+  passed. The decisions now wait for a promise of the library with a native `await` after it took an own `constructor`, wait for a promise of a host without writing to it, settle through a native promise from the
   engine's own constructor, and check the process immediately before they settle. A `then` on
   `Array.prototype` or `Function.prototype`, and a changed `constructor` of `Promise.prototype`, which every `then`
   reads for a species, count as a pollution like one on `Object.prototype`; a promise the library made gets its own
@@ -55,8 +55,8 @@ heading here.
   promise it answers with comes from a fresh realm: `instanceof Promise` is `false` for it, while `await` and `.then`
   work as usual. This happens only on that refused path.
 - A promise of a dependency that the library waits for, such as the answer of a transport, takes a `constructor` of
-  its own first; a transport that already holds a read-only `constructor` on it cannot be given one, and the wait then
-  goes through the `then` captured at load.
+  its own first; a transport that already holds a read-only `constructor` on it cannot be given one, and the wait is judged
+  on the `constructor` it holds.
 - The slots on `globalThis` under which state is shared between copies of the library are writable by the host; a host that overwrites them changes what a later call finds.
 
 ### Planned for the next minor

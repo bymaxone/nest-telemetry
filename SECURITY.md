@@ -65,7 +65,7 @@ These are not vulnerabilities in `@bymax-one/nest-telemetry` itself:
 
 ## Threat model: same-process code
 
-Code that runs in the same process as this library is trusted, as it is in Node itself. The guards against a polluted `Object.prototype`, a replaced built-in or a forged promise are best-effort hardening that catches accidents and common mistakes. They are not a security boundary, and a report that needs code already running in the process to defeat them is out of scope. Their limits are listed in the README and the CHANGELOG.
+Code that runs in the same process as this library is trusted, as it is in Node itself. The guards against a polluted `Object.prototype`, a replaced built-in or a forged promise are best-effort hardening that catches accidents and common mistakes. They are not a security boundary, and a report that needs code already running in the process to defeat them is out of scope.
 
 ## Security best practices for consumers
 
