@@ -42,8 +42,9 @@ heading here.
   library sees the value; the library cannot close that from its side.
 - The OpenTelemetry and OTLP exporter internals read statics and `then` on their own, outside the decisions above.
 - A `then` that is planted and erased again between the check at entry and the settling is not seen.
-- When a host's own promise cannot be consumed because its `constructor` was replaced, the batch or answer is refused,
-  but that promise's own rejection, if it has one, stays unhandled.
+- When a host's own promise cannot be consumed, because its `constructor` was replaced by something that throws or
+  names a `Symbol.species` that throws, the batch or answer is refused, but that promise's own rejection, if it has
+  one, stays unhandled: the library never writes to a promise a host made, so it cannot take the reaction first.
 - When `Promise.prototype.constructor` was deleted before the library loaded, the start is refused as polluted, and the
   promise it answers with comes from a fresh realm: `instanceof Promise` is `false` for it, while `await` and `.then`
   work as usual. This happens only on that refused path.

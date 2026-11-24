@@ -121,6 +121,48 @@ describe('a wait on a promise of a host beside a Symbol.species that throws', ()
   })
 })
 
+describe('a wait on a promise of a host whose constructor the intrinsic check cannot trust', () => {
+  it('does not take the native await for an accessor constructor because Object.prototype.value names the intrinsic', async () => {
+    // Scenario: a host promise holds an own accessor `constructor` and `Object.prototype.value` is planted with the
+    // intrinsic: a descriptor read as `?.value` would pass the check, and the native await would read the accessor and a
+    // forged `then`; the wait goes through the captured `then` and hands over the real value.
+    const host = Object.defineProperty(Promise.resolve('real'), 'constructor', {
+      get: () => function Fake(): void {}
+    })
+    plantSelfRestoringForgery('forged')
+    Object.defineProperty(Promise.prototype, 'constructor', { configurable: true, value: Promise })
+    Object.defineProperty(Object.prototype, 'value', { configurable: true, value: Promise })
+    try {
+      const got = await new Promise<unknown>((resolve) => {
+        expect(absorbHost(host, resolve, resolve)).toBe(true)
+      })
+      expect(got).toBe('real')
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'value')
+    }
+  })
+
+  it('reports a wait that cannot be made when the constructor it names has a Symbol.species that throws', () => {
+    // Scenario: a host promise names its own constructor whose `Symbol.species` throws, and it is not the intrinsic, so
+    // the captured `then` throws before it attaches a reaction: nothing is called, the promise's own rejection stays
+    // unhandled (a documented limit), and the caller fails closed.
+    const Evil = function Evil(): void {}
+    Object.defineProperty(Evil, Symbol.species, {
+      get: () => {
+        throw new Error('species')
+      }
+    })
+    const host = Promise.reject(new Error('host reason'))
+    Object.defineProperty(host, 'constructor', { configurable: true, value: Evil })
+    const called = jest.fn()
+    expect(absorbHost(host, called, called)).toBe(false)
+    expect(called).not.toHaveBeenCalled()
+    // Taken by the test so the runner does not see an unhandled rejection.
+    Reflect.deleteProperty(host, 'constructor')
+    host.catch(() => undefined)
+  })
+})
+
 describe('a wait on a promise a dependency made', () => {
   const original = SLOTS.map((name) => Object.getOwnPropertyDescriptor(Promise.prototype, name))
   afterEach(() => restoreSlots(original))

@@ -40,7 +40,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //     12.31 KiB budget (12,605 B, 20 B of headroom); register 12,706 B, 12.43 KiB (12,728 B, 22 B); nest 2,833 B,
 //     2.79 KiB (2,856 B, 23 B); observability 884 B, 0.89 KiB (911 B, 27 B); sdk CommonJS 12,624 B, 12.35 KiB
 //     (12,646 B, 22 B); nest CommonJS 2,860 B, 2.82 KiB (2,887 B, 27 B); observability CommonJS 911 B, 0.91 KiB
-//     (931 B, 20 B). Pending the PM's grant.
+//     (931 B, 20 B). PM grant 2026-11-24.
 //   - 2026-11-24 (observability and its CommonJS bundle, at the measured size plus 30 B, rounded down in the KiB
 //     column; the PM's rule of the same day, applied to the two bundles the fallback for a constructor slot that is gone
 //     also reaches, since they carry the primordials): observability 829 B measured, 0.83 KiB budget (849 B, 20 B of
