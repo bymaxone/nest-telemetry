@@ -29,7 +29,7 @@ heading here.
   built-ins the library calls: one that is replaced, deleted or swapped for a function of another
   realm counts one, so the start answers with the disabled handle and an export drops its batch, and a check that
   cannot read them counts one rather than zero. What tracing agents and context managers wrap by
-  design, such as timers, `http`, `fetch` and the `then` of `Promise.prototype`, is not compared, and no decision to drop or to send rests on them. The warning says that `Object.prototype` or a
+  design, such as timers, `http`, `fetch` and the `then` of `Promise.prototype`, is not compared, and no decision to drop or to send rests on them, the loads of the packages aside (see the known limit on `import()`). The warning says that `Object.prototype` or a
   built-in was changed, with a count and never a name.
 - **A map or an entry of `instrumentations.overrides` whose settings sit on a prototype is refused.**
   The copy read own keys only, so `enabled: false` held by a parent object (`Object.create({ enabled: false })`) was dropped in silence, and the instrumentation stayed on. The root prototype of the realm, where a
@@ -69,7 +69,6 @@ heading here.
 
 - **The README states what the pollution guard does not cover**, so a host knows where it stops.
 - **The README says the limits on a nested override setting are new in 1.0.12**, so a host that nested more than that finds the refusal documented.
-
 - **The docs state the threat model.** `SECURITY.md` says that code running in the same process is trusted, as in
   Node, and that the guards are best-effort hardening and not a security boundary.
 
