@@ -73,21 +73,12 @@ const EXEMPT: readonly Exemption[] = [
   },
   {
     file: 'register/boot.ts',
-    text: 'async startOrWarn',
-    reason: 'Returns the prototype-less handle or the disabled one; the failure path only warns.'
-  },
-  {
-    file: 'register/boot.ts',
-    text: 'await start(options)',
-    reason: "A native await of the library's own start promise, which carries its own constructor."
-  },
-  {
-    file: 'register/boot.ts',
     text: `await startOrWarn(
     dependencies.start ?? startTelemetry,
     dependencies.env === undefined ? {} : { env: dependencies.env }
   )`,
-    reason: 'A native await of the async function above, built by this module and never by a host.'
+    reason:
+      'A native await of the promise of startOrWarn, which carries its own constructor and is built by this module.'
   },
   {
     file: 'sdk/primordials.ts',
@@ -123,6 +114,10 @@ EXEMPT_CONSTRUCTIONS.push(
   captured(
     'sdk/start.ts|boot',
     'The promise the boot settles itself, built from the intrinsic captured at load, never from the global binding.'
+  ),
+  captured(
+    'register/boot.ts|startOrWarn',
+    'The promise the boot waits on, from the captured intrinsic with its own constructor, so a planted then is never read.'
   ),
   captured(
     'sdk/export-guard.ts|refuseIfPolluted',
