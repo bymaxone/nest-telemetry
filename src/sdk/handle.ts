@@ -6,8 +6,14 @@
  * other through the entry point. They share no module state, only `globalThis`, so the handle lives
  * there under a registry symbol that no application key can collide with.
  */
-import { absorbHost, absorbOwned, ownConstructor, resolvedPromise } from './native-promise'
-import { create, defineProperty, NativePromise } from './primordials'
+import {
+  absorbHost,
+  absorbOwned,
+  ownConstructor,
+  resolvedPromise,
+  unconsumable
+} from './native-promise'
+import { create, defineProperty, freeze, NativePromise } from './primordials'
 import type { TelemetryHandle } from './types'
 import { reportWarning } from './warning-sink'
 
@@ -137,19 +143,24 @@ function beginFlush(
         clearTimeout(timer)
         finish()
       }
-      absorbOwned(
-        new NativePromise<void>((started) => {
-          started(stopSdk())
-        }),
-        () => {
-          stopped()
-          resolve()
-        },
-        (reason) => {
-          stopped()
-          reject(reason)
-        }
-      )
+      const onValue = (): void => {
+        stopped()
+        resolve()
+      }
+      const onReason = (reason: unknown): void => {
+        stopped()
+        reject(reason)
+      }
+      let stopping: Promise<void>
+      try {
+        stopping = stopSdk()
+      } catch (error) {
+        onReason(error)
+        return
+      }
+      // Waited for with a native await after the promise took an own constructor: no `then` of its is read, so a
+      // `then` that the SDK's promise holds cannot settle the flush.
+      absorbOwned(stopping, onValue, onReason)
     })
   )
 }
@@ -203,7 +214,7 @@ export function createHandle(
     })
     return flush
   }
-  return handle
+  return freeze(handle)
 }
 
 /**
@@ -222,8 +233,8 @@ export function shutdownTelemetry(): Promise<void> {
       const drain = (): void => {
         try {
           const handle = currentHandle()
-          if (handle === undefined || !absorbHost(handle.shutdown(), () => resolve(), reject))
-            resolve()
+          if (handle === undefined) resolve()
+          else if (!absorbHost(handle.shutdown(), () => resolve(), reject)) reject(unconsumable())
         } catch (error) {
           reject(error)
         }
@@ -231,7 +242,8 @@ export function shutdownTelemetry(): Promise<void> {
       const pending = pendingStart()
       // A start still loading the packages has no handle to drain yet. Wait for it, so the SDK it builds is
       // stopped rather than left running; whether the start succeeded is its caller's concern.
-      if (pending === undefined || !absorbHost(pending, drain, drain)) drain()
+      if (pending === undefined) drain()
+      else if (!absorbHost(pending, drain, drain)) reject(unconsumable())
     })
   )
 }

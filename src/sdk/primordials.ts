@@ -74,11 +74,16 @@ export const runInFreshRealm = runInNewContext
 /** `util.types.isPromise`, which reads the internal slot of a promise and no property of it. */
 export const isPromise = types.isPromise
 
-/** `Promise.prototype.then`, to attach a handler to a promise that the guard drops. */
-export const promiseThen = Promise.prototype.then
+/**
+ * The `Promise` intrinsic, to build the promises the guard settles itself. It is taken from the promise of an `async`
+ * function, which the engine builds from the intrinsic, so a `globalThis.Promise` that was replaced before this module
+ * loaded is not the one used.
+ */
+export const NativePromise = (async (): Promise<undefined> => undefined)()
+  .constructor as PromiseConstructor
 
-/** `Promise`, to build the promises the guard settles itself, as it was when this module loaded. */
-export const NativePromise = Promise
+/** `Object.freeze`, so a handle handed to the host cannot be given a `then` or a replaced `shutdown`. */
+export const freeze = Object.freeze
 
 /** `Array.prototype`, whose `then` the guard requires to be absent. */
 export const arrayPrototype = Array.prototype

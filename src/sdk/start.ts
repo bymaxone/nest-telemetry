@@ -42,8 +42,15 @@ import {
   setPendingStart
 } from './handle'
 import type { RunningHandle } from './handle'
-import { absorbHost, absorbOwned, ownConstructor, resolvedPromise } from './native-promise'
-import { create, isPromise, NativePromise } from './primordials'
+import {
+  absorbHost,
+  absorbOwned,
+  ignore,
+  ownConstructor,
+  resolvedPromise,
+  unconsumable
+} from './native-promise'
+import { create, freeze, isPromise, NativePromise } from './primordials'
 import { pollutedNames } from './prototype-guard'
 import { createUrlQueryRedactor } from './redaction'
 import { selectResourceDetectors } from './resource-detectors'
@@ -62,6 +69,7 @@ const RESTART_MESSAGE =
 export const DISABLED_HANDLE = create(null) as TelemetryHandle & { enabled: false }
 DISABLED_HANDLE.enabled = false
 DISABLED_HANDLE.shutdown = (): Promise<void> => resolvedPromise()
+freeze(DISABLED_HANDLE)
 
 /**
  * Refuses to start beside a polluted `Object.prototype`: telemetry that cannot be trusted starts nothing and
@@ -146,7 +154,7 @@ function begin(
         reject(error)
       }
     }
-    if (!absorbHost(running.shutdown(), after, after)) after()
+    if (!absorbHost(running.shutdown(), after, after)) reject(unconsumable())
     return
   }
   proceed(settled, env, resolve, reject)
@@ -418,7 +426,14 @@ function boot(options: TelemetryOptions, env: TelemetryEnvironment): Promise<Tel
         sdk.start()
         const handle = createHandle(() => sdk.shutdown(), shutdownTimeoutMs)
         registerHandle(handle)
-        answer(resolve, handle)
+        if (pollutedNames() > 0) {
+          // The process turned polluted while the SDK was built: the answer is the disabled handle, so nothing could
+          // stop the SDK that just started. It is stopped here, and its outcome is nobody's.
+          absorbOwned(handle.shutdown(), ignore, ignore)
+          resolve(DISABLED_HANDLE)
+          return
+        }
+        resolve(handle)
       } catch (error) {
         reject(error)
       }

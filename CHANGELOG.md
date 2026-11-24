@@ -22,8 +22,10 @@ heading here.
   reads for a species, count as a pollution like one on `Object.prototype`; a promise the library made gets its own
   `constructor`, and a promise a host made is never written to. The handle of a started SDK has no prototype, and
   the check is the last thing before a promise of the library resolves with a handle or a send result. A refusal
-  fails closed: the disabled handle at start, a failed export at send. The loads of the packages are not part of this
-  claim: see the known limit on `import()`.
+  of a start answers with the disabled handle, and a refusal of a send fails the export. A wait on a promise of a host
+  that cannot be made, because its `constructor` was replaced, rejects with `BYMAX_TELEMETRY_REALM_POLLUTED` instead of
+  going on. The handles the library returns are frozen. The loads of the packages are not part of this claim: see the
+  known limit on `import()`.
 
 ### Known limits
 
@@ -37,6 +39,11 @@ heading here.
 - A `then` that is planted and erased again between the check at entry and the settling is not seen.
 - When a host's own promise cannot be consumed because its `constructor` was replaced, the batch or answer is refused,
   but that promise's own rejection, if it has one, stays unhandled.
+- A promise of a dependency that the library waits for, such as the answer of a transport, takes a `constructor` of
+  its own first; a transport that already holds a read-only `constructor` on it cannot be given one, and the wait then
+  reads it.
+- The slots on `globalThis` under which the handle, the start in progress and the stopped mark are shared between
+  copies of the library are writable by the host; a host that overwrites them changes what a later call finds.
 
 ### Planned for the next minor
 

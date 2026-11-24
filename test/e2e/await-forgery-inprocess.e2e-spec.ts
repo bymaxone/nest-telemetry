@@ -19,6 +19,7 @@ import { ownConstructor } from '../../src/sdk/native-promise'
 import { startTelemetry } from '../../src/sdk/start'
 
 let sdkFails = false
+let plantOnStart = false
 
 jest.mock('@opentelemetry/sdk-node', () => {
   const actual = jest.requireActual<Record<string, unknown>>('@opentelemetry/sdk-node')
@@ -27,13 +28,26 @@ jest.mock('@opentelemetry/sdk-node', () => {
     ...actual,
     NodeSDK: function (...args: unknown[]): unknown {
       if (sdkFails) throw new Error('sdk refused')
-      return new Real(...args)
+      const sdk = new Real(...args) as { start: () => void }
+      if (plantOnStart) {
+        const start = sdk.start.bind(sdk)
+        sdk.start = (): void => {
+          start()
+          Object.defineProperty(Object.prototype, 'zzPlantedOnStart', {
+            value: 1,
+            configurable: true
+          })
+        }
+      }
+      return sdk
     }
   }
 })
 
 afterEach(() => {
   sdkFails = false
+  plantOnStart = false
+  Reflect.deleteProperty(Object.prototype, 'zzPlantedOnStart')
   clearHandle()
   clearPendingStart()
 })
@@ -188,17 +202,30 @@ describe('a start beside a promise of a host that cannot be consumed', () => {
     expect(handle.enabled).toBe(false)
   })
 
-  it('goes on with the handle that is left when the flush of a stopping handle cannot be consumed', async () => {
+  it('rejects with a typed error when the flush of a stopping handle cannot be consumed', async () => {
     // Scenario: a handle that is stopping hands out a shutdown whose own constructor throws; the wait cannot attach,
-    // and the call goes on without it and answers with the handle.
+    // so the call cannot tell the flush ended and fails with a typed error instead of going on.
     registerHandle({
       enabled: true,
       stopping: true,
       shutdown: () => unconsumablePromise<void>(() => undefined)
     })
     jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    await expect(startTelemetry({ env: {} })).rejects.toMatchObject({
+      code: 'BYMAX_TELEMETRY_REALM_POLLUTED'
+    })
+  })
+
+  it('stops the SDK it started when the process turned polluted while it started', async () => {
+    // Scenario: a name is planted by the start of the real SDK; the answer is the disabled handle, and the SDK that
+    // just started and registered is stopped, so nothing is left running with no handle to stop it.
+    plantOnStart = true
+    jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
     const handle = await startTelemetry({ env: {} })
-    expect(handle.enabled).toBe(true)
+    expect(handle.enabled).toBe(false)
+    Reflect.deleteProperty(Object.prototype, 'zzPlantedOnStart')
+    await shutdownTelemetry()
+    clearHandle()
   })
 
   it('waits for the flush of a stopping handle, then answers with the handle that is left', async () => {
@@ -267,15 +294,16 @@ describe('a guarded send and its providers beside a promise that cannot be consu
     await expect(answer).rejects.toMatchObject({ code: 'BYMAX_TELEMETRY_REALM_POLLUTED' })
   })
 
-  it('refuses a send whose promise cannot be consumed, with a failed result and no rejection', async () => {
-    // Scenario: the transport answers with a native promise whose own constructor throws; the guard fails closed.
+  it('answers a send whose promise had an own constructor that throws, with the result it carries', async () => {
+    // Scenario: the transport answers with a native promise whose own constructor throws; the guard gives it a
+    // constructor of its own before it waits, so the getter is not read and the transport's result arrives.
     const exporter = new OTLPTraceExporter({ url: 'http://127.0.0.1:1/v1/traces' })
     const transport = transportOf(exporter)
     transport.send = () => unconsumablePromise<unknown>((resolve) => resolve({ status: 'success' }))
     guardExports(exporter)
     exporter.export([], () => undefined)
     const result = (await transport.send('data', 1)) as { status: string }
-    expect(result.status).toBe('failure')
+    expect(result.status).toBe('success')
   })
 
   it('refuses a result that arrives after a name was planted on the root prototype', async () => {
@@ -309,6 +337,35 @@ describe('the promises the library returns on a failure', () => {
     // Scenario: the SDK fails to stop; the caller of the handle's shutdown sees the reason and nothing else.
     const handle = createHandle(() => Promise.reject(new Error('flush failed')))
     await expect(handle.shutdown()).rejects.toThrow('flush failed')
+  })
+
+  it('rejects the shutdown of a handle whose SDK throws before it answers with a promise', async () => {
+    // Scenario: stopping the SDK throws at once; the caller sees that error and the handle is finished.
+    const handle = createHandle(() => {
+      throw new Error('stop threw')
+    })
+    await expect(handle.shutdown()).rejects.toThrow('stop threw')
+    expect(handle.stopping).toBe(false)
+  })
+
+  it('rejects the module-level shutdown when the start in progress cannot be consumed', async () => {
+    // Scenario: the pending start carries a constructor that throws; the drain cannot wait for it and fails typed.
+    setPendingStart(unconsumablePromise<never>(() => undefined))
+    await expect(shutdownTelemetry()).rejects.toMatchObject({
+      code: 'BYMAX_TELEMETRY_REALM_POLLUTED'
+    })
+  })
+
+  it('rejects the module-level shutdown when the flush of the registered handle cannot be consumed', async () => {
+    // Scenario: the registered handle answers with a promise whose constructor throws; the drain fails typed.
+    registerHandle({
+      enabled: true,
+      stopping: false,
+      shutdown: () => unconsumablePromise<void>(() => undefined)
+    })
+    await expect(shutdownTelemetry()).rejects.toMatchObject({
+      code: 'BYMAX_TELEMETRY_REALM_POLLUTED'
+    })
   })
 
   it('rejects the module-level shutdown when the registered handle throws', async () => {

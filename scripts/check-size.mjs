@@ -35,6 +35,12 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //
 // Calibration history (newest first):
 //   - 2026-11-24 (sdk, register, the sdk CommonJS bundle and both nest bundles, PM-granted at the measured size plus
+//     30 B, rounded down in the KiB column): sdk 12,368 B measured, 12.10 KiB budget (12,390 B, 22 B of headroom);
+//     register 12,472 B, 12.20 KiB budget (12,493 B, 21 B); sdk CommonJS 12,394 B, 12.13 KiB budget (12,421 B, 27 B);
+//     nest 2,629 B, 2.59 KiB budget (2,652 B, 23 B); nest CommonJS 2,648 B, 2.61 KiB budget (2,673 B, 25 B). The
+//     growth, about 0.14 KiB in each, is the settle helper, the error of a promise that cannot be consumed, the frozen
+//     handles and the stop of an SDK that started while the process turned polluted.
+//   - 2026-11-24 (sdk, register, the sdk CommonJS bundle and both nest bundles, PM-granted at the measured size plus
 //     30 B, rounded down in the KiB column): sdk 12,203 B measured, 11.94 KiB budget (12,226 B, 23 B of headroom);
 //     register 12,319 B, 12.05 KiB budget (12,339 B, 20 B); sdk CommonJS 12,237 B, 11.97 KiB budget (12,257 B, 20 B);
 //     nest 2,442 B, 2.41 KiB budget (2,467 B, 25 B); nest CommonJS 2,459 B, 2.43 KiB budget (2,488 B, 29 B). The
@@ -173,13 +179,13 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
 //   met by shortening the text of a warning.
 const BUDGETS = [
-  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 11.94 * 1024 },
-  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 12.05 * 1024 },
-  { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.41 * 1024 },
+  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 12.1 * 1024 },
+  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 12.2 * 1024 },
+  { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.59 * 1024 },
   { name: 'observability (metrics)', path: 'dist/observability/index.mjs', brotli: 0.74 * 1024 },
-  { name: 'sdk (CommonJS)', path: 'dist/sdk/index.cjs', brotli: 11.97 * 1024 },
+  { name: 'sdk (CommonJS)', path: 'dist/sdk/index.cjs', brotli: 12.13 * 1024 },
   { name: 'register (CommonJS)', path: 'dist/register/index.cjs', brotli: 0.2 * 1024 },
-  { name: 'nest (CommonJS)', path: 'dist/nest/index.cjs', brotli: 2.43 * 1024 },
+  { name: 'nest (CommonJS)', path: 'dist/nest/index.cjs', brotli: 2.61 * 1024 },
   { name: 'observability (CommonJS)', path: 'dist/observability/index.cjs', brotli: 0.75 * 1024 }
 ]
 

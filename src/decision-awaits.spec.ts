@@ -25,7 +25,20 @@ const DECISION_FILES = [
 const EXEMPT_CONSTRUCTIONS: Exemption[] = []
 
 /** The waits that are allowed, each with the reason it is not a decision. */
-const EXEMPT: readonly Exemption[] = []
+const EXEMPT: readonly Exemption[] = [
+  {
+    file: 'sdk/native-promise.ts',
+    text: 'await promise',
+    reason:
+      'A native await of a promise whose constructor is the intrinsic or was tagged: it reads no then and no species.'
+  },
+  {
+    file: 'sdk/native-promise.ts',
+    text: 'async settle',
+    reason:
+      'The one wait of the library, which hands the outcome to a callback and decides nothing by itself.'
+  }
+]
 
 /** A construction from the promise constructor captured when the library loaded: a swap to the global is caught. */
 const captured = (where: string, why: string): Exemption => ({
@@ -62,10 +75,6 @@ EXEMPT_CONSTRUCTIONS.push(
   captured(
     'sdk/handle.ts|beginFlush',
     'The promise the flush answers with: the intrinsic captured at load, settled once the SDK stopped or the deadline passed.'
-  ),
-  captured(
-    'sdk/handle.ts|beginFlush',
-    'The promise that adopts what stopping the SDK returns, so the one that is consumed is a native one of ours.'
   ),
   captured(
     'sdk/handle.ts|shutdownTelemetry',

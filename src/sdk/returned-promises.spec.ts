@@ -12,7 +12,7 @@ import {
   setPendingStart
 } from './handle'
 import { absorbHost, ownConstructor, resolvedPromise } from './native-promise'
-import { startTelemetry } from './start'
+import { DISABLED_HANDLE, startTelemetry } from './start'
 
 /**
  * Waits for `promise` the way a native `await` does: the `then` of the engine is applied while
@@ -81,21 +81,25 @@ describe('the promises that the library returns', () => {
     await awaitedWhileConstructorThrows(shutdownTelemetry())
   })
 
-  it('answers the shutdown of the registered handle when the start in progress cannot be consumed', async () => {
-    // Scenario: the start another copy has under way is a promise whose constructor throws; the shutdown does not wait
-    // for what it cannot read, and goes on to the handle.
+  it('rejects the shutdown when the start in progress cannot be consumed, and stops nothing early', async () => {
+    // Scenario: the start another copy has under way is a promise whose constructor throws; the shutdown cannot wait
+    // for it, so it fails with a typed error and does not drain a handle the start may be about to replace.
     const stop = jest.fn(() => Promise.resolve())
     registerHandle(createHandle(stop))
     setPendingStart(unconsumable() as never)
-    await shutdownTelemetry()
-    expect(stop).toHaveBeenCalledTimes(1)
+    await expect(shutdownTelemetry()).rejects.toMatchObject({
+      code: 'BYMAX_TELEMETRY_REALM_POLLUTED'
+    })
+    expect(stop).not.toHaveBeenCalled()
   })
 
-  it('answers the shutdown when the handle of another copy hands back a promise that cannot be consumed', async () => {
+  it('rejects the shutdown when the handle of another copy hands back a promise that cannot be consumed', async () => {
     // Scenario: a handle registered by another copy answers its shutdown with a promise of the host that throws when
-    // attached to; the shutdown resolves instead of rejecting with the planted error.
+    // attached to; the shutdown must not report a flush it could not see as a success, so it rejects with a typed error.
     registerHandle({ enabled: true, stopping: false, shutdown: unconsumable })
-    await expect(shutdownTelemetry()).resolves.toBeUndefined()
+    await expect(shutdownTelemetry()).rejects.toMatchObject({
+      code: 'BYMAX_TELEMETRY_REALM_POLLUTED'
+    })
   })
 
   it('rejects the module-level shutdown with the reason of a failed flush', async () => {
@@ -126,12 +130,13 @@ describe('a start beside a promise that cannot be consumed', () => {
     expect(handle.enabled).toBe(false)
   })
 
-  it('goes on once the flush of a stopping handle cannot be consumed', async () => {
-    // Scenario: a handle that is stopping answers its shutdown with a promise that cannot be consumed; the start does
-    // not wait for it and answers with the handle that is registered.
-    const stopping = { enabled: true, stopping: true, shutdown: unconsumable }
-    registerHandle(stopping)
-    await expect(startTelemetry({})).resolves.toBe(stopping)
+  it('rejects once the flush of a stopping handle cannot be consumed', async () => {
+    // Scenario: a handle that is stopping answers its shutdown with a promise that cannot be consumed; the start cannot
+    // tell the flush ended, so it fails with a typed error instead of going on.
+    registerHandle({ enabled: true, stopping: true, shutdown: unconsumable })
+    await expect(startTelemetry({})).rejects.toMatchObject({
+      code: 'BYMAX_TELEMETRY_REALM_POLLUTED'
+    })
   })
 })
 
@@ -167,5 +172,93 @@ describe('ownConstructor and resolvedPromise', () => {
       )
     ).toBe(false)
     expect(Object.getOwnPropertyDescriptor(host, 'constructor')).toEqual(before)
+  })
+})
+
+/** Lets every pending reaction run, and the unhandled-rejection check of the process with them. */
+const ticks = (): Promise<void> => new Promise((resolve) => setImmediate(resolve))
+
+describe('the flush of a handle beside a host that plants something on Promise', () => {
+  it('rejects with the reason of the flush, and leaves nothing unhandled, when Symbol.species throws', async () => {
+    // Scenario: a getter on Promise[Symbol.species] throws when a `then` is applied to the promise the SDK answered
+    // with; the wait is a native await, which reads no species, so the reason arrives and nothing is left unhandled.
+    const unhandled = jest.fn()
+    process.on('unhandledRejection', unhandled)
+    const reason = new Error('flush failed')
+    const original = Object.getOwnPropertyDescriptor(Promise, Symbol.species) as PropertyDescriptor
+    Object.defineProperty(Promise, Symbol.species, {
+      configurable: true,
+      get(): never {
+        throw new Error('hostile species')
+      }
+    })
+    let flushed: Promise<void>
+    try {
+      // The slot is put back as soon as the call returns: the library's wait is made inside the call, and a test
+      // that suspended with the getter in place would have the test runner read it.
+      flushed = createHandle(() => Promise.reject(reason)).shutdown()
+    } finally {
+      Object.defineProperty(Promise, Symbol.species, original)
+    }
+    let caught: unknown
+    try {
+      await flushed
+    } catch (error) {
+      caught = error
+    }
+    await ticks()
+    process.off('unhandledRejection', unhandled)
+    expect(caught).toBe(reason)
+    expect(unhandled).not.toHaveBeenCalled()
+  })
+
+  it('does not let a then of the promise the SDK answered with settle the flush', async () => {
+    // Scenario: the promise the SDK answered with rejects but holds a `then` of its own that reports success;
+    // returning or resolving it would read that `then`, so the flush is waited for with a native await instead.
+    const reason = new Error('flush failed')
+    const stopping = Promise.reject(reason)
+    Object.defineProperty(stopping, 'then', {
+      value: (onValue: () => void): void => onValue()
+    })
+    await expect(createHandle(() => stopping).shutdown()).rejects.toBe(reason)
+  })
+
+  it('rejects with the error of a stop that throws before it returns a promise', async () => {
+    // Scenario: stopping the SDK throws at once, not through a promise; the caller of the flush sees that error and the
+    // handle is finished, as for any failed flush.
+    const reason = new Error('stop threw')
+    const handle = createHandle(() => {
+      throw reason
+    })
+    await expect(handle.shutdown()).rejects.toBe(reason)
+    expect(handle.stopping).toBe(false)
+  })
+
+  it('does not let the host redefine the constructor of the flush it was handed', async () => {
+    // Scenario: the host redefines `constructor` of the flush promise as a getter that throws, so that the next wait
+    // on it fails open; the own property is read-only and not configurable, so the definition is refused.
+    const reason = new Error('flush failed')
+    const flushed = createHandle(() => Promise.reject(reason)).shutdown()
+    const redefined = Reflect.defineProperty(flushed, 'constructor', {
+      get(): never {
+        throw new Error('hostile constructor')
+      }
+    })
+    expect(redefined).toBe(false)
+    await expect(flushed).rejects.toBe(reason)
+  })
+})
+
+describe('the handles handed to the host', () => {
+  it('freezes the disabled handle and the handle of a started SDK', () => {
+    // Scenario: a host that gives an earlier handle a `then`, or replaces its `shutdown`, would decide what the next
+    // promise that resolves with it reads; a frozen handle refuses both.
+    const started = createHandle(() => Promise.resolve())
+    for (const handle of [DISABLED_HANDLE, started]) {
+      expect(Object.isFrozen(handle)).toBe(true)
+      expect(Reflect.set(handle, 'then', () => undefined)).toBe(false)
+      expect(Reflect.set(handle, 'shutdown', () => undefined)).toBe(false)
+      expect('then' in handle).toBe(false)
+    }
   })
 })

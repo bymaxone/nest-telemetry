@@ -10,7 +10,7 @@
  * so it reaches the metrics and logs exporters that the SDK builds itself; that wrap is process-wide.
  */
 import { POLLUTED_CODE } from './error-code'
-import { absorbHost, absorbOwned, ownConstructor } from './native-promise'
+import { absorbHost, absorbOwned, ignore, ownConstructor } from './native-promise'
 import {
   apply,
   defineProperty,
@@ -107,9 +107,6 @@ function innermostTransport(exporter: unknown): Transport | undefined {
     : undefined
 }
 
-/** Takes the outcome of a promise that the guard dropped, so neither a rejection nor a value is passed on. */
-function ignore(): void {}
-
 /**
  * Checks again once a provider has answered: a provider the host supplied can wait, and a name planted while it
  * did would be read by the request that follows. An answer that is not a promise is handed back as it is, so a
@@ -200,7 +197,8 @@ function guardedSend(
           const settle = (value: unknown): void =>
             resolve(pollutedNames() > 0 ? refusedResult() : value)
           if (!isPromise(sent)) settle(sent)
-          else if (!absorbHost(sent, settle, reject)) resolve(refusedResult())
+          // The promise is a dependency's: it takes an own constructor first, so a replaced one is never read.
+          else absorbOwned(sent, settle, reject)
         } catch (error) {
           reject(error)
         }

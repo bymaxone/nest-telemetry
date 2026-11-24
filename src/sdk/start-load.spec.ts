@@ -113,4 +113,25 @@ describe('the packages a start takes', () => {
       delete (Object.prototype as unknown as Record<string, unknown>)['plantedWhileLoading']
     }
   })
+
+  it('stops the SDK it started when the process turned polluted while it started', async () => {
+    // Scenario: a name is planted by the start of the SDK itself; the answer is the disabled handle, so nothing else
+    // could stop the SDK that just started and registered, and the start stops it.
+    mockSdkInstance.start.mockImplementationOnce(() => {
+      Object.defineProperty(Object.prototype, 'plantedWhileStarting', {
+        value: 1,
+        enumerable: true,
+        configurable: true,
+        writable: true
+      })
+    })
+    try {
+      const handle = await startTelemetry({ env: {} })
+      expect(handle.enabled).toBe(false)
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(mockSdkInstance.shutdown).toHaveBeenCalledTimes(1)
+    } finally {
+      delete (Object.prototype as unknown as Record<string, unknown>)['plantedWhileStarting']
+    }
+  })
 })

@@ -160,14 +160,47 @@ describe('the settling of a guarded send', () => {
     expect(Object.getPrototypeOf(settled)).toBeNull()
   })
 
-  it('refuses with a failed result, and does not reject, when the host promise cannot be consumed', async () => {
-    // Scenario: a getter on Promise.prototype.constructor throws when the guard attaches its handlers to the promise
-    // the transport answered with; the host's promise is not written to, and the attempt fails closed.
+  it('answers with what the transport sent when the constructor of promises throws as it is awaited', async () => {
+    // Scenario: a getter on Promise.prototype.constructor throws when the guard waits for the promise the transport
+    // answered with; the promise took an own constructor first, so the getter is not reached and the result arrives.
     const guarded = exporterSending(() => Promise.resolve({ status: 'success' }))
     const settled = whileConstructorThrows(() => guarded.send('data', 1))
-    const refused = (await settled) as object
-    expect(Object.getPrototypeOf(refused)).toBeNull()
-    expect(refused).toMatchObject({ status: 'failure' })
+    await expect(settled).resolves.toEqual({ status: 'success' })
+  })
+
+  it('rejects with the reason of the transport when a constructor getter erases itself after one read', async () => {
+    // Scenario: the transport plants a getter on Promise.prototype.constructor that throws once and removes itself, and
+    // answers with a rejecting promise; the promise took an own constructor first, so the getter is not read, the
+    // rejection is handled and the attempt fails with the transport's own reason.
+    const unhandled = jest.fn()
+    process.on('unhandledRejection', unhandled)
+    const reason = new Error('send failed')
+    const original = Object.getOwnPropertyDescriptor(
+      Promise.prototype,
+      'constructor'
+    ) as PropertyDescriptor
+    const guarded = exporterSending(() => {
+      const sent = Promise.reject(reason)
+      Object.defineProperty(Promise.prototype, 'constructor', {
+        configurable: true,
+        get(): never {
+          Object.defineProperty(Promise.prototype, 'constructor', original)
+          throw new Error('hostile constructor')
+        }
+      })
+      return sent
+    })
+    try {
+      const result = guarded.send('data', 1)
+      // Put back before anything of the test reads the slot: the library's own wait is the one under examination.
+      Object.defineProperty(Promise.prototype, 'constructor', original)
+      await expect(result).rejects.toBe(reason)
+      await new Promise((resolve) => setImmediate(resolve))
+    } finally {
+      Object.defineProperty(Promise.prototype, 'constructor', original)
+      process.off('unhandledRejection', unhandled)
+    }
+    expect(unhandled).not.toHaveBeenCalled()
   })
 
   it('answers a provider thenable through a promise of its own whose constructor is not read', async () => {
