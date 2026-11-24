@@ -6,26 +6,94 @@
  * guard's own, and every other wait is listed here with the reason it decides nothing.
  * @layer repository
  */
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import ts from 'typescript'
 
 type Exemption = { file: string; text: string; reason: string }
 
-/** The files whose waits are decisions: what is exported, and what a start builds. */
-const DECISION_FILES = [
-  'sdk/start.ts',
-  'sdk/export-guard.ts',
-  'sdk/native-promise.ts',
-  'sdk/handle.ts'
-] as const
+/**
+ * Every source file under `src`, tests excepted: a list of the files that decide proves nothing about the files left
+ * out of it, so a file that is added is scanned without anyone listing it.
+ *
+ * @param dir - A directory under `src`, relative to it.
+ * @returns The paths of the source files, relative to `src`.
+ */
+function sourceFiles(dir = ''): string[] {
+  return readdirSync(join(__dirname, dir), { withFileTypes: true }).flatMap((entry) => {
+    const path = dir === '' ? entry.name : `${dir}/${entry.name}`
+    if (entry.isDirectory()) return sourceFiles(path)
+    return path.endsWith('.ts') && !path.endsWith('.spec.ts') && !path.endsWith('.d.ts')
+      ? [path]
+      : []
+  })
+}
+
+/** The files whose waits are scanned: all of them. */
+const DECISION_FILES = sourceFiles()
 
 /** The constructions of a promise that are allowed, each from the captured intrinsic, with a reason. */
 const EXEMPT_CONSTRUCTIONS: Exemption[] = []
 
 /** The waits that are allowed, each with the reason it is not a decision. */
 const EXEMPT: readonly Exemption[] = [
+  {
+    file: 'nest/telemetry-shutdown.hook.ts',
+    text: 'await shutdownTelemetry()',
+    reason:
+      "The promise is the library's own, with its own constructor; the outcome only picks a report, no verdict."
+  },
+  {
+    file: 'nest/telemetry-shutdown.hook.ts',
+    text: 'async onApplicationShutdown',
+    reason: 'Nest awaits the hook while the application closes; it decides nothing about an export.'
+  },
+  {
+    file: 'nest/telemetry-shutdown.hook.ts',
+    text: 'Promise.resolve(…)',
+    reason:
+      'Takes the promise an application logger returned, whose outcome nobody uses for a verdict.'
+  },
+  {
+    file: 'nest/telemetry-shutdown.hook.ts',
+    text: 'Promise.resolve(result).catch(…)',
+    reason:
+      'Only turns a rejected logger entry into a process warning; the outcome decides nothing.'
+  },
+  {
+    file: 'register/boot.ts',
+    text: 'Promise.allSettled(…)',
+    reason: 'A flush on exit whose outcome is discarded with `void`; nothing is decided by it.'
+  },
+  {
+    file: 'register/boot.ts',
+    text: 'async bootFromEnvironment',
+    reason: 'Returns the prototype-less handle, which resolves with no `then` to read from a chain.'
+  },
+  {
+    file: 'register/boot.ts',
+    text: 'async startOrWarn',
+    reason: 'Returns the prototype-less handle or the disabled one; the failure path only warns.'
+  },
+  {
+    file: 'register/boot.ts',
+    text: 'await start(options)',
+    reason: "A native await of the library's own start promise, which carries its own constructor."
+  },
+  {
+    file: 'register/boot.ts',
+    text: `await startOrWarn(
+    dependencies.start ?? startTelemetry,
+    dependencies.env === undefined ? {} : { env: dependencies.env }
+  )`,
+    reason: 'A native await of the async function above, built by this module and never by a host.'
+  },
+  {
+    file: 'sdk/primordials.ts',
+    text: 'async <anonymous>',
+    reason: 'Builds the one sample promise the engine intrinsics are read from; it awaits nothing.'
+  },
   {
     file: 'sdk/native-promise.ts',
     text: 'await promise',
@@ -126,6 +194,7 @@ function constructionOf(node: ts.NewExpression, aliases: Set<string>): string | 
 /** What any other node that waits is listed as, or `undefined`. */
 function waitOf(node: ts.Node, source: ts.SourceFile): string | undefined {
   if (ts.isAwaitExpression(node)) return node.getText(source)
+  if (ts.isForOfStatement(node) && node.awaitModifier !== undefined) return 'for await'
   if (
     ts.isCallExpression(node) &&
     ts.isPropertyAccessExpression(node.expression) &&

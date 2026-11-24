@@ -44,6 +44,9 @@ heading here.
 - A `then` that is planted and erased again between the check at entry and the settling is not seen.
 - When a host's own promise cannot be consumed because its `constructor` was replaced, the batch or answer is refused,
   but that promise's own rejection, if it has one, stays unhandled.
+- When `Promise.prototype.constructor` was deleted before the library loaded, the start is refused as polluted, and the
+  promise it answers with comes from a fresh realm: `instanceof Promise` is `false` for it, while `await` and `.then`
+  work as usual. This happens only on that refused path.
 - A promise of a dependency that the library waits for, such as the answer of a transport, takes a `constructor` of
   its own first; a transport that already holds a read-only `constructor` on it cannot be given one, and the wait then
   goes through the `then` captured at load.

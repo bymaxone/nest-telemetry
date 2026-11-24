@@ -9,6 +9,8 @@
 import type { AttributeValue, Attributes } from '@opentelemetry/api'
 import type { SpanProcessor } from '@opentelemetry/sdk-trace'
 
+import { resolvedPromise } from './native-promise'
+
 /** Marker a redacted query string is replaced with: it shows a query was present, not what it held. */
 export const REDACTED_QUERY_VALUE = '[redacted]'
 
@@ -106,8 +108,8 @@ export function createUrlQueryRedactor(): SpanProcessor {
       redactSpanUrlQuery(span)
     },
     onEnd: () => undefined,
-    shutdown: () => Promise.resolve(),
-    forceFlush: () => Promise.resolve()
+    shutdown: resolvedPromise,
+    forceFlush: resolvedPromise
   }
 }
 

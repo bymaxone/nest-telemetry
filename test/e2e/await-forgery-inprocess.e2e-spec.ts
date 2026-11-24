@@ -393,6 +393,23 @@ describe('a guarded send and its providers beside a promise that cannot be consu
     expect(result.status).toBe('success')
   })
 
+  it('answers a send whose frozen promise names another constructor with the result it carries', async () => {
+    // Scenario: the transport answers with a frozen promise whose own `constructor` is not the intrinsic; it cannot be
+    // tagged or awaited natively, so it is waited for through the `then` captured at load, and its result arrives.
+    const exporter = new OTLPTraceExporter({ url: 'http://127.0.0.1:1/v1/traces' })
+    const transport = transportOf(exporter)
+    transport.send = () =>
+      Object.freeze(
+        Object.defineProperty(Promise.resolve({ status: 'success' }), 'constructor', {
+          value: function Other(): void {}
+        })
+      )
+    guardExports(exporter)
+    exporter.export([], () => undefined)
+    const result = (await transport.send('data', 1)) as { status: string }
+    expect(result.status).toBe('success')
+  })
+
   it('rejects a send whose promise holds a read-only constructor that throws, with a typed error', async () => {
     // Scenario: the transport answers with a promise that already holds a non-configurable `constructor` that throws;
     // it cannot be tagged and cannot be waited for, so the send rejects with the pollution error and nothing of it is used.

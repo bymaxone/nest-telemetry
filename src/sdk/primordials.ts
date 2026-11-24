@@ -74,6 +74,20 @@ export const runInFreshRealm = runInNewContext
 /** `util.types.isPromise`, which reads the internal slot of a promise and no property of it. */
 export const isPromise = types.isPromise
 
+/**
+ * The value of an own data property, and `undefined` for an accessor or a missing property. A descriptor is an ordinary
+ * object: `descriptor.value` on an accessor's would resolve through a `value` planted on the root prototype, so the
+ * field is read only when the descriptor owns it.
+ *
+ * @param holder - The object.
+ * @param key - The property.
+ * @returns The value of the data property.
+ */
+export function dataValue(holder: object, key: PropertyKey): unknown {
+  const descriptor = getOwnPropertyDescriptor(holder, key)
+  return descriptor !== undefined && hasOwn(descriptor, 'value') ? descriptor.value : undefined
+}
+
 /** A promise the engine built from its own intrinsic, whatever `globalThis.Promise` is: where the intrinsic is read from. */
 const engineSample = (async (): Promise<undefined> => undefined)()
 
@@ -92,7 +106,7 @@ export const promisePrototype = getPrototypeOf(engineSample) as Promise<unknown>
  * host may have replaced; a start can then still be built and refused rather than throw at its caller, and the
  * guard counts that slot as changed.
  */
-export const NativePromise = (getOwnPropertyDescriptor(promisePrototype, 'constructor')?.value ??
+export const NativePromise = (dataValue(promisePrototype, 'constructor') ??
   runInFreshRealm('Promise')) as PromiseConstructor
 
 /**
@@ -101,8 +115,7 @@ export const NativePromise = (getOwnPropertyDescriptor(promisePrototype, 'constr
  * something installs on `Promise.prototype` later is never the one that runs; the guard compares the slot with a
  * fresh realm's, so a `then` planted before the load is counted.
  */
-export const promiseThen = getOwnPropertyDescriptor(promisePrototype, 'then')
-  ?.value as Promise<unknown>['then']
+export const promiseThen = dataValue(promisePrototype, 'then') as Promise<unknown>['then']
 
 /** `Object.freeze`, so a handle handed to the host cannot be given a `then` or a replaced `shutdown`. */
 export const freeze = Object.freeze

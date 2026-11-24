@@ -12,10 +12,13 @@
 import { POLLUTED_CODE } from './error-code'
 import {
   apply,
+  dataValue,
   defineProperty,
   ErrorClass,
   getOwnPropertyDescriptor,
+  getPrototypeOf,
   NativePromise,
+  promisePrototype,
   promiseThen
 } from './primordials'
 
@@ -75,6 +78,25 @@ function attach(
 }
 
 /**
+ * Whether a native `await` of a promise ends its lookup of `constructor` on the intrinsic, judged from descriptors
+ * alone, so no getter runs: its own `constructor`, or the engine's `Promise.prototype` when nothing shadows it, must be
+ * a data property that holds the captured constructor. With nothing between this check and the await that can run
+ * code, the await reads the very value judged here.
+ *
+ * @param promise - A native promise.
+ * @returns `true` when the await attaches its reaction directly.
+ */
+function endsOnIntrinsic(promise: Promise<unknown>): boolean {
+  if (getOwnPropertyDescriptor(promise, 'constructor') !== undefined) {
+    return dataValue(promise, 'constructor') === NativePromise
+  }
+  return (
+    getPrototypeOf(promise) === promisePrototype &&
+    dataValue(promisePrototype, 'constructor') === NativePromise
+  )
+}
+
+/**
  * Waits for a promise with a native `await` and hands the outcome to a callback. A native `await` of a promise whose
  * `constructor` is the intrinsic attaches its reaction directly: no `then` is read from the promise or its
  * prototypes, and no `Symbol.species` is read from the constructor.
@@ -116,7 +138,7 @@ export function absorbOwned(
   onReason: (reason: unknown) => void
 ): void {
   ownConstructor(promise)
-  if (getOwnPropertyDescriptor(promise, 'constructor')?.value === NativePromise) {
+  if (endsOnIntrinsic(promise)) {
     void settle(promise, onValue, onReason)
   } else if (!attach(promise, onValue, onReason)) {
     onReason(unconsumable())
@@ -137,6 +159,10 @@ export function absorbHost(
   onValue: (value: unknown) => void,
   onReason: (reason: unknown) => void
 ): boolean {
+  if (endsOnIntrinsic(promise)) {
+    void settle(promise, onValue, onReason)
+    return true
+  }
   return attach(promise, onValue, onReason)
 }
 
