@@ -98,7 +98,7 @@ function exporterSending(
 
 describe('the settling of a guarded send', () => {
   it('rejects, with the reason, when the send throws before it returns a promise', async () => {
-    // Scenario: a send that throws synchronously is a rejected attempt, as it was when the wrapper was async.
+    // Scenario: a send that throws synchronously becomes a rejected attempt carrying the original reason.
     const guarded = exporterSending(() => {
       throw new Error('send failed')
     })
