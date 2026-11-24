@@ -23,7 +23,7 @@ heading here.
   `constructor`, and a promise a host made is never written to. The handle of a started SDK has no prototype, and
   the check is the last thing before a promise of the library resolves with a handle or a send result. A refusal
   of a start at boot answers with the disabled handle, and a refusal of a send fails the export. A wait on a promise
-  of a host that cannot be made, because its `constructor` was replaced, is refused instead of going on: a start, a
+  of a host that cannot be consumed, because its `constructor` was replaced, is refused instead of going on: a start, a
   `shutdown` and `shutdownTelemetry` then reject with `BYMAX_TELEMETRY_REALM_POLLUTED`. A boot that finds the process
   polluted after the SDK started stops that SDK, warns with the same code and answers with the disabled handle. The
   handles the library returns are frozen. The loads of the packages are not part of this claim: see the known limit
