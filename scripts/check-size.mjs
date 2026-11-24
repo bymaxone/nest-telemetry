@@ -34,6 +34,9 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
+//   - 2026-11-24 (register only, PM grant 2026-11-24 (16b.17(f) boot.ts:51 pin), owner standing rule, at the measured
+//     size plus 30 B, rounded down in the KiB column): register 12,743 B measured, 12.47 KiB budget (12,769 B, 26 B of
+//     headroom). The growth over the 12,706 B of the entry below, 37 B, is the start of the preload answering through a promise of its own.
 //   - 2026-11-24 (every bundle but the register CommonJS stub, at the measured size plus 30 B, rounded down in the KiB
 //     column; the PM's rule of the same day, applied for the wait on a promise of a host that goes through a native
 //     await when its constructor is the intrinsic, and for reading a descriptor as own data): sdk 12,585 B measured,
@@ -204,7 +207,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //   met by shortening the text of a warning.
 const BUDGETS = [
   { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 12.31 * 1024 },
-  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 12.43 * 1024 },
+  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 12.47 * 1024 },
   { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.79 * 1024 },
   { name: 'observability (metrics)', path: 'dist/observability/index.mjs', brotli: 0.89 * 1024 },
   { name: 'sdk (CommonJS)', path: 'dist/sdk/index.cjs', brotli: 12.35 * 1024 },
