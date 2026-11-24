@@ -9,17 +9,131 @@
  */
 import {
   create,
+  getOwnPropertyDescriptor,
   getOwnPropertyDescriptors,
+  getPrototypeOf,
   hasOwn,
   ownKeys,
   rootPrototype,
   runInFreshRealm
 } from './primordials'
 
+/** An expression that reads one built-in object in a realm, and the names of it that are compared. */
+type GuardedRow = readonly [string, readonly (string | symbol)[]]
+
+/**
+ * The built-ins, besides `Object.prototype`, whose named members the SDK calls on a decision path, by a call or by
+ * iterating (a `for...of`, a spread, a destructuring and `new Set(list)` reach `Symbol.iterator`, `next` and `add`
+ * with no call in the source): each row is an expression that reads the object in a realm, and the names of it that
+ * are compared with a fresh realm's. A member that the host replaced after this module loaded is counted like a
+ * changed name of the root prototype.
+ */
+export const GUARDED_BUILTINS: readonly GuardedRow[] = [
+  [
+    'Array.prototype',
+    [
+      'filter',
+      'find',
+      'flatMap',
+      'includes',
+      'indexOf',
+      'map',
+      'push',
+      'slice',
+      'some',
+      Symbol.iterator
+    ]
+  ],
+  [
+    'String.prototype',
+    [
+      'codePointAt',
+      'includes',
+      'indexOf',
+      'padStart',
+      'replace',
+      'slice',
+      'split',
+      'startsWith',
+      'toLowerCase',
+      'toString',
+      'trim'
+    ]
+  ],
+  ['Map.prototype', ['get', 'has']],
+  ['Set.prototype', ['add', 'has', Symbol.iterator]],
+  ['RegExp.prototype', ['test']],
+  ['Number.prototype', ['toString']],
+  ['Array', ['isArray']],
+  ['JSON', ['stringify']],
+  ['Number', ['isFinite']],
+  ['Object', ['assign', 'create', 'entries', 'fromEntries', 'keys', 'setPrototypeOf', 'values']],
+  ['Reflect', ['deleteProperty', 'get', 'set']],
+  ['Symbol', ['for']],
+  ['Object.getPrototypeOf([][Symbol.iterator]())', ['next']],
+  ['Object.getPrototypeOf(new Set()[Symbol.iterator]())', ['next']]
+]
+
+/** The expression that reads every guarded object of a realm, in the order of {@link GUARDED_BUILTINS}. */
+const EXPRESSION = `[${GUARDED_BUILTINS.map(([expression]) => expression).join(', ')}]`
+
+/** The prototypes of the iterators of an array and of a set, read when this module loads: no name reaches them. */
+const ARRAY_ITERATOR = getPrototypeOf([][Symbol.iterator]()) as object
+const SET_ITERATOR = getPrototypeOf(new Set()[Symbol.iterator]()) as object
+
+/**
+ * Reads the guarded objects of this realm, in the order of {@link GUARDED_BUILTINS}, by the names the code that
+ * calls them uses, so a global that was replaced is the one that is read.
+ *
+ * @returns One object per row.
+ */
+export function readBuiltins(): readonly object[] {
+  return [
+    Array.prototype,
+    String.prototype,
+    Map.prototype,
+    Set.prototype,
+    RegExp.prototype,
+    Number.prototype,
+    Array,
+    JSON,
+    Number,
+    Object,
+    Reflect,
+    Symbol,
+    ARRAY_ITERATOR,
+    SET_ITERATOR
+  ]
+}
+
+/**
+ * The descriptors of the guarded names of each object, by row. A name the object lacks has no entry, and no
+ * entry is read through a prototype: the records have none, and the rows are held by index.
+ *
+ * @param objects - The objects read by {@link EXPRESSION}, in a realm.
+ * @returns One record of descriptors per row.
+ */
+function describeAll(objects: readonly object[]): Record<number, Descriptors> {
+  const rows = create(null) as Record<number, Descriptors>
+  for (let at = 0; at < GUARDED_BUILTINS.length; at += 1) {
+    const names = (GUARDED_BUILTINS[at] as GuardedRow)[1]
+    const row = create(null) as Descriptors
+    // Stryker disable next-line EqualityOperator: one step past the row reads a name that no guarded object owns, so no descriptor is kept and nothing changes.
+    for (let each = 0; each < names.length; each += 1) {
+      const name = names[each] as string | symbol
+      const descriptor = getOwnPropertyDescriptor(objects[at] as object, name)
+      if (descriptor !== undefined) row[name] = descriptor
+    }
+    rows[at] = row
+  }
+  return rows
+}
+
 /** What a fresh realm holds: the descriptors of its `Object.prototype` and the text of a function. */
 interface Pristine {
   readonly descriptors: Readonly<Record<string | symbol, PropertyDescriptor>>
   readonly sourceOf: (value: unknown) => string
+  readonly targets: Readonly<Record<number, Descriptors>>
 }
 
 /** What the prototype held when this module loaded, so a name swapped for another native function is caught by identity. */
@@ -39,14 +153,23 @@ const loaded = getOwnPropertyDescriptors(rootPrototype) as Record<
  */
 function build(): Pristine | undefined {
   try {
-    return runInFreshRealm(
+    const made = runInFreshRealm(
       '({ descriptors: Object.getOwnPropertyDescriptors(Object.prototype), ' +
-        'sourceOf: (value) => Function.prototype.toString.call(value) })'
-    ) as Pristine
+        'sourceOf: (value) => Function.prototype.toString.call(value), ' +
+        `objects: ${EXPRESSION} })`
+    ) as { descriptors: Descriptors; sourceOf: Pristine['sourceOf']; objects: readonly object[] }
+    return {
+      descriptors: made.descriptors,
+      sourceOf: made.sourceOf,
+      targets: describeAll(made.objects)
+    }
   } catch {
     return undefined
   }
 }
+
+/** What each guarded built-in held when this module loaded, by row, so a member swapped for another function is caught. */
+const loadedRows = describeAll(readBuiltins())
 
 let pristine: Pristine | undefined = build()
 
@@ -98,7 +221,8 @@ function unchanged(
   name: string | symbol,
   have: Descriptors,
   want: Descriptors,
-  sourceOf: Pristine['sourceOf']
+  sourceOf: Pristine['sourceOf'],
+  loaded: Descriptors
 ): boolean {
   // An absent descriptor reads every field as undefined, so a deleted name and a planted one differ at once.
   const now = hasOwn(have, name) ? have[name] : undefined
@@ -161,7 +285,43 @@ export function pollutedNames(): number {
   }
   let found = 0
   for (let at = 0; at < total; at += 1) {
-    if (!unchanged(names[at] as string | symbol, now, descriptors, sourceOf)) found += 1
+    if (!unchanged(names[at] as string | symbol, now, descriptors, sourceOf, loaded)) found += 1
+  }
+  return found + changedBuiltins(pristine.targets, sourceOf)
+}
+
+/**
+ * Counts the guarded members of the other built-ins that differ from a fresh realm's or from the function this
+ * module met: a method of a prototype or a static that something replaced after the library loaded.
+ *
+ * @param fresh - The fresh realm's descriptors, by row.
+ * @param sourceOf - Reads function text.
+ * @returns Zero when none changed; one when the built-ins could not be read, which is not clean.
+ */
+function changedBuiltins(
+  fresh: Readonly<Record<number, Descriptors>>,
+  sourceOf: Pristine['sourceOf']
+): number {
+  let found = 0
+  try {
+    const now = describeAll(readBuiltins())
+    for (let at = 0; at < GUARDED_BUILTINS.length; at += 1) {
+      const names = (GUARDED_BUILTINS[at] as GuardedRow)[1]
+      // Stryker disable next-line EqualityOperator: one step past the row compares a name that neither realm owns, so it is the same on both sides and nothing is counted.
+      for (let each = 0; each < names.length; each += 1) {
+        const name = names[each] as string | symbol
+        const same = unchanged(
+          name,
+          now[at] as Descriptors,
+          fresh[at] as Descriptors,
+          sourceOf,
+          loadedRows[at] as Descriptors
+        )
+        if (!same) found += 1
+      }
+    }
+  } catch {
+    return 1
   }
   return found
 }

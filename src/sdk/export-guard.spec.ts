@@ -47,7 +47,7 @@ describe('guardExports', () => {
     expect(sent).toEqual([['clean']])
     expect(results[1]?.code).toBe(1)
     expect((results[1]?.error as Error).message).toBe(
-      'The Object.prototype of this process is polluted, so the batch was dropped.'
+      'Object.prototype or a built-in of this process was changed, so the batch was dropped.'
     )
   })
 
@@ -107,6 +107,37 @@ describe('guardExports', () => {
       expect(Object.getOwnPropertyDescriptor(transport, 'send')?.writable).toBe(true)
     } finally {
       Reflect.deleteProperty(Object.prototype, 'get')
+    }
+  })
+
+  it('decides to drop, and to send, with the then of Promise replaced by a function that throws', () => {
+    // Scenario: a host wrapped Promise.prototype.then; the decision to drop or to send reads no then, so the
+    // batch is dropped when polluted and sent when clean, and the replacement is never called.
+    const { sent, make } = exporters()
+    const exporter = make()
+    guardExports(exporter)
+    const original = Object.getOwnPropertyDescriptor(
+      Promise.prototype,
+      'then'
+    ) as PropertyDescriptor
+    let calls = 0
+    Object.defineProperty(Promise.prototype, 'then', {
+      ...original,
+      value: (): never => {
+        calls += 1
+        throw new Error('replaced then must not run')
+      }
+    })
+    try {
+      const results: { code: number }[] = []
+      exporter.export(['clean'], (result) => results.push(result))
+      polluted.mockReturnValue(1)
+      exporter.export(['dropped'], (result) => results.push(result))
+      expect(results.map((result) => result.code)).toEqual([0, 1])
+      expect(sent).toEqual([['clean']])
+      expect(calls).toBe(0)
+    } finally {
+      Object.defineProperty(Promise.prototype, 'then', original)
     }
   })
 

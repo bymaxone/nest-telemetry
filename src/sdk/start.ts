@@ -69,7 +69,7 @@ function refusesPollution(): boolean {
   const polluted = pollutedNames()
   if (polluted === 0) return false
   emitWarning(
-    `Telemetry did not start: the Object.prototype of this process holds ${polluted} name(s) that the engine does not define, or holds them changed, and the SDK and its dependencies would read them as settings. Nothing is exported. Remove them, or start telemetry before they are added.`,
+    `Telemetry did not start: Object.prototype or a built-in the SDK calls differs from the engine's in ${polluted} name(s) (added, missing or changed), and the SDK and its dependencies would read or call them. Nothing is exported. Undo the change, or start telemetry before it is made.`,
     { type: 'SecurityWarning', code: 'BYMAX_TELEMETRY_REALM_POLLUTED' }
   )
   return true

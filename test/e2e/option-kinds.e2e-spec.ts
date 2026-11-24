@@ -3,6 +3,7 @@
  * anything, names the option, and never repeats the value it was given.
  * @layer e2e
  */
+import { runInNewContext } from 'node:vm'
 import { ignorePaths, shutdownTelemetry, startTelemetry } from '@bymax-one/nest-telemetry'
 import type { TelemetryOptions } from '@bymax-one/nest-telemetry'
 
@@ -212,6 +213,56 @@ describe('startTelemetry in the real library, for an option of the wrong kind', 
     expect(
       (await refusal({ instrumentations: { overrides: Object.create(mapParent) } }))?.message
     ).toContain('The instrumentations.overrides option must be set on the object itself')
+  })
+
+  it('refuses an override that an ordinary parent object holds, which a copy of own keys would drop', async () => {
+    // Scenario: `Object.create({ enabled: false })` keeps the setting on its parent, so the instrumentation
+    // would stay on; the start is refused naming the entry, and nothing is started.
+    const error = await refusal({
+      instrumentations: { overrides: { pino: Object.create({ enabled: false }) } }
+    })
+    expect(error).toMatchObject({
+      code: 'BYMAX_TELEMETRY_OPTION_INVALID',
+      option: 'instrumentations.overrides[]'
+    })
+    expect(error?.message).toContain('not on a prototype')
+  })
+
+  it('refuses an entry whose class holds a getter of a setting, which is not enumerable', async () => {
+    // Scenario: `get enabled()` of a class is not an own key and not enumerable, so a copy of the own keys would
+    // drop `enabled: false` in silence and the instrumentation would stay on; the start is refused.
+    class Entry {
+      get enabled(): boolean {
+        return false
+      }
+    }
+    const error = await refusal({ instrumentations: { overrides: { pino: new Entry() } } })
+    expect(error).toMatchObject({
+      code: 'BYMAX_TELEMETRY_OPTION_INVALID',
+      option: 'instrumentations.overrides[]'
+    })
+  })
+
+  it('starts with an entry whose class holds only methods, which are not settings', async () => {
+    // Scenario: a method of a class is not enumerable and not an accessor, so no setting is dropped and the
+    // start goes on.
+    class Entry {
+      enabled = true
+      describe(): string {
+        return 'entry'
+      }
+    }
+    const overrides = { pino: new Entry() } as never
+    const handle = await startTelemetry({ instrumentations: { overrides } })
+    expect(handle.enabled).toBe(true)
+  })
+
+  it('starts with an overrides map made in another realm', async () => {
+    // Scenario: a plain object of vm.runInNewContext has that realm's root prototype as its parent, which owns the
+    // accessor `__proto__`; it is no class, so the map is read as written and the start goes on.
+    const overrides = runInNewContext('({ pino: { enabled: false } })') as never
+    const handle = await startTelemetry({ instrumentations: { overrides } })
+    expect(handle.enabled).toBe(true)
   })
 
   it('starts with an overrides map that is a Proxy, which is read for what it answers', async () => {

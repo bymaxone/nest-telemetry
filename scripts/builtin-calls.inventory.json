@@ -1,0 +1,396 @@
+{
+  "src/nest/telemetry-shutdown.hook.ts|method|.catch": {
+    "count": 1,
+    "class": "inert",
+    "reason": "Wrapper-prone, so not in the guard's table: it only sequences the start or the shutdown, or builds a resolved promise, and decides nothing about what is exported or redacted; the export decision awaits native promises and reads no then."
+  },
+  "src/nest/telemetry-shutdown.hook.ts|method|.get": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/nest/telemetry-shutdown.hook.ts|static|Promise.resolve": {
+    "count": 1,
+    "class": "inert",
+    "reason": "Wrapper-prone, so not in the guard's table: it only sequences the start or the shutdown, or builds a resolved promise, and decides nothing about what is exported or redacted; the export decision awaits native promises and reads no then."
+  },
+  "src/register/boot.ts|static|Promise.allSettled": {
+    "count": 1,
+    "class": "inert",
+    "reason": "Wrapper-prone, so not in the guard's table: it only sequences the start or the shutdown, or builds a resolved promise, and decides nothing about what is exported or redacted; the export decision awaits native promises and reads no then."
+  },
+  "src/register/boot.ts|static|Promise.resolve": {
+    "count": 1,
+    "class": "inert",
+    "reason": "Wrapper-prone, so not in the guard's table: it only sequences the start or the shutdown, or builds a resolved promise, and decides nothing about what is exported or redacted; the export decision awaits native promises and reads no then."
+  },
+  "src/register/boot.ts|static|process.once": {
+    "count": 1,
+    "class": "inert",
+    "reason": "Registers the exit hook of the preload; a replaced one skips a flush on exit and changes what is exported by nothing."
+  },
+  "src/sdk/assembly.ts|iterate|array-destructure": {
+    "count": 1,
+    "class": "guarded",
+    "iterates": ["array"]
+  },
+  "src/sdk/assembly.ts|iterate|for-of": {
+    "count": 4,
+    "class": "guarded",
+    "iterates": ["array", "set"]
+  },
+  "src/sdk/assembly.ts|iterate|new-Set": {
+    "count": 2,
+    "class": "guarded",
+    "iterates": ["add", "array"]
+  },
+  "src/sdk/assembly.ts|iterate|spread": {
+    "count": 5,
+    "class": "guarded",
+    "iterates": ["array", "set"]
+  },
+  "src/sdk/assembly.ts|method|.codePointAt": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/assembly.ts|method|.has": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/assembly.ts|method|.includes": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/assembly.ts|method|.map": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/assembly.ts|method|.padStart": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/assembly.ts|method|.replace": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/assembly.ts|method|.slice": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/assembly.ts|method|.some": {
+    "count": 2,
+    "class": "guarded"
+  },
+  "src/sdk/assembly.ts|method|.startsWith": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/assembly.ts|method|.toString": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/assembly.ts|method|.trim": {
+    "count": 3,
+    "class": "guarded"
+  },
+  "src/sdk/assembly.ts|static|Array.isArray": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/assembly.ts|static|JSON.stringify": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/assembly.ts|static|Object.assign": {
+    "count": 5,
+    "class": "guarded"
+  },
+  "src/sdk/assembly.ts|static|Object.create": {
+    "count": 8,
+    "class": "guarded"
+  },
+  "src/sdk/assembly.ts|static|Object.entries": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/assembly.ts|static|Object.fromEntries": {
+    "count": 1,
+    "class": "guarded",
+    "iterates": ["array"]
+  },
+  "src/sdk/assembly.ts|static|Object.keys": {
+    "count": 3,
+    "class": "guarded"
+  },
+  "src/sdk/assembly.ts|static|Object.setPrototypeOf": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/assembly.ts|static|Object.values": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/emit-warning.ts|static|process.emitWarning": {
+    "count": 1,
+    "class": "inert",
+    "reason": "Hands a text to the warning channel of the process; a replaced one loses a warning and changes no option, export or redaction."
+  },
+  "src/sdk/environment.ts|iterate|spread": {
+    "count": 1,
+    "class": "inert",
+    "reason": "Runs once, when the module loads, before anything the host can replace; no decision on the export path reads it."
+  },
+  "src/sdk/environment.ts|method|.filter": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/environment.ts|method|.find": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/environment.ts|method|.includes": {
+    "count": 2,
+    "class": "guarded"
+  },
+  "src/sdk/environment.ts|method|.map": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/environment.ts|method|.push": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/environment.ts|method|.split": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/environment.ts|method|.toLowerCase": {
+    "count": 2,
+    "class": "guarded"
+  },
+  "src/sdk/environment.ts|method|.trim": {
+    "count": 5,
+    "class": "guarded"
+  },
+  "src/sdk/environment.ts|static|Number.isFinite": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/export-failure.ts|static|Symbol.for": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/export-guard.ts|static|Symbol.for": {
+    "count": 2,
+    "class": "guarded"
+  },
+  "src/sdk/handle.ts|method|.finally": {
+    "count": 1,
+    "class": "inert",
+    "reason": "Wrapper-prone, so not in the guard's table: it only sequences the start or the shutdown, or builds a resolved promise, and decides nothing about what is exported or redacted; the export decision awaits native promises and reads no then."
+  },
+  "src/sdk/handle.ts|method|.then": {
+    "count": 1,
+    "class": "inert",
+    "reason": "Wrapper-prone, so not in the guard's table: it only sequences the start or the shutdown, or builds a resolved promise, and decides nothing about what is exported or redacted; the export decision awaits native promises and reads no then."
+  },
+  "src/sdk/handle.ts|static|Number.isFinite": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/handle.ts|static|Promise.allSettled": {
+    "count": 1,
+    "class": "inert",
+    "reason": "Wrapper-prone, so not in the guard's table: it only sequences the start or the shutdown, or builds a resolved promise, and decides nothing about what is exported or redacted; the export decision awaits native promises and reads no then."
+  },
+  "src/sdk/handle.ts|static|Promise.resolve": {
+    "count": 1,
+    "class": "inert",
+    "reason": "Wrapper-prone, so not in the guard's table: it only sequences the start or the shutdown, or builds a resolved promise, and decides nothing about what is exported or redacted; the export decision awaits native promises and reads no then."
+  },
+  "src/sdk/handle.ts|static|Reflect.deleteProperty": {
+    "count": 2,
+    "class": "guarded"
+  },
+  "src/sdk/handle.ts|static|Reflect.get": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/handle.ts|static|Reflect.set": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/handle.ts|static|Symbol.for": {
+    "count": 3,
+    "class": "guarded"
+  },
+  "src/sdk/ignore-paths.ts|method|.indexOf": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/ignore-paths.ts|method|.map": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/ignore-paths.ts|method|.replace": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/ignore-paths.ts|method|.slice": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/ignore-paths.ts|method|.some": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/ignore-paths.ts|method|.test": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/prototype-guard.ts|iterate|array-destructure": {
+    "count": 1,
+    "class": "inert",
+    "reason": "Reads the pair of a table row in the check itself, whose own table covers the iterator; and it is read through an index loop elsewhere. No host value is iterated."
+  },
+  "src/sdk/prototype-guard.ts|method|.join": {
+    "count": 1,
+    "class": "inert",
+    "reason": "Runs once, at the top level of the module, to spell the expression the fresh realm evaluates, before any code of the host can replace it; it is never called again."
+  },
+  "src/sdk/prototype-guard.ts|method|.map": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/redaction.ts|iterate|for-of": {
+    "count": 1,
+    "class": "guarded",
+    "iterates": ["array"]
+  },
+  "src/sdk/redaction.ts|iterate|new-Set": {
+    "count": 1,
+    "class": "guarded",
+    "iterates": ["add", "array"]
+  },
+  "src/sdk/redaction.ts|iterate|spread": {
+    "count": 3,
+    "class": "guarded",
+    "iterates": ["array", "set"]
+  },
+  "src/sdk/redaction.ts|method|.includes": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/redaction.ts|method|.indexOf": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/redaction.ts|method|.slice": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/redaction.ts|static|Promise.resolve": {
+    "count": 2,
+    "class": "inert",
+    "reason": "Wrapper-prone, so not in the guard's table: it only sequences the start or the shutdown, or builds a resolved promise, and decides nothing about what is exported or redacted; the export decision awaits native promises and reads no then."
+  },
+  "src/sdk/resource-detectors.ts|iterate|array-destructure": {
+    "count": 1,
+    "class": "guarded",
+    "iterates": ["array"]
+  },
+  "src/sdk/resource-detectors.ts|iterate|new-Map": {
+    "count": 1,
+    "class": "inert",
+    "reason": "Runs once, when the module loads, before anything the host can replace; no decision on the export path reads it."
+  },
+  "src/sdk/resource-detectors.ts|iterate|new-Set": {
+    "count": 1,
+    "class": "guarded",
+    "iterates": ["add", "array"]
+  },
+  "src/sdk/resource-detectors.ts|iterate|spread": {
+    "count": 1,
+    "class": "guarded",
+    "iterates": ["array", "set"]
+  },
+  "src/sdk/resource-detectors.ts|method|.filter": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/resource-detectors.ts|method|.flatMap": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/resource-detectors.ts|method|.get": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/resource-detectors.ts|method|.includes": {
+    "count": 4,
+    "class": "guarded"
+  },
+  "src/sdk/resource-detectors.ts|method|.map": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/resource-detectors.ts|static|Object.entries": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/resource-detectors.ts|static|Object.fromEntries": {
+    "count": 1,
+    "class": "guarded",
+    "iterates": ["array"]
+  },
+  "src/sdk/start.ts|iterate|array-destructure": {
+    "count": 1,
+    "class": "guarded",
+    "iterates": ["array"]
+  },
+  "src/sdk/start.ts|iterate|spread": {
+    "count": 1,
+    "class": "guarded",
+    "iterates": ["array"]
+  },
+  "src/sdk/start.ts|method|.finally": {
+    "count": 1,
+    "class": "inert",
+    "reason": "Wrapper-prone, so not in the guard's table: it only sequences the start or the shutdown, or builds a resolved promise, and decides nothing about what is exported or redacted; the export decision awaits native promises and reads no then."
+  },
+  "src/sdk/start.ts|method|.map": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/start.ts|static|Object.assign": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/start.ts|static|Object.create": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/start.ts|static|Promise.all": {
+    "count": 1,
+    "class": "inert",
+    "reason": "Wrapper-prone, so not in the guard's table: it only sequences the start or the shutdown, or builds a resolved promise, and decides nothing about what is exported or redacted; the export decision awaits native promises and reads no then."
+  },
+  "src/sdk/start.ts|static|Promise.allSettled": {
+    "count": 1,
+    "class": "inert",
+    "reason": "Wrapper-prone, so not in the guard's table: it only sequences the start or the shutdown, or builds a resolved promise, and decides nothing about what is exported or redacted; the export decision awaits native promises and reads no then."
+  },
+  "src/sdk/start.ts|static|Promise.resolve": {
+    "count": 1,
+    "class": "inert",
+    "reason": "Wrapper-prone, so not in the guard's table: it only sequences the start or the shutdown, or builds a resolved promise, and decides nothing about what is exported or redacted; the export decision awaits native promises and reads no then."
+  },
+  "src/sdk/warning-sink.ts|static|Symbol.for": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/winston-transport.ts|static|process.cwd": {
+    "count": 1,
+    "class": "inert",
+    "reason": "Only the default of a directory that shortens the file paths in a log line; a replaced one changes display text."
+  }
+}

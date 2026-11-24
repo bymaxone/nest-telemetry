@@ -80,7 +80,7 @@ export function warnOnExportFailure<E extends ObservableExporter>(
               code: 'BYMAX_TELEMETRY_EXPORT_FAILED',
               text:
                 code === POLLUTED_CODE
-                  ? `Exporting spans was refused (${kind}, code ${code}), so the batch was dropped. Something added a property to Object.prototype after the start; the collector was not contacted. This warning repeats at most once a minute.`
+                  ? `Exporting spans was refused (${kind}, code ${code}), so the batch was dropped. Something changed Object.prototype or a built-in after the start; the collector was not contacted. This warning repeats at most once a minute.`
                   : `Exporting spans failed (${kind}, code ${code}), so the batch was dropped. This warning repeats at most once a minute. Check that the collector is reachable.`,
               fields: { kind, code }
             })

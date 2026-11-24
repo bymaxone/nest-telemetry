@@ -34,6 +34,18 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
+//   - 2026-11-23 (sdk, register and the sdk CommonJS bundle, PM-granted at about the measured size plus 64 B):
+//     sdk 11,357 B measured, 11.16 KiB budget (11,428 B, 71 B of headroom); register 11,519 B, 11.32 KiB budget
+//     (11,592 B, 73 B: 11.31 KiB would leave 62 B, so it is rounded up); sdk CommonJS 11,400 B, 11.19 KiB budget
+//     (11,458 B, 58 B). The growth over the entry below, about 110 B in each, is the rows for the iterators of an array
+//     and of a set, `Set.prototype.add` and the two prototypes that the load captures, the check of an accessor on a
+//     prototype of an override, and the new texts of the warnings.
+//   - 2026-11-23 (sdk, register and the sdk CommonJS bundle, PM-granted; the table of guarded built-ins): sdk 11,242 B
+//     measured, 11.01 KiB budget (11,274 B, 32 B of headroom); register 11,397 B, 11.16 KiB budget (11,428 B, 31 B);
+//     sdk CommonJS 11,288 B, 11.06 KiB budget (11,325 B, 37 B). The growth, about 0.55 KiB in each, is the table of the
+//     built-ins that the guard, the export wrap and the option settling call, the descriptors read from this realm
+//     and from a fresh one, and the comparison that counts a replaced, deleted or foreign member. Rows that no
+//     guarded call needs were left out of the table first.
 //   - 2026-11-23 (sdk and register, and a row for the CommonJS bundle of every subpath): sdk 10,680 B measured,
 //     10.46 KiB budget (10,711 B, 31 B of headroom); register 10,833 B, 10.61 KiB budget (10,865 B, 32 B). The growth,
 //     233 B in each, is the code the dropped batch carries and the warning text that names the pollution. The
@@ -146,11 +158,11 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
 //   met by shortening the text of a warning.
 const BUDGETS = [
-  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 10.46 * 1024 },
-  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 10.61 * 1024 },
+  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 11.16 * 1024 },
+  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 11.32 * 1024 },
   { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.2 * 1024 },
   { name: 'observability (metrics)', path: 'dist/observability/index.mjs', brotli: 0.74 * 1024 },
-  { name: 'sdk (CommonJS)', path: 'dist/sdk/index.cjs', brotli: 10.5 * 1024 },
+  { name: 'sdk (CommonJS)', path: 'dist/sdk/index.cjs', brotli: 11.19 * 1024 },
   { name: 'register (CommonJS)', path: 'dist/register/index.cjs', brotli: 0.2 * 1024 },
   { name: 'nest (CommonJS)', path: 'dist/nest/index.cjs', brotli: 2.22 * 1024 },
   { name: 'observability (CommonJS)', path: 'dist/observability/index.cjs', brotli: 0.75 * 1024 }

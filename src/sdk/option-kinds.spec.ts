@@ -3,6 +3,7 @@
  * and the copies of a list and of a map.
  * @layer sdk
  */
+import { runInNewContext } from 'node:vm'
 import {
   MAX_OPTION_ENTRIES,
   TelemetryOptionError,
@@ -229,8 +230,21 @@ describe('settleOverrides, for a map or an entry whose keys sit on a prototype w
     Object.assign(Object.create(null) as object, { pino: { enabled: false } })
   const entryBase = (): object => Object.assign(Object.create(null) as object, { enabled: false })
 
+  const plainParent = (): object => ({ pino: { enabled: false } })
+  const plainEntryParent = (): object => ({ enabled: false })
+
   it.each([
     ['the map', () => Object.create(base()) as object, 'x'],
+    [
+      'the map, when its parent is an ordinary object',
+      () => Object.create(plainParent()) as object,
+      'x'
+    ],
+    [
+      'an entry, when its parent is an ordinary object',
+      () => ({ pino: Object.create(plainEntryParent()) as object }),
+      'instrumentations.overrides[]'
+    ],
     [
       'an entry of the map',
       () => ({ pino: Object.create(entryBase()) as object }),
@@ -246,7 +260,7 @@ describe('settleOverrides, for a map or an entry whose keys sit on a prototype w
     // so the host's `enabled: false` would be lost; the start is refused with a fixed path instead.
     expect(thrown(() => settleOverrides('x', make()))).toMatchObject({
       option,
-      message: `The ${option} option must be set on the object itself, not on a prototype that has no prototype, so the start was refused.`
+      message: `The ${option} option must be set on the object itself, not on a prototype, so the start was refused.`
     })
   })
 
@@ -281,11 +295,121 @@ describe('settleOverrides, for a map or an entry whose keys sit on a prototype w
     }
   })
 
-  it('does not refuse a map whose parent has a prototype of its own, whatever the parent holds', () => {
-    // Scenario: only a holder with no prototype is the case that is refused; an ordinary parent object
-    // is not, so a parent that holds a name and has a prototype leaves the start going.
-    const parent = Object.create({}, { pino: { value: { enabled: true }, enumerable: true } })
-    expect(() => settleOverrides('x', Object.create(parent) as object)).not.toThrow()
+  it('does not refuse a map whose parent holds only names that are not enumerable', () => {
+    // Scenario: the methods of a class are not enumerable and hold no setting, so a class instance, whose
+    // parent has a prototype of its own, is read as before.
+    class Settings {
+      own = { pino: { enabled: false } }
+      method(): void {}
+    }
+    expect(settleOverrides('x', Object.assign(new Settings().own))).toEqual({
+      pino: { enabled: false }
+    })
+    expect(() => settleOverrides('x', new Settings() as object)).not.toThrow()
+  })
+
+  it('accepts a map and an entry made in another realm, whose Object.prototype owns the accessor __proto__', () => {
+    // Scenario: a plain object from vm.runInNewContext has that realm's root prototype as its parent, which owns
+    // the non-enumerable accessor `__proto__`; it is the root of a realm and not a class, so it is not a setting.
+    const map = runInNewContext('({ http: { enabled: false } })') as object
+    expect(settleOverrides('x', map)).toEqual({ http: { enabled: false } })
+  })
+
+  it.each([
+    [
+      'an entry whose class holds a getter',
+      (): object => {
+        class Entry {
+          get enabled(): boolean {
+            return false
+          }
+        }
+        return { http: new Entry() }
+      },
+      'instrumentations.overrides[]'
+    ],
+    [
+      'a map whose class holds a getter',
+      (): object => {
+        class Map_ {
+          get http(): object {
+            return { enabled: false }
+          }
+        }
+        return new Map_()
+      },
+      'x'
+    ],
+    [
+      'an entry whose class holds a getter of a symbol name',
+      (): object => {
+        class Entry {
+          get [Symbol.for('setting')](): boolean {
+            return false
+          }
+        }
+        return { http: new Entry() }
+      },
+      'instrumentations.overrides[]'
+    ]
+  ])('refuses %s, though the getter is not enumerable', (_where, make, option) => {
+    // Scenario: a getter of a class is not enumerable, and the copy of own keys would drop the setting it answers
+    // (`enabled: false`) in silence and leave the instrumentation on; a method is not a setting, a getter is.
+    expect(thrown(() => settleOverrides('x', make()))).toMatchObject({
+      option,
+      message: `The ${option} option must be set on the object itself, not on a prototype, so the start was refused.`
+    })
+  })
+
+  it('accepts a map with no prototype made in another realm', () => {
+    // Scenario: Object.create(null) of another realm has no parent at all, so there is nothing to hold a setting.
+    const map = runInNewContext(
+      'Object.assign(Object.create(null), { http: { enabled: false } })'
+    ) as object
+    expect(settleOverrides('x', map)).toEqual({ http: { enabled: false } })
+  })
+
+  it.each([
+    [
+      'a class of another realm that holds a getter',
+      'class Entry { get enabled() { return false } }; ({ http: new Entry() })',
+      'instrumentations.overrides[]'
+    ],
+    [
+      'the root prototype of another realm with an enumerable key planted on it',
+      'Object.prototype.enabled = false; ({ http: {} })',
+      'x'
+    ]
+  ])('refuses %s, as one of this realm', (_where, source, option) => {
+    // Scenario: skipping the accessor `__proto__` of a foreign root must not hide a setting that a class of that
+    // realm, or a key planted there, holds: they are refused as in this realm.
+    expect(thrown(() => settleOverrides('x', runInNewContext(source) as object))).toMatchObject({
+      option
+    })
+  })
+
+  it('refuses a class whose prototype defines a getter named __proto__, which is not the accessor of a root', () => {
+    // Scenario: only a holder with no prototype, the root of a realm, owns the accessor `__proto__` by right; a
+    // class that defines one holds an inherited accessor like any other and is refused as one.
+    class Entry {
+      get ['__proto__'](): object {
+        return { enabled: false }
+      }
+    }
+    expect(thrown(() => settleOverrides('x', { http: new Entry() }))).toMatchObject({
+      option: 'instrumentations.overrides[]'
+    })
+  })
+
+  it('refuses a parent with no prototype that holds a getter of a setting, whatever the name', () => {
+    // Scenario: only the name `__proto__` is skipped on a holder with no prototype; a getter named `enabled` there
+    // is a setting that a copy of the own keys would drop in silence, so it is refused.
+    const holder = Object.create(null, { enabled: { get: (): boolean => false } }) as object
+    expect(
+      thrown(() => settleOverrides('x', { http: Object.create(holder) as object }))
+    ).toMatchObject({
+      option: 'instrumentations.overrides[]'
+    })
   })
 
   it('does not refuse a Proxy whose answer for its prototype is a holder of settings', () => {

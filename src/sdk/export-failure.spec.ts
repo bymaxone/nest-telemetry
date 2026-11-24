@@ -83,7 +83,7 @@ describe('warnOnExportFailure', () => {
     warnOnExportFailure(double.exporter, 'otlp-http traces')
     exportOnce(double.exporter)
     const text = emitWarning.mock.calls[0]?.[0] as string
-    expect(text).toContain('Object.prototype')
+    expect(text).toContain('changed Object.prototype or a built-in')
     expect(text).not.toContain('collector is reachable')
   })
 

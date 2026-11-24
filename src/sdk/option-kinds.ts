@@ -11,6 +11,7 @@ import {
   create,
   entries,
   endsWith,
+  getOwnPropertyDescriptor,
   getPrototypeOf,
   hasOwn,
   isArray,
@@ -18,6 +19,7 @@ import {
   isProxy,
   isRegExp,
   keys,
+  ownKeys,
   rootPrototype,
   toNumber,
   toText
@@ -400,24 +402,43 @@ function detach(value: unknown, seen: { count: number }, depth: number): unknown
 }
 
 /**
- * Refuses an object whose settings sit on a prototype with no prototype, which a copy of its own keys
- * would drop in silence. The root prototype of this realm is where a pollution is planted and is ignored,
- * as are the methods of a class, which are not enumerable.
+ * Whether a prototype holds a setting that a copy of the own keys of its instance would drop: an enumerable
+ * key, or a getter or a setter, which a class defines without making it enumerable. A method is not a setting.
+ * Neither is the accessor `__proto__` of a holder with no prototype, which every realm's root owns, so a map made
+ * in another realm is read as the map of this one; a class that defines one holds an accessor like any other.
+ *
+ * @param holder - A prototype of the value, other than the root of this realm.
+ * @returns `true` when the holder has one.
+ */
+function holdsSetting(holder: object): boolean {
+  if (keys(holder).length > 0) return true
+  const names = ownKeys(holder)
+  for (let at = 0; at < names.length; at += 1) {
+    const name = names[at] as string | symbol
+    if (name === '__proto__' && getPrototypeOf(holder) === null) continue
+    // An accessor has its own `get`, even when it is undefined; a data property has none.
+    if (hasOwn(getOwnPropertyDescriptor(holder, name) as object, 'get')) return true
+  }
+  return false
+}
+
+/**
+ * Refuses an object whose settings sit on a prototype, which a copy of its own keys would drop in
+ * silence. The root prototype of this realm is where a pollution is planted and is ignored, as are the
+ * methods of a class, which are not enumerable.
  *
  * @param path - What the error names.
  * @param value - The map or the entry the host passed.
- * @throws {TelemetryOptionError} When a prototype with no prototype, other than the root of this realm,
- *   has an enumerable key.
+ * @throws {TelemetryOptionError} When a prototype other than the root of this realm has an enumerable key,
+ *   a getter or a setter.
  */
 function refuseAncestorKeys(path: string, value: object): void {
   if (isProxy(value)) return
   let holder: object | null = getPrototypeOf(value)
+  // Stryker disable next-line EqualityOperator: requireObject refuses a chain of MAX_CHAIN prototypes before this walk starts, so the walk never reaches the hop that the bound would add.
   for (let hops = 0; holder !== null && hops < MAX_CHAIN; hops++) {
-    if (getPrototypeOf(holder) === null && holder !== rootPrototype && keys(holder).length > 0) {
-      throw new TelemetryOptionError(
-        path,
-        'set on the object itself, not on a prototype that has no prototype'
-      )
+    if (holder !== rootPrototype && holdsSetting(holder)) {
+      throw new TelemetryOptionError(path, 'set on the object itself, not on a prototype')
     }
     holder = getPrototypeOf(holder)
   }

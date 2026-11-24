@@ -2,6 +2,7 @@
  * @fileoverview Tests when the fresh realm is built, and that a realm that cannot be built counts as polluted.
  * @layer sdk
  */
+import { readBuiltins } from './prototype-guard'
 import type { pollutedNames as PollutedNames } from './prototype-guard'
 
 /** Loads a fresh copy of the guard with the vm module replaced by `runInNewContext`, and returns what it needs. */
@@ -17,6 +18,7 @@ function guardWith(runInNewContext: jest.Mock): typeof PollutedNames {
 
 /** The real thing the vm module would answer: this realm's own descriptors, so every comparison is clean. */
 const real = (): object => ({
+  objects: readBuiltins(),
   descriptors: Object.getOwnPropertyDescriptors(Object.prototype),
   sourceOf: (value: unknown): string => Function.prototype.toString.call(value)
 })

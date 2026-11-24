@@ -24,12 +24,20 @@ heading here.
   was told and the `BYMAX_TELEMETRY_EXPORT_FAILED` warning was lost. The settling of the start options did the same,
   so a replaced one dropped host options such as `enabled: false` in silence. Both paths now call the built-ins the
   library read once when it loaded.
-- **A map or an entry of `instrumentations.overrides` whose settings sit on a prototype with no prototype is refused.**
-  The copy read own keys only, so `enabled: false` held by such an ancestor was dropped in silence, as the other options
-  already refuse it. The start fails with `BYMAX_TELEMETRY_OPTION_INVALID`, naming `instrumentations.overrides` for a map and `instrumentations.overrides[]` for an entry.
+- **A built-in that the library's own checks rely on, replaced after it loaded, now counts as a pollution.** The
+  check of the process compared only `Object.prototype` with a fresh realm. It now also compares the members of the
+  built-ins that the guard, the export wrap and the option settling call: one that is replaced, deleted or swapped for a function of another
+  realm counts one, so the start answers with the disabled handle and an export drops its batch, and a check that
+  cannot read them counts one rather than zero. `Promise`, its `then`, `catch` and `finally`, timers, `Date`,
+  `EventEmitter`, `http`, `fetch` and `process` are not compared: tracing agents and context managers wrap them by
+  design, and no decision to drop or to send awaits through anything but a native promise. The warning says that `Object.prototype` or a
+  built-in was changed, with a count and never a name.
+- **A map or an entry of `instrumentations.overrides` whose settings sit on a prototype is refused.**
+  The copy read own keys only, so `enabled: false` held by a parent object (`Object.create({ enabled: false })`) was dropped in silence, and the instrumentation stayed on. The root prototype of the realm, where a
+  pollution is planted, and the methods of a class are not a setting, but a getter or a setter of a class is, since it is not enumerable and the copy would drop what it answers. The start fails with `BYMAX_TELEMETRY_OPTION_INVALID`, naming `instrumentations.overrides` for a map and `instrumentations.overrides[]` for an entry.
 - **The warning for a batch dropped by the pollution guard says why.** It told the host to check that the collector
   was reachable, though the collector was never contacted. The dropped batch now fails with the code
-  `BYMAX_TELEMETRY_REALM_POLLUTED`, and the warning names the prototype.
+  `BYMAX_TELEMETRY_REALM_POLLUTED`, and the warning names the change.
 - **An `OTEL_*` value of a host `env` object that is not a string is ignored.** Each variable the library reads
   went straight to `.trim()`, `.split()` or a number conversion, so `env: { OTEL_SERVICE_NAME: 5 }` threw a
   `TypeError` at start, and a number or a boolean was read as if it were the text it converts to. A value that is not
@@ -53,7 +61,7 @@ heading here.
 Nothing to change. A setting nested in an override beyond those limits fails at start with
 `BYMAX_TELEMETRY_OPTION_INVALID`, as it does since 1.0.12. A host `env` object that held a number, a boolean or an object for one of the `OTEL_*` names now
 reads that variable as unset instead of throwing or converting it. An `instrumentations.overrides` map or entry whose
-settings sit on a prototype with no prototype now fails at start instead of losing them.
+settings sit on a prototype now fails at start instead of losing them.
 
 ## [1.0.12] - 2026-11-21
 

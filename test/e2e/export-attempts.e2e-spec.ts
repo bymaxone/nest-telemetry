@@ -135,7 +135,7 @@ describe('a name planted after the check of an export, in a real process', () =>
     expect(collector.bodies).toHaveLength(0)
     expect(planted.results).toEqual([1])
     expect(planted.errors).toEqual([
-      'The Object.prototype of this process is polluted, so the batch was dropped.'
+      'Object.prototype or a built-in of this process was changed, so the batch was dropped.'
     ])
   }, 60_000)
 
@@ -164,7 +164,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 `
     const result = await runInRealProcess(child, { BUNDLE: bundle.file }, 30_000)
     expect(JSON.parse(result.lines[result.lines.length - 1] ?? '{}')).toEqual({
-      refusal: 'The Object.prototype of this process is polluted, so the batch was dropped.',
+      refusal:
+        'Object.prototype or a built-in of this process was changed, so the batch was dropped.',
       unhandled: 0
     })
     expect(result.code).toBe(0)

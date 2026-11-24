@@ -2,7 +2,10 @@
  * @fileoverview Tests the count of names that make this realm's Object.prototype differ from a fresh realm's.
  * @layer sdk
  */
-import { pollutedNames } from './prototype-guard'
+import { runInNewContext } from 'node:vm'
+
+import { GUARDED_BUILTINS, pollutedNames, readBuiltins } from './prototype-guard'
+import { buildRedactedQueryParams } from './redaction'
 
 /** Runs `run` with a descriptor put on the root prototype, and removes or restores it after. */
 function plant(name: string, descriptor: PropertyDescriptor, run: () => void): void {
@@ -152,6 +155,222 @@ describe('pollutedNames', () => {
       for (const name of ['get', 'set', 'value']) {
         delete (Object.prototype as unknown as Record<string, unknown>)[name]
       }
+    }
+  })
+})
+
+type GuardModule = typeof import('./prototype-guard')
+
+/** A copy of the module, loaded when this is called, so the test that asks for it is the one that reads its table. */
+async function loadGuard(): Promise<GuardModule> {
+  let loaded: GuardModule | undefined
+  await jest.isolateModulesAsync(async () => {
+    loaded = await import('./prototype-guard')
+  })
+  return loaded as GuardModule
+}
+
+/** One row per guarded member: the expression of its object, and its name. */
+const MEMBERS: (readonly [number, string, string | symbol])[] = GUARDED_BUILTINS.flatMap(
+  ([expression, names], at) =>
+    names.map((name): readonly [number, string, string | symbol] => [at, expression, name])
+)
+
+/** The members that decision paths reach by iterating, with the object that holds each. */
+const ITERATION: (readonly [string, object, string | symbol])[] = [
+  ['the next of an array iterator', Object.getPrototypeOf([][Symbol.iterator]()) as object, 'next'],
+  ['the iterator of an array', Array.prototype, Symbol.iterator],
+  [
+    'the next of a set iterator',
+    Object.getPrototypeOf(new Set()[Symbol.iterator]()) as object,
+    'next'
+  ],
+  ['the iterator of a set', Set.prototype, Symbol.iterator],
+  ['the add of a set, which new Set(list) calls', Set.prototype, 'add']
+]
+
+/** Runs `run` with a member of a guarded built-in redefined as `descriptor`, then puts the original back. */
+function replacing(
+  row: number,
+  name: string | symbol,
+  descriptor: PropertyDescriptor,
+  run: () => void
+): void {
+  const target = readBuiltins()[row] as object
+  const original = Object.getOwnPropertyDescriptor(target, name) as PropertyDescriptor
+  Object.defineProperty(target, name, descriptor)
+  try {
+    run()
+  } finally {
+    Object.defineProperty(target, name, original)
+  }
+}
+
+describe('the built-ins that the SDK calls on a decision path', () => {
+  it('counts nothing when none of them was replaced', () => {
+    // Scenario: a clean process is never refused because of the wider comparison.
+    expect(pollutedNames()).toBe(0)
+  })
+
+  it.each(MEMBERS)(
+    'counts row %s %s.%s once it is replaced by another function',
+    (row, _expression, name) => {
+      // Scenario: code that ran after the library loaded assigned its own function over a member the SDK calls;
+      // the realm is no longer one telemetry can trust, so the count is not zero.
+      let counted = 0
+      replacing(
+        row,
+        name,
+        { value: function replaced(): void {}, writable: true, configurable: true },
+        () => {
+          counted = pollutedNames()
+        }
+      )
+      expect(counted).toBeGreaterThan(0)
+      expect(pollutedNames()).toBe(0)
+    }
+  )
+
+  it('counts a member that was deleted', () => {
+    // Scenario: a deleted member is a change as much as a replaced one, and is put back after.
+    let counted = 0
+    const original = Object.getOwnPropertyDescriptor(Array.prototype, 'map') as PropertyDescriptor
+    delete (Array.prototype as unknown as Record<string, unknown>)['map']
+    try {
+      counted = pollutedNames()
+    } finally {
+      Object.defineProperty(Array.prototype, 'map', original)
+    }
+    expect(counted).toBeGreaterThan(0)
+  })
+
+  it('counts a member swapped for the same engine function of another realm, by identity', () => {
+    // Scenario: a function with the engine's own text but not the one this module met is a replacement.
+    const other = runInNewContext('Array.prototype.map') as () => void
+    let counted = 0
+    replacing(0, 'map', { value: other, writable: true, configurable: true }, () => {
+      counted = pollutedNames()
+    })
+    expect(counted).toBeGreaterThan(0)
+  })
+
+  it.each(ITERATION)(
+    'counts %s once it is replaced, the iteration the decision paths do without a call',
+    (_label, target, name) => {
+      // Scenario: a for...of, a spread, a destructuring or new Set(list) on a decision path reaches these members
+      // with no call in the source, so the list of built-in calls cannot see them; replacing one is a change.
+      const original = Object.getOwnPropertyDescriptor(target, name) as PropertyDescriptor
+      let counted = 0
+      Object.defineProperty(target, name, {
+        value: function replaced(): void {},
+        writable: true,
+        configurable: true
+      })
+      try {
+        counted = pollutedNames()
+      } finally {
+        Object.defineProperty(target, name, original)
+      }
+      expect(counted).toBeGreaterThan(0)
+      expect(pollutedNames()).toBe(0)
+    }
+  )
+
+  it('counts every member of the table, in a copy of the module that this test loads', async () => {
+    // Scenario: the table is read when the module loads, so a copy loaded here is the one this test depends on; a
+    // row with a wrong name or object cannot be replaced and fails here, and a row that lost its names is seen by
+    // the number of members of each row, the one thing a sweep over the rows cannot see.
+    const guard = await loadGuard()
+    expect(guard.GUARDED_BUILTINS.map(([, names]) => names.length)).toEqual([
+      10, 11, 2, 3, 1, 1, 1, 1, 1, 7, 3, 1, 1, 1
+    ])
+    guard.GUARDED_BUILTINS.forEach(([, names], row) => {
+      names.forEach((name) => {
+        const target = guard.readBuiltins()[row] as object
+        const original = Object.getOwnPropertyDescriptor(target, name) as PropertyDescriptor
+        Object.defineProperty(target, name, {
+          value: function replaced(): void {},
+          writable: true,
+          configurable: true
+        })
+        let counted = 0
+        try {
+          counted = guard.pollutedNames()
+        } finally {
+          Object.defineProperty(target, name, original)
+        }
+        expect(counted).toBeGreaterThan(0)
+      })
+    })
+    expect(guard.pollutedNames()).toBe(0)
+  })
+
+  it('counts the iteration that empties the list of redacted query parameters, before anything is read from it', () => {
+    // Scenario: with the next of an array iterator answering done, buildRedactedQueryParams returns no name at all,
+    // so the query secrets would be exported; the guard counts it, and the start refuses on that count.
+    const iterator = Object.getPrototypeOf([][Symbol.iterator]()) as { next: () => unknown }
+    const original = iterator.next
+    let params = -1
+    let counted = 0
+    iterator.next = (): unknown => ({ done: true, value: undefined })
+    try {
+      params = buildRedactedQueryParams(['x']).length
+      counted = pollutedNames()
+    } finally {
+      iterator.next = original
+    }
+    expect(params).toBe(0)
+    expect(counted).toBeGreaterThan(0)
+  })
+
+  it('counts one, with no error, when a built-in cannot be read as an object at all', () => {
+    // Scenario: a global that was replaced by null makes the read of its members throw; that is not clean.
+    const original = Object.getOwnPropertyDescriptor(globalThis, 'Reflect') as PropertyDescriptor
+    Object.defineProperty(globalThis, 'Reflect', { ...original, value: null })
+    let counted = 0
+    try {
+      counted = pollutedNames()
+    } finally {
+      Object.defineProperty(globalThis, 'Reflect', original)
+    }
+    expect(counted).toBe(1)
+  })
+
+  it('reads, for the fresh realm and for this one, the same object in every row', () => {
+    // Scenario: the expression that the fresh realm evaluates and the reader of this realm are two spellings
+    // of one table; a row that names a different object in each would compare the wrong things.
+    const here = readBuiltins()
+    expect(here).toHaveLength(GUARDED_BUILTINS.length)
+    GUARDED_BUILTINS.forEach(([expression], at) => {
+      expect((0, eval)(expression)).toBe(here[at])
+    })
+  })
+
+  it('counts nothing while then, catch, finally and the statics of Promise are wrapped, as a tracing agent does', () => {
+    // Scenario: context managers and APMs wrap the promise machinery by design, so a host that does is not
+    // refused; the export decision awaits native promises and reads none of these names.
+    const wrapped: [object, string][] = [
+      [Promise.prototype, 'then'],
+      [Promise.prototype, 'catch'],
+      [Promise.prototype, 'finally'],
+      [Promise, 'resolve'],
+      [Promise, 'all'],
+      [Promise, 'allSettled']
+    ]
+    const saved = wrapped.map(([target, name]) => Object.getOwnPropertyDescriptor(target, name))
+    wrapped.forEach(([target, name]) =>
+      Object.defineProperty(target, name, {
+        value: function wrapper(): void {},
+        configurable: true,
+        writable: true
+      })
+    )
+    try {
+      expect(pollutedNames()).toBe(0)
+    } finally {
+      wrapped.forEach(([target, name], at) =>
+        Object.defineProperty(target, name, saved[at] as PropertyDescriptor)
+      )
     }
   })
 })

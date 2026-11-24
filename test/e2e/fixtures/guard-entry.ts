@@ -4,8 +4,9 @@
  * @layer e2e
  */
 export { guardExports } from '../../../src/sdk/export-guard'
-export { pollutedNames } from '../../../src/sdk/prototype-guard'
+export { GUARDED_BUILTINS, pollutedNames } from '../../../src/sdk/prototype-guard'
 export { exportFailureCount, warnOnExportFailure } from '../../../src/sdk/export-failure'
 export { settleOptions } from '../../../src/sdk/settle-options'
 export { clearWarningSink, registerWarningSink } from '../../../src/sdk/warning-sink'
 export { describeFailure } from '../../../src/sdk/error-code'
+export { buildRedactedQueryParams } from '../../../src/sdk/redaction'
