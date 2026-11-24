@@ -12,7 +12,7 @@ heading here.
 
 ### Fixed
 
-- **The start and the export no longer let a forged promise result decide.** The start awaited the five packages
+- **The start and the export no longer let a forged promise result decide.** The start awaited the packages
   through `Promise.all` and an `await`, and a guarded export awaited the provider answer and the send. A
   `Promise.all` replaced after load, a `then` on `Object.prototype` that erases itself after one read, or a replaced
   `then` with a constructor that is put back could hand back a forged `NodeSDK` or forged headers while the checks
@@ -22,12 +22,12 @@ heading here.
   reads for a species, count as a pollution like one on `Object.prototype`; a promise the library made gets its own
   `constructor`, and a promise a host made is never written to. The handle of a started SDK has no prototype, and
   the check is the last thing before a promise of the library resolves with a handle or a send result. A refusal
-  fails closed: the disabled handle at start, a failed export at send. The five package loads are not part of this
-  claim: see the first of the known limits.
+  fails closed: the disabled handle at start, a failed export at send. The loads of the packages are not part of this
+  claim: see the known limit on `import()`.
 
 ### Known limits
 
-- The five packages are loaded by `import()`, and Node's module loader fills those promises through the live
+- The packages are loaded by `import()`, and Node's module loader fills those promises through the live
   `Promise.prototype.then`. A host that replaces `then`, swaps a module namespace and puts `then` back can have a
   package of its own built; module resolution belongs to the host, which can also replace a module through loader
   hooks or `require.cache`, so the library does not claim to close this route.
