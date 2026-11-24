@@ -39,19 +39,23 @@ describe('the Promise the guard builds from', () => {
     expect(loaded?.promisePrototype).not.toBe(Zoneish.prototype)
   })
 
-  it('takes the slot as it is, a value planted there, and the global when it is gone', () => {
-    // Scenario: the constructor slot holds a function, or was deleted, before load; the capture reads the data
-    // property and neither throws nor runs a getter, and a missing slot falls back to the global so the guard can refuse the process.
+  it('takes the slot as it is, a value planted there, and one from a fresh realm when it is gone', () => {
+    // Scenario: the constructor slot holds a function, or was deleted, before load, with the global replaced; the
+    // capture reads the data property, neither throws nor runs a getter, and a missing slot falls back to a fresh
+    // realm's constructor, never to the global one, so the guard can refuse the process.
+    const realGlobal = globalThis.Promise
     const original = Object.getOwnPropertyDescriptor(
-      Promise.prototype,
+      realGlobal.prototype,
       'constructor'
     ) as PropertyDescriptor
     const planted = function Planted(): void {}
     const captured: unknown[] = []
+    const Replaced = function Replaced(): void {}
+    globalThis.Promise = Replaced as unknown as PromiseConstructor
     try {
       for (const slot of [{ ...original, value: planted }, undefined]) {
-        if (slot === undefined) Reflect.deleteProperty(Promise.prototype, 'constructor')
-        else Object.defineProperty(Promise.prototype, 'constructor', slot)
+        if (slot === undefined) Reflect.deleteProperty(realGlobal.prototype, 'constructor')
+        else Object.defineProperty(realGlobal.prototype, 'constructor', slot)
         jest.isolateModules(() => {
           captured.push(
             (jest.requireActual('./primordials') as { NativePromise: unknown }).NativePromise
@@ -59,8 +63,12 @@ describe('the Promise the guard builds from', () => {
         })
       }
     } finally {
-      Object.defineProperty(Promise.prototype, 'constructor', original)
+      globalThis.Promise = realGlobal
+      Object.defineProperty(realGlobal.prototype, 'constructor', original)
     }
-    expect(captured).toEqual([planted, Promise])
+    expect(captured[0]).toBe(planted)
+    expect(typeof captured[1]).toBe('function')
+    expect(captured[1]).not.toBe(Replaced)
+    expect(captured[1]).not.toBe(realGlobal)
   })
 })

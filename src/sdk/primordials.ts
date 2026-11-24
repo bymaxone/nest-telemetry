@@ -88,11 +88,12 @@ export const promisePrototype = getPrototypeOf(engineSample) as Promise<unknown>
  * The `Promise` constructor that {@link promisePrototype} holds, to build the promises the guard settles itself. It is
  * read as the data property of the engine's prototype, so a getter there never runs. A value planted there before
  * this module loaded is captured too, and the guard refuses a constructor that is not the engine's: see
- * `promiseConstructorChanged`. A slot that is gone or is an accessor falls back to the global `Promise`, so a start
- * can still be built and refused rather than throw at its caller; the guard counts that slot as changed.
+ * `promiseConstructorChanged`. A slot that is gone or is an accessor falls back to the `Promise` of a fresh realm, never to the global one, which a
+ * host may have replaced; a start can then still be built and refused rather than throw at its caller, and the
+ * guard counts that slot as changed.
  */
 export const NativePromise = (getOwnPropertyDescriptor(promisePrototype, 'constructor')?.value ??
-  Promise) as PromiseConstructor
+  runInFreshRealm('Promise')) as PromiseConstructor
 
 /**
  * The `then` that {@link promisePrototype} holds, read as a data property when this module loaded. Called on a promise

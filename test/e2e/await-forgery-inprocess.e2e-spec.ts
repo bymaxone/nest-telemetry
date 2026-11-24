@@ -322,17 +322,20 @@ describe('a start beside a promise of a host that cannot be consumed', () => {
 })
 
 describe('a library that loads beside a Promise.prototype without a constructor', () => {
-  it('captures the global Promise and counts the missing slot', () => {
-    // Scenario: a host deletes `Promise.prototype.constructor` before the library loads; the capture falls back to
-    // the global and the guard counts the slot as changed.
+  it('captures no replaced global Promise and counts the missing slot', () => {
+    // Scenario: a host deletes `Promise.prototype.constructor` and replaces the global `Promise` before the library
+    // loads; the capture takes neither, and the guard counts the slot as changed.
     const original = Object.getOwnPropertyDescriptor(
       Promise.prototype,
       'constructor'
     ) as PropertyDescriptor
+    const realGlobal = globalThis.Promise
+    const Replaced = function Replaced(): void {}
     let captured: unknown
     let count = -1
     jest.isolateModules(() => {
       Reflect.deleteProperty(Promise.prototype, 'constructor')
+      globalThis.Promise = Replaced as unknown as PromiseConstructor
       try {
         captured = (jest.requireActual('../../src/sdk/primordials') as { NativePromise: unknown })
           .NativePromise
@@ -342,10 +345,13 @@ describe('a library that loads beside a Promise.prototype without a constructor'
           }
         ).pollutedNames()
       } finally {
+        globalThis.Promise = realGlobal
         Object.defineProperty(Promise.prototype, 'constructor', original)
       }
     })
-    expect(captured).toBe(Promise)
+    expect(typeof captured).toBe('function')
+    expect(captured).not.toBe(Replaced)
+    expect(captured).not.toBe(realGlobal)
     expect(count).toBeGreaterThan(0)
   })
 })

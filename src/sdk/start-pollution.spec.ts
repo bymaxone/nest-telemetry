@@ -3,6 +3,8 @@
  * polluted, at the start and again right before the SDK is built, with the SDK packages replaced by doubles.
  * @layer sdk
  */
+import { types } from 'node:util'
+
 import { clearHandle, clearPendingStart } from './handle'
 import { startTelemetry } from './start'
 
@@ -230,7 +232,7 @@ describe('startTelemetry beside a Promise.prototype whose constructor was delete
     })
     emitWarning.mockRestore()
     expect(thrown).toBeUndefined()
-    expect(answer).toBeInstanceOf(Promise)
+    expect(types.isPromise(answer)).toBe(true)
     await expect(answer).resolves.toMatchObject({ enabled: false })
     expect(mockNodeSdk).not.toHaveBeenCalled()
   })
