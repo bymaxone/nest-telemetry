@@ -34,6 +34,14 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
+//   - 2026-11-24 (every bundle but the register CommonJS stub, at the measured size plus 30 B, rounded down in the KiB
+//     column; the PM's rule of the same day, applied again for the audit fixes): sdk 12,473 B measured, 12.20 KiB budget
+//     (12,493 B, 20 B of headroom); register 12,587 B, 12.32 KiB (12,616 B, 29 B); nest 2,681 B, 2.64 KiB (2,703 B,
+//     22 B); observability 790 B, 0.80 KiB (819 B, 29 B); sdk CommonJS 12,506 B, 12.24 KiB (12,534 B, 28 B); nest
+//     CommonJS 2,698 B, 2.66 KiB (2,723 B, 25 B); observability CommonJS 804 B, 0.81 KiB (829 B, 25 B). The growth, about
+//     0.1 KiB in each, is the check that the engine's Promise reads as a fresh realm's, the engine prototype taken from
+//     an async function's promise, the warning of a boot that found the process polluted and the second pin of the
+//     pending start.
 //   - 2026-11-24 (sdk, register, the sdk CommonJS bundle and both nest bundles, PM-granted at the measured size plus
 //     30 B, rounded down in the KiB column): sdk 12,368 B measured, 12.10 KiB budget (12,390 B, 22 B of headroom);
 //     register 12,472 B, 12.20 KiB budget (12,493 B, 21 B); sdk CommonJS 12,394 B, 12.13 KiB budget (12,421 B, 27 B);
@@ -179,14 +187,14 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
 //   met by shortening the text of a warning.
 const BUDGETS = [
-  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 12.1 * 1024 },
-  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 12.2 * 1024 },
-  { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.59 * 1024 },
-  { name: 'observability (metrics)', path: 'dist/observability/index.mjs', brotli: 0.74 * 1024 },
-  { name: 'sdk (CommonJS)', path: 'dist/sdk/index.cjs', brotli: 12.13 * 1024 },
+  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 12.2 * 1024 },
+  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 12.32 * 1024 },
+  { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.64 * 1024 },
+  { name: 'observability (metrics)', path: 'dist/observability/index.mjs', brotli: 0.8 * 1024 },
+  { name: 'sdk (CommonJS)', path: 'dist/sdk/index.cjs', brotli: 12.24 * 1024 },
   { name: 'register (CommonJS)', path: 'dist/register/index.cjs', brotli: 0.2 * 1024 },
-  { name: 'nest (CommonJS)', path: 'dist/nest/index.cjs', brotli: 2.61 * 1024 },
-  { name: 'observability (CommonJS)', path: 'dist/observability/index.cjs', brotli: 0.75 * 1024 }
+  { name: 'nest (CommonJS)', path: 'dist/nest/index.cjs', brotli: 2.66 * 1024 },
+  { name: 'observability (CommonJS)', path: 'dist/observability/index.cjs', brotli: 0.81 * 1024 }
 ]
 
 const fmt = (n) => `${(n / 1024).toFixed(2)} kB`

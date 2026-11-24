@@ -20,7 +20,8 @@ function guardWith(runInNewContext: jest.Mock): typeof PollutedNames {
 const real = (): object => ({
   objects: readBuiltins(),
   descriptors: Object.getOwnPropertyDescriptors(Object.prototype),
-  sourceOf: (value: unknown): string => Function.prototype.toString.call(value)
+  sourceOf: (value: unknown): string => Function.prototype.toString.call(value),
+  promiseSource: Function.prototype.toString.call(Promise)
 })
 
 describe('the fresh realm', () => {

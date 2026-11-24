@@ -122,12 +122,13 @@ describe('the promises that the library returns', () => {
 })
 
 describe('a start beside a promise that cannot be consumed', () => {
-  it('answers the disabled handle when the start already under way cannot be consumed', async () => {
-    // Scenario: the start another copy has under way is a promise whose constructor throws; the second caller is
-    // refused with the disabled handle instead of waiting on what it cannot read.
+  it('rejects with a typed error when the start already under way cannot be consumed', async () => {
+    // Scenario: the start another copy has under way is a promise whose constructor throws; the second caller fails
+    // typed, like every other wait that cannot be made, instead of waiting on what it cannot read.
     setPendingStart(unconsumable() as never)
-    const handle = await startTelemetry({})
-    expect(handle.enabled).toBe(false)
+    await expect(startTelemetry({})).rejects.toMatchObject({
+      code: 'BYMAX_TELEMETRY_REALM_POLLUTED'
+    })
   })
 
   it('rejects once the flush of a stopping handle cannot be consumed', async () => {
