@@ -10,8 +10,42 @@ heading here.
 
 ## [Unreleased]
 
+### Planned for the next minor
+
+- **Export the option error class** with `code` and `option` typed in the declarations, so a host can test for
+  it. It is a public addition, so it waits for a minor release.
+
+## [1.0.13] - 2026-11-24
+
 ### Fixed
 
+- **A built-in that code replaces after the library loaded can no longer lose a warning or a host option.** The
+  callback of a failed export looked its built-ins up when it ran, so a replaced one made it throw before the caller
+  was told and the `BYMAX_TELEMETRY_EXPORT_FAILED` warning was lost. The settling of the start options did the same,
+  so a replaced one dropped host options such as `enabled: false` in silence. Both paths now call the built-ins the
+  library read once when it loaded.
+- **A built-in that the library's own checks rely on, replaced after it loaded, now counts as a pollution.** The
+  check of the process compared only `Object.prototype` with a fresh realm. It now also compares the members of the
+  built-ins the library calls: one that is replaced, deleted or swapped for a function of another
+  realm counts one, so the start answers with the disabled handle and an export drops its batch, and a check that
+  cannot read them counts one rather than zero. What tracing agents and context managers wrap by
+  design, such as timers, `http`, `fetch` and the `then` of `Promise.prototype`, is not compared, and no decision to drop or to send rests on them, the loads of the packages aside (see the known limit on `import()`). The warning says that `Object.prototype` or a
+  built-in was changed, with a count and never a name.
+- **A map or an entry of `instrumentations.overrides` whose settings sit on a prototype is refused.**
+  The copy read own keys only, so `enabled: false` held by a parent object (`Object.create({ enabled: false })`) was dropped in silence, and the instrumentation stayed on. The root prototype of the realm, where a
+  pollution is planted, and the methods of a class are not a setting, but a getter or a setter of a class is, since it is not enumerable and the copy would drop what it answers. The start fails with `BYMAX_TELEMETRY_OPTION_INVALID`.
+- **The warning for a batch dropped by the pollution guard says why.** It told the host to check that the collector
+  was reachable, though the collector was never contacted. The dropped batch now fails with the code
+  `BYMAX_TELEMETRY_REALM_POLLUTED`, and the warning names the change.
+- **An `OTEL_*` value of a host `env` object that is not a string is ignored.** Each variable the library reads
+  went straight to `.trim()`, `.split()` or a number conversion, so `env: { OTEL_SERVICE_NAME: 5 }` threw a
+  `TypeError` at start, and a number or a boolean was read as if it were the text it converts to. A value that is not
+  a string is now read as no variable, for every variable the library reads. The process environment never holds
+  one, so nothing changes for it.
+- **The Lambda start time is read while the instrumentation is built.** The AWS Lambda instrumentation reads
+  `lambdaStartTime` as well as `lambdaHandler` when it is built, so it is an own undefined key like the handler name.
+- **The refusal for too many values in a nested setting says so.** The limit of 10,000 objects and lists in one
+  setting had the message of the limit of 16 levels; it now says `at most 10,000 objects and lists in all`.
 - **The start and the export no longer let a forged promise result decide.** The start awaited the packages
   through `Promise.all` and an `await`, and a guarded export awaited the provider answer and the send. A
   `Promise.all` replaced after load, a `then` on `Object.prototype` that erases itself after one read, or a replaced
@@ -30,6 +64,11 @@ heading here.
   on `import()`.
 - **The preload waits for the start on a promise of its own.** A `constructor` and a `then` planted for a single read
   while the SDK starts could forge the handle the preload awaited and skip the registration of the flush on exit.
+
+### Documentation
+
+- **The README states what the pollution guard does not cover**, so a host knows where it stops.
+- **The README says the limits on a nested override setting are new in 1.0.12**, so a host that nested more than that finds the refusal documented.
 - **The docs state the threat model.** `SECURITY.md` says that code running in the same process is trusted, as in
   Node, and that the guards are best-effort hardening and not a security boundary.
 
@@ -58,52 +97,6 @@ heading here.
   its own first; a transport that already holds a read-only `constructor` on it cannot be given one, and the wait is judged
   on the `constructor` it holds.
 - The slots on `globalThis` under which state is shared between copies of the library are writable by the host; a host that overwrites them changes what a later call finds.
-
-### Planned for the next minor
-
-- **Export the option error class** with `code` and `option` typed in the declarations, so a host can test for
-  it. It is a public addition, so it waits for a minor release.
-
-## [1.0.13] - 2026-11-23
-
-### Fixed
-
-- **A built-in that code replaces after the library loaded can no longer lose a warning or a host option.** The
-  callback of a failed export looked its built-ins up when it ran, so a replaced one made it throw before the caller
-  was told and the `BYMAX_TELEMETRY_EXPORT_FAILED` warning was lost. The settling of the start options did the same,
-  so a replaced one dropped host options such as `enabled: false` in silence. Both paths now call the built-ins the
-  library read once when it loaded.
-- **A built-in that the library's own checks rely on, replaced after it loaded, now counts as a pollution.** The
-  check of the process compared only `Object.prototype` with a fresh realm. It now also compares the members of the
-  built-ins that the guard, the export wrap and the option settling call: one that is replaced, deleted or swapped for a function of another
-  realm counts one, so the start answers with the disabled handle and an export drops its batch, and a check that
-  cannot read them counts one rather than zero. `Promise`, its `then`, `catch` and `finally`, timers, `Date`,
-  `EventEmitter`, `http`, `fetch` and `process` are not compared: tracing agents and context managers wrap them by
-  design, and no decision to drop or to send awaits through anything but a native promise. The warning says that `Object.prototype` or a
-  built-in was changed, with a count and never a name.
-- **A map or an entry of `instrumentations.overrides` whose settings sit on a prototype is refused.**
-  The copy read own keys only, so `enabled: false` held by a parent object (`Object.create({ enabled: false })`) was dropped in silence, and the instrumentation stayed on. The root prototype of the realm, where a
-  pollution is planted, and the methods of a class are not a setting, but a getter or a setter of a class is, since it is not enumerable and the copy would drop what it answers. The start fails with `BYMAX_TELEMETRY_OPTION_INVALID`, naming `instrumentations.overrides` for a map and `instrumentations.overrides[]` for an entry.
-- **The warning for a batch dropped by the pollution guard says why.** It told the host to check that the collector
-  was reachable, though the collector was never contacted. The dropped batch now fails with the code
-  `BYMAX_TELEMETRY_REALM_POLLUTED`, and the warning names the change.
-- **An `OTEL_*` value of a host `env` object that is not a string is ignored.** Each variable the library reads
-  went straight to `.trim()`, `.split()` or a number conversion, so `env: { OTEL_SERVICE_NAME: 5 }` threw a
-  `TypeError` at start, and a number or a boolean was read as if it were the text it converts to. A value that is not
-  a string is now read as no variable, for every variable the library reads. The process environment never holds
-  one, so nothing changes for it.
-- **The Lambda start time is read while the instrumentation is built.** The AWS Lambda instrumentation reads
-  `lambdaStartTime` as well as `lambdaHandler` when it is built, so it is an own undefined key like the handler name.
-- **The refusal for too many values in a nested setting says so.** The limit of 10,000 objects and lists in one
-  setting had the message of the limit of 16 levels; it now says `at most 10,000 objects and lists in all`.
-
-### Documentation
-
-- **The README states what the pollution guard does not cover**: a `detail` or `code` defined as an accessor or
-  read-only (the start is disabled with no warning), an exporter built from another copy of the OpenTelemetry
-  packages (not wrapped), and an options object whose prototype is the host's own (read as a class chain).
-- **The README says the limits on a nested override setting are new in 1.0.12** (16 levels, 10,000 objects and lists,
-  1000 entries to a list or an object), so a host that nested more than that finds the refusal documented.
 
 ### Apply to a derived backend
 
