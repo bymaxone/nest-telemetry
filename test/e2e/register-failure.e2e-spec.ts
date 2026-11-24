@@ -50,6 +50,22 @@ describe('the preload boot when an optional peer cannot be loaded', () => {
     })
   })
 
+  it('warns and returns a disabled handle when the start throws before it returns a promise', async () => {
+    // Scenario: a start that throws at once, not through a rejection, must not take the preload down.
+    const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    const handle = await bootFromEnvironment(PARENT, {
+      env: { OTEL_SERVICE_NAME: 'preload' },
+      start: () => {
+        throw new Error('constructor failed')
+      }
+    })
+    expect(handle.enabled).toBe(false)
+    expect(emitWarning).toHaveBeenCalledWith(
+      expect.stringContaining('could not be started'),
+      expect.objectContaining({ code: 'BYMAX_TELEMETRY_START_FAILED' })
+    )
+  })
+
   it('names the code and the package of a start that failed for want of a peer, and nothing else', async () => {
     // Scenario: the usual cause of a failed start, a peer that is not installed; the warning names
     // the package so the reader can fix it, and not the path or the rest of the message.

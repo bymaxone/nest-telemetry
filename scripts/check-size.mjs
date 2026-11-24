@@ -34,6 +34,54 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
+//   - 2026-11-24 (register only, PM grant 2026-11-24, owner standing rule, at the measured
+//     size plus 30 B, rounded down in the KiB column): register 12,743 B measured, 12.47 KiB budget (12,769 B, 26 B of
+//     headroom). The growth over the 12,706 B of the entry below, 37 B, is the start of the preload answering through a promise of its own.
+//   - 2026-11-24 (every bundle but the register CommonJS stub, at the measured size plus 30 B, rounded down in the KiB
+//     column; the PM's rule of the same day, applied for the wait on a promise of a host that goes through a native
+//     await when its constructor is the intrinsic, and for reading a descriptor as own data): sdk 12,585 B measured,
+//     12.31 KiB budget (12,605 B, 20 B of headroom); register 12,706 B, 12.43 KiB (12,728 B, 22 B); nest 2,833 B,
+//     2.79 KiB (2,856 B, 23 B); observability 884 B, 0.89 KiB (911 B, 27 B); sdk CommonJS 12,624 B, 12.35 KiB
+//     (12,646 B, 22 B); nest CommonJS 2,860 B, 2.82 KiB (2,887 B, 27 B); observability CommonJS 911 B, 0.91 KiB
+//     (931 B, 20 B). PM grant 2026-11-24.
+//   - 2026-11-24 (observability and its CommonJS bundle, at the measured size plus 30 B, rounded down in the KiB
+//     column; the PM's rule of the same day, applied to the two bundles the fallback for a constructor slot that is gone
+//     also reaches, since they carry the primordials): observability 829 B measured, 0.83 KiB budget (849 B, 20 B of
+//     headroom); observability CommonJS 866 B, 0.87 KiB (890 B, 24 B). Not named in the PM's grant of the other three.
+//   - 2026-11-24 (sdk, register and the sdk CommonJS bundle, at the measured size plus 30 B, rounded down in the KiB
+//     column; the PM's rule of the same day, applied again for the host-promise wait and the missing constructor slot):
+//     sdk 12,510 B measured, 12.24 KiB budget (12,533 B, 23 B of headroom); register 12,627 B, 12.36 KiB (12,657 B,
+//     30 B); sdk CommonJS 12,524 B, 12.25 KiB (12,544 B, 20 B). The growth is the captured `then`, the wait through it
+//     for a promise of a host or one that cannot be tagged, and the fallback for a constructor slot that is gone.
+//   - 2026-11-24 (every bundle but the register CommonJS stub, at the measured size plus 30 B, rounded down in the KiB
+//     column; the PM's rule of the same day, applied again for the audit fixes): sdk 12,473 B measured, 12.20 KiB budget
+//     (12,493 B, 20 B of headroom); register 12,587 B, 12.32 KiB (12,616 B, 29 B); nest 2,681 B, 2.64 KiB (2,703 B,
+//     22 B); observability 790 B, 0.80 KiB (819 B, 29 B); sdk CommonJS 12,506 B, 12.24 KiB (12,534 B, 28 B); nest
+//     CommonJS 2,698 B, 2.66 KiB (2,723 B, 25 B); observability CommonJS 804 B, 0.81 KiB (829 B, 25 B). The growth, about
+//     0.1 KiB in each, is the check that the engine's Promise reads as a fresh realm's, the engine prototype taken from
+//     an async function's promise, the warning of a boot that found the process polluted and the second pin of the
+//     pending start.
+//   - 2026-11-24 (sdk, register, the sdk CommonJS bundle and both nest bundles, PM-granted at the measured size plus
+//     30 B, rounded down in the KiB column): sdk 12,368 B measured, 12.10 KiB budget (12,390 B, 22 B of headroom);
+//     register 12,472 B, 12.20 KiB budget (12,493 B, 21 B); sdk CommonJS 12,394 B, 12.13 KiB budget (12,421 B, 27 B);
+//     nest 2,629 B, 2.59 KiB budget (2,652 B, 23 B); nest CommonJS 2,648 B, 2.61 KiB budget (2,673 B, 25 B). The
+//     growth, about 0.14 KiB in each, is the settle helper, the error of a promise that cannot be consumed, the frozen
+//     handles and the stop of an SDK that started while the process turned polluted.
+//   - 2026-11-24 (sdk, register, the sdk CommonJS bundle and both nest bundles, PM-granted at the measured size plus
+//     30 B, rounded down in the KiB column): sdk 12,203 B measured, 11.94 KiB budget (12,226 B, 23 B of headroom);
+//     register 12,319 B, 12.05 KiB budget (12,339 B, 20 B); sdk CommonJS 12,237 B, 11.97 KiB budget (12,257 B, 20 B);
+//     nest 2,442 B, 2.41 KiB budget (2,467 B, 25 B); nest CommonJS 2,459 B, 2.43 KiB budget (2,488 B, 29 B). The
+//     growth is every promise a decision path returns carrying its own constructor, the flush and the module-level
+//     shutdown built on native promises instead of `finally` and `allSettled`, and the guarded send in its own function.
+//   - 2026-11-24 (sdk, register and the sdk CommonJS bundle, PM-granted at the measured size plus 30 B, rounded down
+//     in the KiB column): sdk 12,076 B measured, 11.82 KiB budget (12,103 B, 27 B of headroom); register 12,235 B,
+//     11.97 KiB budget (12,257 B, 22 B); sdk CommonJS 12,118 B, 11.86 KiB budget (12,144 B, 26 B). The growth, about
+//     0.29 KiB in each, is the promise helper that attaches handlers without reading a constructor, the start
+//     answering through a promise of its own, and the check before each resolve.
+//   - 2026-11-24 (sdk, register and the sdk CommonJS bundle, PM-granted at the measured size plus 30 B, rounded down
+//     in the KiB column): sdk 11,755 B measured, 11.50 KiB budget (11,776 B, 21 B of headroom); register 11,910 B,
+//     11.66 KiB budget (11,940 B, 30 B); sdk CommonJS 11,789 B, 11.54 KiB budget (11,817 B, 28 B). The growth, about
+//     0.32 KiB in each, is the start and the guarded export settling on native promises instead of awaiting.
 //   - 2026-11-23 (sdk, register and the sdk CommonJS bundle, PM-granted at about the measured size plus 64 B):
 //     sdk 11,357 B measured, 11.16 KiB budget (11,428 B, 71 B of headroom); register 11,519 B, 11.32 KiB budget
 //     (11,592 B, 73 B: 11.31 KiB would leave 62 B, so it is rounded up); sdk CommonJS 11,400 B, 11.19 KiB budget
@@ -158,14 +206,14 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
 //   met by shortening the text of a warning.
 const BUDGETS = [
-  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 11.16 * 1024 },
-  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 11.32 * 1024 },
-  { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.2 * 1024 },
-  { name: 'observability (metrics)', path: 'dist/observability/index.mjs', brotli: 0.74 * 1024 },
-  { name: 'sdk (CommonJS)', path: 'dist/sdk/index.cjs', brotli: 11.19 * 1024 },
+  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 12.31 * 1024 },
+  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 12.47 * 1024 },
+  { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.79 * 1024 },
+  { name: 'observability (metrics)', path: 'dist/observability/index.mjs', brotli: 0.89 * 1024 },
+  { name: 'sdk (CommonJS)', path: 'dist/sdk/index.cjs', brotli: 12.35 * 1024 },
   { name: 'register (CommonJS)', path: 'dist/register/index.cjs', brotli: 0.2 * 1024 },
-  { name: 'nest (CommonJS)', path: 'dist/nest/index.cjs', brotli: 2.22 * 1024 },
-  { name: 'observability (CommonJS)', path: 'dist/observability/index.cjs', brotli: 0.75 * 1024 }
+  { name: 'nest (CommonJS)', path: 'dist/nest/index.cjs', brotli: 2.82 * 1024 },
+  { name: 'observability (CommonJS)', path: 'dist/observability/index.cjs', brotli: 0.91 * 1024 }
 ]
 
 const fmt = (n) => `${(n / 1024).toFixed(2)} kB`

@@ -3,6 +3,8 @@
  * polluted, at the start and again right before the SDK is built, with the SDK packages replaced by doubles.
  * @layer sdk
  */
+import { types } from 'node:util'
+
 import { clearHandle, clearPendingStart } from './handle'
 import { startTelemetry } from './start'
 
@@ -82,6 +84,41 @@ describe('startTelemetry beside a polluted Object.prototype', () => {
     }
   })
 
+  it('hands out a handle that has no prototype, so resolving with it reads no then', async () => {
+    // Scenario: a promise that resolves with an object reads its `then` through the prototype chain, so the handle
+    // of a started SDK has no prototype to read one from.
+    const handle = await startTelemetry({ serviceName: 'api', env: {} })
+    expect(handle.enabled).toBe(true)
+    expect(Object.getPrototypeOf(handle)).toBeNull()
+  })
+
+  it('answers a later call with the disabled handle when a then is planted, and reads that then never', async () => {
+    // Scenario: a call that returns the running handle checks the process right before it resolves, so a self-erasing
+    // `then` planted on the root prototype is seen, and is not read for the value.
+    await startTelemetry({ serviceName: 'api', env: {} })
+    let reads = 0
+    let seen = -1
+    let handle: Awaited<ReturnType<typeof startTelemetry>> | undefined
+    Object.defineProperty(Object.prototype, 'then', {
+      configurable: true,
+      get() {
+        reads += 1
+        delete (Object.prototype as unknown as Record<string, unknown>)['then']
+        return (resolve: (value: unknown) => void): void => resolve({ forged: true })
+      }
+    })
+    try {
+      jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      handle = await startTelemetry({ serviceName: 'api', env: {} })
+      seen = reads
+    } finally {
+      delete (Object.prototype as unknown as Record<string, unknown>)['then']
+    }
+    expect(seen).toBe(0)
+    expect((handle as { forged?: boolean } | undefined)?.forged).toBeUndefined()
+    expect(handle?.enabled).toBe(false)
+  })
+
   it('hands the warning an own, empty detail and an own ctor, so a planted one is not shown', async () => {
     // Scenario: process.emitWarning reads detail and ctor from the options it is given, which would inherit a
     // planted one and show it; the options of the refusal own both, undefined, so the warning carries the count only.
@@ -150,5 +187,53 @@ describe('startTelemetry beside a polluted Object.prototype', () => {
     } finally {
       delete (Object.prototype as unknown as Record<string, unknown>)['plantedDuringTheImport']
     }
+  })
+
+  it('answers a refusal with a handle that has no prototype, so a planted then is not read from it', async () => {
+    // Scenario: the refusal resolves the start with the disabled handle; resolving reads a then from the value's
+    // prototype chain, and a handle that inherits nothing has none to read.
+    Object.defineProperty(Object.prototype, 'plantedForThen', {
+      value: 1,
+      enumerable: true,
+      configurable: true,
+      writable: true
+    })
+    try {
+      const handle = await startTelemetry({ env: {} })
+      expect(handle.enabled).toBe(false)
+      expect(Object.getPrototypeOf(handle)).toBeNull()
+    } finally {
+      delete (Object.prototype as unknown as Record<string, unknown>)['plantedForThen']
+    }
+  })
+})
+
+describe('startTelemetry beside a Promise.prototype whose constructor was deleted before the load', () => {
+  it('answers with a promise and never throws at the caller', async () => {
+    // Scenario: a host deletes `Promise.prototype.constructor` before this copy loads; the call must still hand
+    // back a promise, and a process in that state is refused, not started.
+    const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    const original = Object.getOwnPropertyDescriptor(
+      Promise.prototype,
+      'constructor'
+    ) as PropertyDescriptor
+    let answer: unknown
+    let thrown: unknown
+    jest.isolateModules(() => {
+      Reflect.deleteProperty(Promise.prototype, 'constructor')
+      try {
+        const loaded = jest.requireActual('./start') as typeof import('./start')
+        answer = loaded.startTelemetry({ serviceName: 'svc' })
+      } catch (error) {
+        thrown = error
+      } finally {
+        Object.defineProperty(Promise.prototype, 'constructor', original)
+      }
+    })
+    emitWarning.mockRestore()
+    expect(thrown).toBeUndefined()
+    expect(types.isPromise(answer)).toBe(true)
+    await expect(answer).resolves.toMatchObject({ enabled: false })
+    expect(mockNodeSdk).not.toHaveBeenCalled()
   })
 })

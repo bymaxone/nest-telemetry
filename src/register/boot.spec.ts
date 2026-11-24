@@ -266,6 +266,43 @@ describe('bootFromEnvironment', () => {
       expect(started.shutdown).toHaveBeenCalledTimes(1)
     })
 
+    it('still registers the flush when a one-shot constructor and then are planted while the SDK starts', async () => {
+      // Scenario: the start is host-reachable code, so a `Promise.prototype.constructor` getter and a `then` that each
+      // answer once can be planted during it. A bare await of the promise of the start would read the constructor,
+      // wrap, and call the forged `then` with a handle that is not enabled, so the exit flush would never be
+      // registered and the last spans would be lost; the wait must end on the library's own promise.
+      const once = jest.spyOn(process, 'once').mockImplementation(() => process)
+      const started = handle(true)
+      const slots = ['constructor', 'then'] as const
+      const original = slots.map((name) => Object.getOwnPropertyDescriptor(Promise.prototype, name))
+      const forged = handle(false)
+      const start = jest.fn((): Promise<TelemetryHandle> => {
+        const answer = Promise.resolve(started)
+        // Pinned, as the promise of the real start is, so only a wait on the promise of the boot reads the slots.
+        Object.defineProperty(answer, 'constructor', { value: Promise })
+        slots.forEach((name, at) => {
+          Object.defineProperty(Promise.prototype, name, {
+            configurable: true,
+            get: () => {
+              Object.defineProperty(Promise.prototype, name, original[at] as PropertyDescriptor)
+              return name === 'constructor'
+                ? Object
+                : (onFulfilled: (value: unknown) => void): void => onFulfilled(forged)
+            }
+          })
+        })
+        return answer
+      })
+      try {
+        await bootFromEnvironment(PARENT, { registerHook: jest.fn(), start, env: {} })
+      } finally {
+        slots.forEach((name, at) =>
+          Object.defineProperty(Promise.prototype, name, original[at] as PropertyDescriptor)
+        )
+      }
+      expect(once).toHaveBeenCalledWith('beforeExit', expect.any(Function))
+    })
+
     it('does not install an exit listener when the SDK did not start', async () => {
       // Scenario: a disabled boot leaves no trace on the process.
       const once = jest.spyOn(process, 'once').mockImplementation(() => process)

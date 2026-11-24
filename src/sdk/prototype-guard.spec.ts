@@ -282,7 +282,7 @@ describe('the built-ins that the SDK calls on a decision path', () => {
     // the number of members of each row, the one thing a sweep over the rows cannot see.
     const guard = await loadGuard()
     expect(guard.GUARDED_BUILTINS.map(([, names]) => names.length)).toEqual([
-      10, 11, 2, 3, 1, 1, 1, 1, 1, 7, 3, 1, 1, 1
+      10, 11, 2, 3, 1, 1, 1, 1, 1, 7, 3, 1, 1, 1, 1
     ])
     guard.GUARDED_BUILTINS.forEach(([, names], row) => {
       names.forEach((name) => {
@@ -372,5 +372,168 @@ describe('the built-ins that the SDK calls on a decision path', () => {
         Object.defineProperty(target, name, saved[at] as PropertyDescriptor)
       )
     }
+  })
+
+  it('counts a then on Array.prototype or Function.prototype, one each, and nothing once it is gone', () => {
+    // Scenario: a value that is an array or a function and is resolved into a promise is read for a then, so one
+    // planted on either prototype is as unsafe as one on Object.prototype; each is counted once, and the count
+    // returns to zero when the name is removed.
+    for (const target of [Array.prototype, Function.prototype] as object[]) {
+      expect(pollutedNames()).toBe(0)
+      Object.defineProperty(target, 'then', { value: () => undefined, configurable: true })
+      try {
+        expect(pollutedNames()).toBe(1)
+      } finally {
+        delete (target as Record<string, unknown>)['then']
+      }
+      expect(pollutedNames()).toBe(0)
+    }
+  })
+
+  it('counts a changed constructor of Promise.prototype, and nothing once it is back', () => {
+    // Scenario: a then reads the constructor of the promise it is called on, so a getter or another function there
+    // is a change the guard refuses to export beside.
+    const original = Object.getOwnPropertyDescriptor(
+      Promise.prototype,
+      'constructor'
+    ) as PropertyDescriptor
+    const before = pollutedNames()
+    try {
+      Object.defineProperty(Promise.prototype, 'constructor', {
+        configurable: true,
+        get: () => Promise
+      })
+      expect(pollutedNames()).toBe(before + 1)
+      Object.defineProperty(Promise.prototype, 'constructor', {
+        configurable: true,
+        writable: true,
+        value: function Other() {}
+      })
+      expect(pollutedNames()).toBe(before + 1)
+    } finally {
+      Object.defineProperty(Promise.prototype, 'constructor', original)
+    }
+    expect(pollutedNames()).toBe(before)
+  })
+
+  describe('a Promise that was changed before this copy loaded', () => {
+    /** Loads a fresh copy of the guard while `prepare` has changed the process, and counts before it restores it. */
+    function countedAfterLoad(prepare: () => () => void): number {
+      let count = -1
+      jest.isolateModules(() => {
+        const restore = prepare()
+        try {
+          count = (
+            jest.requireActual('./prototype-guard') as typeof import('./prototype-guard')
+          ).pollutedNames()
+        } finally {
+          restore()
+        }
+      })
+      return count
+    }
+
+    const slot = (): PropertyDescriptor =>
+      Object.getOwnPropertyDescriptor(Promise.prototype, 'constructor') as PropertyDescriptor
+
+    it('counts a constructor of Promise.prototype that was set before the load, which the copy then captures', () => {
+      // Scenario: a host sets the slot to its own function before a copy loads (the nest bundle loads after the
+      // preload); the copy captures it, and the count still names the change because it is not the engine's Promise.
+      const original = slot()
+      const count = countedAfterLoad(() => {
+        Object.defineProperty(Promise.prototype, 'constructor', {
+          ...original,
+          value: function Host(): void {}
+        })
+        return () => Object.defineProperty(Promise.prototype, 'constructor', original)
+      })
+      expect(count).toBeGreaterThan(0)
+    })
+
+    it('counts a constructor that links back to the prototype but reads as another function', () => {
+      // Scenario: the planted function takes `Promise.prototype` as its own `prototype`, so the slot and the link both
+      // agree; its text is not the engine's.
+      const original = slot()
+      const count = countedAfterLoad(() => {
+        const host = function Host(): void {}
+        host.prototype = Promise.prototype
+        Object.defineProperty(Promise.prototype, 'constructor', { ...original, value: host })
+        return () => Object.defineProperty(Promise.prototype, 'constructor', original)
+      })
+      expect(count).toBeGreaterThan(0)
+    })
+
+    it('counts a constructor slot that was deleted before the load, and the count does not throw', () => {
+      // Scenario: a host deletes `Promise.prototype.constructor` before a copy loads; the capture falls back to the
+      // global and the guard counts the missing slot instead of throwing at the caller.
+      const original = slot()
+      const count = countedAfterLoad(() => {
+        Reflect.deleteProperty(Promise.prototype, 'constructor')
+        return () => Object.defineProperty(Promise.prototype, 'constructor', original)
+      })
+      expect(count).toBeGreaterThan(0)
+    })
+
+    it('counts nothing for a global Promise that a host replaced with a subclass before the load', () => {
+      // Scenario: a zone or Bluebird style host replaces `globalThis.Promise` before load; the engine's prototype is
+      // untouched, so the process is not polluted and the start is not refused forever.
+      const real = globalThis.Promise
+      class Zoneish extends (real as unknown as new (executor: () => void) => object) {}
+      const count = countedAfterLoad(() => {
+        globalThis.Promise = Zoneish as unknown as PromiseConstructor
+        return () => {
+          globalThis.Promise = real
+        }
+      })
+      expect(count).toBe(0)
+    })
+  })
+})
+
+describe('Promise[Symbol.species] in the baseline', () => {
+  const species = Object.getOwnPropertyDescriptor(Promise, Symbol.species) as PropertyDescriptor
+
+  it('counts a species getter that answers with a fake constructor, and a throwing one', () => {
+    // Scenario: a persistent species getter makes every `then` a dependency calls build a promise from a constructor the
+    // host chose, so a realm check that ignores it passes while the answer is forged; a throwing getter breaks the
+    // `then` before a reaction is attached. Both must count, and the count must go back when the getter is restored.
+    const counted: number[] = []
+    try {
+      Object.defineProperty(Promise, Symbol.species, { configurable: true, get: () => Object })
+      counted.push(pollutedNames())
+      Object.defineProperty(Promise, Symbol.species, {
+        configurable: true,
+        get: () => {
+          throw new Error('species')
+        }
+      })
+      counted.push(pollutedNames())
+    } finally {
+      Object.defineProperty(Promise, Symbol.species, species)
+    }
+    expect(counted.every((count) => count > 0)).toBe(true)
+    expect(pollutedNames()).toBe(0)
+  })
+
+  it('counts a data species beside an Object.prototype.get that names the original getter', () => {
+    // Scenario: the slot became data holding a fake constructor while `Object.prototype.get` names the real getter, so
+    // a `get` read through the chain would match; the data slot still differs from the fresh realm's accessor through
+    // its own `value`, and counts. The own-only read itself is held by the test of a getter planted under a field name.
+    const original = species.get as () => unknown
+    let counted = 0
+    try {
+      Object.defineProperty(Object.prototype, 'get', { configurable: true, value: original })
+      Object.defineProperty(Promise, Symbol.species, {
+        __proto__: null,
+        configurable: true,
+        value: Object
+      } as PropertyDescriptor)
+      counted = pollutedNames()
+    } finally {
+      Object.defineProperty(Promise, Symbol.species, species)
+      Reflect.deleteProperty(Object.prototype, 'get')
+    }
+    expect(counted).toBeGreaterThan(0)
+    expect(pollutedNames()).toBe(0)
   })
 })

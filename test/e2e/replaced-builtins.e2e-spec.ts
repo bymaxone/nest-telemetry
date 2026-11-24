@@ -159,8 +159,12 @@ const ITERATED = [
   'ArrayIteratorPrototype.next', 'Array.prototype.Symbol(Symbol.iterator)', 'SetIteratorPrototype.next',
   'Set.prototype.Symbol(Symbol.iterator)', 'Set.prototype.add'
 ]
+// A slot the guard compares by identity with the one it loaded with, a data property rather than a table row.
+const WATCHED = ['Promise.prototype.constructor']
 const guarded = (r) => {
-  if (ITERATED.includes(r.label)) return true
+  if (ITERATED.includes(r.label) || WATCHED.includes(r.label)) return true
+  // The global Promise is replaced by hosts by design; the guard reads the intrinsic it captured, and its species.
+  if (r.owner === 'globalThis' && r.key === 'Promise') return false
   if (r.owner === 'globalThis') return GUARDED_BUILTINS.some(([expression]) => expression === String(r.key) || expression === String(r.key) + '.prototype')
   return GUARDED_BUILTINS.some(([expression, names]) => expression === r.owner && names.includes(r.key))
 }

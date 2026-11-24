@@ -18,11 +18,6 @@
     "class": "inert",
     "reason": "Wrapper-prone, so not in the guard's table: it only sequences the start or the shutdown, or builds a resolved promise, and decides nothing about what is exported or redacted; the export decision awaits native promises and reads no then."
   },
-  "src/register/boot.ts|static|Promise.resolve": {
-    "count": 1,
-    "class": "inert",
-    "reason": "Wrapper-prone, so not in the guard's table: it only sequences the start or the shutdown, or builds a resolved promise, and decides nothing about what is exported or redacted; the export decision awaits native promises and reads no then."
-  },
   "src/register/boot.ts|static|process.once": {
     "count": 1,
     "class": "inert",
@@ -183,29 +178,9 @@
     "count": 2,
     "class": "guarded"
   },
-  "src/sdk/handle.ts|method|.finally": {
-    "count": 1,
-    "class": "inert",
-    "reason": "Wrapper-prone, so not in the guard's table: it only sequences the start or the shutdown, or builds a resolved promise, and decides nothing about what is exported or redacted; the export decision awaits native promises and reads no then."
-  },
-  "src/sdk/handle.ts|method|.then": {
-    "count": 1,
-    "class": "inert",
-    "reason": "Wrapper-prone, so not in the guard's table: it only sequences the start or the shutdown, or builds a resolved promise, and decides nothing about what is exported or redacted; the export decision awaits native promises and reads no then."
-  },
   "src/sdk/handle.ts|static|Number.isFinite": {
     "count": 1,
     "class": "guarded"
-  },
-  "src/sdk/handle.ts|static|Promise.allSettled": {
-    "count": 1,
-    "class": "inert",
-    "reason": "Wrapper-prone, so not in the guard's table: it only sequences the start or the shutdown, or builds a resolved promise, and decides nothing about what is exported or redacted; the export decision awaits native promises and reads no then."
-  },
-  "src/sdk/handle.ts|static|Promise.resolve": {
-    "count": 1,
-    "class": "inert",
-    "reason": "Wrapper-prone, so not in the guard's table: it only sequences the start or the shutdown, or builds a resolved promise, and decides nothing about what is exported or redacted; the export decision awaits native promises and reads no then."
   },
   "src/sdk/handle.ts|static|Reflect.deleteProperty": {
     "count": 2,
@@ -288,11 +263,6 @@
     "count": 1,
     "class": "guarded"
   },
-  "src/sdk/redaction.ts|static|Promise.resolve": {
-    "count": 2,
-    "class": "inert",
-    "reason": "Wrapper-prone, so not in the guard's table: it only sequences the start or the shutdown, or builds a resolved promise, and decides nothing about what is exported or redacted; the export decision awaits native promises and reads no then."
-  },
   "src/sdk/resource-detectors.ts|iterate|array-destructure": {
     "count": 1,
     "class": "guarded",
@@ -342,20 +312,10 @@
     "class": "guarded",
     "iterates": ["array"]
   },
-  "src/sdk/start.ts|iterate|array-destructure": {
-    "count": 1,
-    "class": "guarded",
-    "iterates": ["array"]
-  },
   "src/sdk/start.ts|iterate|spread": {
     "count": 1,
     "class": "guarded",
     "iterates": ["array"]
-  },
-  "src/sdk/start.ts|method|.finally": {
-    "count": 1,
-    "class": "inert",
-    "reason": "Wrapper-prone, so not in the guard's table: it only sequences the start or the shutdown, or builds a resolved promise, and decides nothing about what is exported or redacted; the export decision awaits native promises and reads no then."
   },
   "src/sdk/start.ts|method|.map": {
     "count": 1,
@@ -368,21 +328,6 @@
   "src/sdk/start.ts|static|Object.create": {
     "count": 1,
     "class": "guarded"
-  },
-  "src/sdk/start.ts|static|Promise.all": {
-    "count": 1,
-    "class": "inert",
-    "reason": "Wrapper-prone, so not in the guard's table: it only sequences the start or the shutdown, or builds a resolved promise, and decides nothing about what is exported or redacted; the export decision awaits native promises and reads no then."
-  },
-  "src/sdk/start.ts|static|Promise.allSettled": {
-    "count": 1,
-    "class": "inert",
-    "reason": "Wrapper-prone, so not in the guard's table: it only sequences the start or the shutdown, or builds a resolved promise, and decides nothing about what is exported or redacted; the export decision awaits native promises and reads no then."
-  },
-  "src/sdk/start.ts|static|Promise.resolve": {
-    "count": 1,
-    "class": "inert",
-    "reason": "Wrapper-prone, so not in the guard's table: it only sequences the start or the shutdown, or builds a resolved promise, and decides nothing about what is exported or redacted; the export decision awaits native promises and reads no then."
   },
   "src/sdk/warning-sink.ts|static|Symbol.for": {
     "count": 1,

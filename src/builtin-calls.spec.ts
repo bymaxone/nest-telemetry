@@ -230,6 +230,9 @@ describe('the direct calls of a built-in in the sources', () => {
         for (const [expression, names] of GUARDED_BUILTINS)
           if (names.includes(name.slice(1))) reached.add(`${expression}|${name.slice(1)}`)
     }
+    // The species of `Promise` is read by the engine on every call of the captured `then`, with no call in the source.
+    if (readFileSync(join(ROOT, 'sdk', 'native-promise.ts'), 'utf8').includes('apply(promiseThen'))
+      reached.add(`Promise|${String(Symbol.species)}`)
     const unreached = GUARDED_BUILTINS.flatMap(([expression, names]) =>
       names.map((member) => `${expression}|${String(member)}`).filter((ref) => !reached.has(ref))
     )

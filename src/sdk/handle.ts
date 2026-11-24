@@ -6,6 +6,14 @@
  * other through the entry point. They share no module state, only `globalThis`, so the handle lives
  * there under a registry symbol that no application key can collide with.
  */
+import {
+  absorbHost,
+  absorbOwned,
+  ownConstructor,
+  resolvedPromise,
+  unconsumable
+} from './native-promise'
+import { create, defineProperty, freeze, NativePromise } from './primordials'
 import type { TelemetryHandle } from './types'
 import { reportWarning } from './warning-sink'
 
@@ -106,6 +114,58 @@ function shutdownDeadline(requested: number | undefined): number {
 }
 
 /**
+ * Stops the SDK, bounded by a deadline.
+ *
+ * @param stopSdk - Stops the SDK.
+ * @param shutdownTimeoutMs - The host's deadline, or `undefined`.
+ * @param finish - Marks the shutdown finished, once the SDK stopped or the deadline passed.
+ * @returns A promise that settles when the shutdown does.
+ */
+function beginFlush(
+  stopSdk: () => Promise<void>,
+  shutdownTimeoutMs: number | undefined,
+  finish: () => void
+): Promise<void> {
+  return ownConstructor(
+    new NativePromise<void>((resolve, reject) => {
+      const deadline = shutdownDeadline(shutdownTimeoutMs)
+      const timer = setTimeout(() => {
+        reportWarning({
+          code: 'BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT',
+          text: `The telemetry flush did not finish within ${deadline} ms, so shutdown stopped waiting for it. Spans still queued may be lost. Raise shutdownTimeoutMs or check that the collector answers.`,
+          fields: { timeoutMs: deadline }
+        })
+        finish()
+        resolve()
+      }, deadline)
+      timer.unref()
+      const stopped = (): void => {
+        clearTimeout(timer)
+        finish()
+      }
+      const onValue = (): void => {
+        stopped()
+        resolve()
+      }
+      const onReason = (reason: unknown): void => {
+        stopped()
+        reject(reason)
+      }
+      let stopping: Promise<void>
+      try {
+        stopping = stopSdk()
+      } catch (error) {
+        onReason(error)
+        return
+      }
+      // Waited for with a native await after the promise took an own constructor: no `then` of its is read, so a
+      // `then` that the SDK's promise holds cannot settle the flush.
+      absorbOwned(stopping, onValue, onReason)
+    })
+  )
+}
+
+/**
  * Creates the handle of a started SDK.
  *
  * Every caller of `shutdown` gets the one flush: a caller that arrives while it is pending waits for
@@ -129,47 +189,32 @@ export function createHandle(
 ): RunningHandle {
   let flush: Promise<void> | undefined
   let finished = false
-  const handle: RunningHandle = {
-    enabled: true,
-    get stopping() {
-      return flush !== undefined && !finished
-    },
-    shutdown: () => {
-      if (finished) {
-        return Promise.resolve()
-      }
-      flush ??= new Promise<void>((resolve, reject) => {
-        const deadline = shutdownDeadline(shutdownTimeoutMs)
-        const finish = (): void => {
-          finished = true
-          Reflect.set(globalThis, STOPPED_KEY, true)
-          if (currentHandle() === handle) {
-            Reflect.deleteProperty(globalThis, HANDLE_KEY)
-          }
-        }
-        const timer = setTimeout(() => {
-          reportWarning({
-            code: 'BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT',
-            text: `The telemetry flush did not finish within ${deadline} ms, so shutdown stopped waiting for it. Spans still queued may be lost. Raise shutdownTimeoutMs or check that the collector answers.`,
-            fields: { timeoutMs: deadline }
-          })
-          finish()
-          resolve()
-        }, deadline)
-        timer.unref()
-        new Promise<void>((started) => {
-          started(stopSdk())
-        })
-          .finally(() => {
-            clearTimeout(timer)
-            finish()
-          })
-          .then(resolve, reject)
-      })
-      return flush
-    }
+  // No prototype: a promise that resolves with the handle reads no `then` from the root prototype.
+  const handle = create(null) as {
+    enabled: boolean
+    stopping: boolean
+    shutdown: () => Promise<void>
   }
-  return handle
+  defineProperty(handle, 'stopping', {
+    __proto__: null,
+    enumerable: true,
+    get: (): boolean => flush !== undefined && !finished
+  } as PropertyDescriptor)
+  handle.enabled = true
+  handle.shutdown = (): Promise<void> => {
+    if (finished) {
+      return resolvedPromise()
+    }
+    flush ??= beginFlush(stopSdk, shutdownTimeoutMs, () => {
+      finished = true
+      Reflect.set(globalThis, STOPPED_KEY, true)
+      if (currentHandle() === handle) {
+        Reflect.deleteProperty(globalThis, HANDLE_KEY)
+      }
+    })
+    return flush
+  }
+  return freeze(handle)
 }
 
 /**
@@ -181,9 +226,24 @@ export function createHandle(
  *
  * @returns A promise that resolves once buffered spans are exported.
  */
-export async function shutdownTelemetry(): Promise<void> {
-  // A start still loading the packages has no handle to drain yet. Wait for it, so the SDK it
-  // builds is stopped rather than left running; whether the start succeeded is its caller's concern.
-  await Promise.allSettled([pendingStart()])
-  await currentHandle()?.shutdown()
+export function shutdownTelemetry(): Promise<void> {
+  // No `async`: a caller awaits a promise that carries its own constructor, and nothing is read from a handle's promise.
+  return ownConstructor(
+    new NativePromise<void>((resolve, reject) => {
+      const drain = (): void => {
+        try {
+          const handle = currentHandle()
+          if (handle === undefined) resolve()
+          else if (!absorbHost(handle.shutdown(), () => resolve(), reject)) reject(unconsumable())
+        } catch (error) {
+          reject(error)
+        }
+      }
+      const pending = pendingStart()
+      // A start still loading the packages has no handle to drain yet. Wait for it, so the SDK it builds is
+      // stopped rather than left running; whether the start succeeded is its caller's concern.
+      if (pending === undefined) drain()
+      else if (!absorbHost(pending, drain, drain)) reject(unconsumable())
+    })
+  )
 }

@@ -102,7 +102,8 @@ describe("a flag looser than the fresh realm's", () => {
         runInNewContext: () => ({
           objects: readBuiltins(),
           descriptors,
-          sourceOf: (value: unknown): string => Function.prototype.toString.call(value)
+          sourceOf: (value: unknown): string => Function.prototype.toString.call(value),
+          promiseSource: Function.prototype.toString.call(Promise)
         })
       }))
       loaded = (require('./prototype-guard') as { pollutedNames: typeof PollutedNames })
@@ -142,7 +143,8 @@ describe('a value that is not a function in the fresh realm', () => {
         runInNewContext: () => ({
           objects: readBuiltins(),
           descriptors,
-          sourceOf: (value: unknown): string => Function.prototype.toString.call(value)
+          sourceOf: (value: unknown): string => Function.prototype.toString.call(value),
+          promiseSource: Function.prototype.toString.call(Promise)
         })
       }))
       guard = (require('./prototype-guard') as { pollutedNames: typeof PollutedNames })

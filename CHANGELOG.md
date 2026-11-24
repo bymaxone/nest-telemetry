@@ -10,6 +10,55 @@ heading here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The start and the export no longer let a forged promise result decide.** The start awaited the packages
+  through `Promise.all` and an `await`, and a guarded export awaited the provider answer and the send. A
+  `Promise.all` replaced after load, a `then` on `Object.prototype` that erases itself after one read, or a replaced
+  `then` with a constructor that is put back could hand back a forged `NodeSDK` or forged headers while the checks
+  passed. The decisions now wait for a promise of the library with a native `await` after it took an own `constructor`, wait for a promise of a host without writing to it, settle through a native promise from the
+  engine's own constructor, and check the process immediately before they settle. A `then` on
+  `Array.prototype` or `Function.prototype`, and a changed `constructor` of `Promise.prototype`, which every `then`
+  reads for a species, count as a pollution like one on `Object.prototype`; a promise the library made gets its own
+  `constructor`, and a promise a host made is never written to. The handle of a started SDK has no prototype, and
+  the check is the last thing before a promise of the library resolves with a handle or a send result. A refusal
+  of a start at boot answers with the disabled handle, and a refusal of a send fails the export. A wait on a promise
+  of a host that cannot be consumed, because its `constructor` was replaced, is refused instead of going on: a start, a
+  `shutdown` and `shutdownTelemetry` then reject with `BYMAX_TELEMETRY_REALM_POLLUTED`. A boot that finds the process
+  polluted after the SDK started stops that SDK, warns with the same code and answers with the disabled handle. The
+  handles the library returns are frozen. The loads of the packages are not part of this claim: see the known limit
+  on `import()`.
+- **The preload waits for the start on a promise of its own.** A `constructor` and a `then` planted for a single read
+  while the SDK starts could forge the handle the preload awaited and skip the registration of the flush on exit.
+- **The docs state the threat model.** `SECURITY.md` says that code running in the same process is trusted, as in
+  Node, and that the guards are best-effort hardening and not a security boundary.
+
+### Known limits
+
+- The packages are loaded by `import()`, and Node's module loader fills those promises through the live
+  `Promise.prototype.then`. A host that replaces `then`, swaps a module namespace and puts `then` back can have a
+  package of its own built; module resolution belongs to the host, which can also replace a module through loader
+  hooks or `require.cache`, so the library does not claim to close this route.
+- The check compares the engine's `Promise` with a fresh realm's, and the library takes it from the engine, but a
+  host that changes `Promise.prototype.constructor` to something that reads like the engine's own `Promise` before
+  the library loads is not told apart.
+- A host provider that resolves a plain object reads a `then` planted on `Object.prototype` itself, before the
+  library sees the value; the library cannot close that from its side.
+- The OpenTelemetry and OTLP exporter internals read statics and `then` on their own, outside the decisions above.
+- A `then` that is planted and erased again between the check at entry and the settling is not seen.
+- When a host's own promise cannot be consumed, because its `constructor` was replaced by something that throws or
+  names a `Symbol.species` that throws, the batch or answer is refused, but that promise's own rejection, if it has
+  one, stays unhandled: the library never writes to a promise a host made, so it cannot take the reaction first.
+- A `Promise[Symbol.species]` getter that erases itself inside a third-party call is not observable: the realm checks
+  compare the accessor before and after, and a dependency's own `then` reads it in between.
+- When `Promise.prototype.constructor` was deleted before the library loaded, the start is refused as polluted, and the
+  promise it answers with comes from a fresh realm: `instanceof Promise` is `false` for it, while `await` and `.then`
+  work as usual. This happens only on that refused path.
+- A promise of a dependency that the library waits for, such as the answer of a transport, takes a `constructor` of
+  its own first; a transport that already holds a read-only `constructor` on it cannot be given one, and the wait is judged
+  on the `constructor` it holds.
+- The slots on `globalThis` under which state is shared between copies of the library are writable by the host; a host that overwrites them changes what a later call finds.
+
 ### Planned for the next minor
 
 - **Export the option error class** with `code` and `option` typed in the declarations, so a host can test for

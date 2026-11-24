@@ -8,7 +8,9 @@ import { register } from 'node:module'
 import { emitWarning } from '../sdk/emit-warning'
 import { readTelemetryEnvironment } from '../sdk/environment'
 import { describeFailure } from '../sdk/error-code'
-import { startTelemetry } from '../sdk/start'
+import { absorbOwned, ownConstructor } from '../sdk/native-promise'
+import { NativePromise } from '../sdk/primordials'
+import { DISABLED_HANDLE, startTelemetry } from '../sdk/start'
 import type { TelemetryHandle, TelemetryOptions } from '../sdk/types'
 
 /** The loader hook that lets OpenTelemetry instrument native ES modules. */
@@ -73,19 +75,29 @@ export async function bootFromEnvironment(
  * @param options - The start options.
  * @returns The handle of the SDK, or a disabled one.
  */
-async function startOrWarn(
+function startOrWarn(
   start: (options: TelemetryOptions) => Promise<TelemetryHandle>,
   options: TelemetryOptions
 ): Promise<TelemetryHandle> {
-  try {
-    return await start(options)
-  } catch (error) {
-    emitWarning(
-      `Telemetry could not be started (${describeFailure(error)}), so the application continues without it.`,
-      { type: 'Warning', code: 'BYMAX_TELEMETRY_START_FAILED' }
-    )
-    return { enabled: false, shutdown: () => Promise.resolve() }
-  }
+  // No `async`: the caller waits for a promise of the library's own, with its own `constructor`, so a `constructor`
+  // and a `then` that the start planted for a single read cannot forge the handle and skip the flush on exit.
+  return ownConstructor(
+    new NativePromise<TelemetryHandle>((resolve) => {
+      const failed = (error: unknown): void => {
+        emitWarning(
+          `Telemetry could not be started (${describeFailure(error)}), so the application continues without it.`,
+          { type: 'Warning', code: 'BYMAX_TELEMETRY_START_FAILED' }
+        )
+        // The handle that has no prototype: resolving with an object reads a `then` from the root one.
+        resolve(DISABLED_HANDLE)
+      }
+      try {
+        absorbOwned(start(options), (handle) => resolve(handle as TelemetryHandle), failed)
+      } catch (error) {
+        failed(error)
+      }
+    })
+  )
 }
 
 /**

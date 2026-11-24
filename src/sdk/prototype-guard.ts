@@ -8,12 +8,16 @@
  * one telemetry can trust with its data. The count is all that is ever reported, never a name or a value.
  */
 import {
+  arrayPrototype,
   create,
   getOwnPropertyDescriptor,
   getOwnPropertyDescriptors,
+  functionPrototype,
   getPrototypeOf,
   hasOwn,
+  NativePromise,
   ownKeys,
+  promisePrototype,
   rootPrototype,
   runInFreshRealm
 } from './primordials'
@@ -70,6 +74,7 @@ export const GUARDED_BUILTINS: readonly GuardedRow[] = [
   ['Object', ['assign', 'create', 'entries', 'fromEntries', 'keys', 'setPrototypeOf', 'values']],
   ['Reflect', ['deleteProperty', 'get', 'set']],
   ['Symbol', ['for']],
+  ['Promise', [Symbol.species]],
   ['Object.getPrototypeOf([][Symbol.iterator]())', ['next']],
   ['Object.getPrototypeOf(new Set()[Symbol.iterator]())', ['next']]
 ]
@@ -101,6 +106,7 @@ export function readBuiltins(): readonly object[] {
     Object,
     Reflect,
     Symbol,
+    NativePromise,
     ARRAY_ITERATOR,
     SET_ITERATOR
   ]
@@ -133,6 +139,7 @@ function describeAll(objects: readonly object[]): Record<number, Descriptors> {
 interface Pristine {
   readonly descriptors: Readonly<Record<string | symbol, PropertyDescriptor>>
   readonly sourceOf: (value: unknown) => string
+  readonly promiseSource: string
   readonly targets: Readonly<Record<number, Descriptors>>
 }
 
@@ -156,11 +163,18 @@ function build(): Pristine | undefined {
     const made = runInFreshRealm(
       '({ descriptors: Object.getOwnPropertyDescriptors(Object.prototype), ' +
         'sourceOf: (value) => Function.prototype.toString.call(value), ' +
+        'promiseSource: Function.prototype.toString.call(Promise), ' +
         `objects: ${EXPRESSION} })`
-    ) as { descriptors: Descriptors; sourceOf: Pristine['sourceOf']; objects: readonly object[] }
+    ) as {
+      descriptors: Descriptors
+      sourceOf: Pristine['sourceOf']
+      promiseSource: string
+      objects: readonly object[]
+    }
     return {
       descriptors: made.descriptors,
       sourceOf: made.sourceOf,
+      promiseSource: made.promiseSource,
       targets: describeAll(made.objects)
     }
   } catch {
@@ -287,7 +301,46 @@ export function pollutedNames(): number {
   for (let at = 0; at < total; at += 1) {
     if (!unchanged(names[at] as string | symbol, now, descriptors, sourceOf, loaded)) found += 1
   }
-  return found + changedBuiltins(pristine.targets, sourceOf)
+  return (
+    found +
+    changedBuiltins(pristine.targets, sourceOf) +
+    thenOnSiblings() +
+    promiseConstructorChanged(pristine)
+  )
+}
+
+/**
+ * Counts the prototypes next to the root that hold a `then`: a value that is an array or a function and is
+ * resolved into a promise would be read for it, as an object is read through `Object.prototype`, whose own
+ * names are compared above.
+ *
+ * @returns Zero, one or two.
+ */
+function thenOnSiblings(): number {
+  return (hasOwn(arrayPrototype, 'then') ? 1 : 0) + (hasOwn(functionPrototype, 'then') ? 1 : 0)
+}
+
+/**
+ * Counts a change of the `constructor` slot of `Promise.prototype`, which every `then` reads for a species: it must
+ * still be the data property that holds the engine's own `Promise`. What this module captured is not enough, since a
+ * value planted before it loaded would be captured as well; the constructor has to read as the `Promise` of a fresh
+ * realm and be the one whose `prototype` is the prototype that was checked.
+ *
+ * @param fresh - What the fresh realm holds.
+ * @returns Zero when untouched, one otherwise.
+ */
+function promiseConstructorChanged(fresh: Pristine): number {
+  const slot = getOwnPropertyDescriptor(promisePrototype, 'constructor')
+  const link = getOwnPropertyDescriptor(NativePromise, 'prototype')
+  return slot !== undefined &&
+    hasOwn(slot, 'value') &&
+    slot.value === NativePromise &&
+    link !== undefined &&
+    hasOwn(link, 'value') &&
+    link.value === promisePrototype &&
+    fresh.sourceOf(NativePromise) === fresh.promiseSource
+    ? 0
+    : 1
 }
 
 /**
