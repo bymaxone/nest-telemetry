@@ -23,8 +23,7 @@ heading here.
   `constructor`, and a promise a host made is never written to. The handle of a started SDK has no prototype, and
   the check is the last thing before a promise of the library resolves with a handle or a send result. A refusal
   of a start answers with the disabled handle, and a refusal of a send fails the export. A wait on a promise of a host
-  that cannot be made, because its `constructor` was replaced, rejects with `BYMAX_TELEMETRY_REALM_POLLUTED` instead of
-  going on. The handles the library returns are frozen. The loads of the packages are not part of this claim: see the
+  that cannot be made, because its `constructor` was replaced, is refused instead of going on. The handles the library returns are frozen. The loads of the packages are not part of this claim: see the
   known limit on `import()`.
 
 ### Known limits
@@ -42,8 +41,7 @@ heading here.
 - A promise of a dependency that the library waits for, such as the answer of a transport, takes a `constructor` of
   its own first; a transport that already holds a read-only `constructor` on it cannot be given one, and the wait then
   reads it.
-- The slots on `globalThis` under which the handle, the start in progress and the stopped mark are shared between
-  copies of the library are writable by the host; a host that overwrites them changes what a later call finds.
+- The slots on `globalThis` under which state is shared between copies of the library are writable by the host; a host that overwrites them changes what a later call finds.
 
 ### Planned for the next minor
 
