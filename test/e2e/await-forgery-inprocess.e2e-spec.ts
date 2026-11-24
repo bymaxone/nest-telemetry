@@ -321,6 +321,35 @@ describe('a start beside a promise of a host that cannot be consumed', () => {
   })
 })
 
+describe('a library that loads beside a Promise.prototype without a constructor', () => {
+  it('captures the global Promise and counts the missing slot', () => {
+    // Scenario: a host deletes `Promise.prototype.constructor` before the library loads; the capture falls back to
+    // the global and the guard counts the slot as changed.
+    const original = Object.getOwnPropertyDescriptor(
+      Promise.prototype,
+      'constructor'
+    ) as PropertyDescriptor
+    let captured: unknown
+    let count = -1
+    jest.isolateModules(() => {
+      Reflect.deleteProperty(Promise.prototype, 'constructor')
+      try {
+        captured = (jest.requireActual('../../src/sdk/primordials') as { NativePromise: unknown })
+          .NativePromise
+        count = (
+          jest.requireActual('../../src/sdk/prototype-guard') as {
+            pollutedNames: () => number
+          }
+        ).pollutedNames()
+      } finally {
+        Object.defineProperty(Promise.prototype, 'constructor', original)
+      }
+    })
+    expect(captured).toBe(Promise)
+    expect(count).toBeGreaterThan(0)
+  })
+})
+
 describe('a guarded send and its providers beside a promise that cannot be consumed', () => {
   it('drops a provider answer that is a promise of the host with a constructor that throws', async () => {
     // Scenario: a provider answers with a native promise whose own constructor throws; the guard cannot attach, so the
@@ -344,6 +373,39 @@ describe('a guarded send and its providers beside a promise that cannot be consu
     exporter.export([], () => undefined)
     const result = (await transport.send('data', 1)) as { status: string }
     expect(result.status).toBe('success')
+  })
+
+  it('answers a send whose promise is frozen with the result it carries', async () => {
+    // Scenario: the transport answers with a frozen native promise, which cannot be tagged; it is waited for through
+    // the `then` captured at load, and the transport's result arrives.
+    const exporter = new OTLPTraceExporter({ url: 'http://127.0.0.1:1/v1/traces' })
+    const transport = transportOf(exporter)
+    transport.send = () => Object.freeze(Promise.resolve({ status: 'success' }))
+    guardExports(exporter)
+    exporter.export([], () => undefined)
+    const result = (await transport.send('data', 1)) as { status: string }
+    expect(result.status).toBe('success')
+  })
+
+  it('rejects a send whose promise holds a read-only constructor that throws, with a typed error', async () => {
+    // Scenario: the transport answers with a promise that already holds a non-configurable `constructor` that throws;
+    // it cannot be tagged and cannot be waited for, so the send rejects with the pollution error and nothing of it is used.
+    const exporter = new OTLPTraceExporter({ url: 'http://127.0.0.1:1/v1/traces' })
+    const transport = transportOf(exporter)
+    transport.send = () => {
+      const sent = Promise.resolve({ status: 'success' })
+      Object.defineProperty(sent, 'constructor', {
+        get: (): never => {
+          throw new Error('hostile constructor')
+        }
+      })
+      return sent
+    }
+    guardExports(exporter)
+    exporter.export([], () => undefined)
+    await expect(transport.send('data', 1)).rejects.toMatchObject({
+      code: 'BYMAX_TELEMETRY_REALM_POLLUTED'
+    })
   })
 
   it('refuses a result that arrives after a name was planted on the root prototype', async () => {

@@ -316,6 +316,44 @@ describe('a transport behind a guarded exporter', () => {
       )
     })
 
+    it('answers with what the host promise holds when the call leaves self-restoring accessors behind', async () => {
+      // Scenario: the provider installs one-shot accessors for `constructor` and `then` on Promise.prototype, each of
+      // which puts its slot back when read, and returns its promise; the checks before and after find nothing, and
+      // a bare wait would hand the forged answer to the request.
+      const slots = ['constructor', 'then'].map((name) => [
+        name,
+        Object.getOwnPropertyDescriptor(Promise.prototype, name) as PropertyDescriptor
+      ])
+      const restore = (name: string): void => {
+        Object.defineProperty(Promise.prototype, name, Object.fromEntries(slots)[name])
+      }
+      const provider = armed(() => {
+        const host = Promise.resolve({ authorization: 'real' })
+        Object.defineProperty(Promise.prototype, 'constructor', {
+          configurable: true,
+          get: () => {
+            restore('constructor')
+            return Object
+          }
+        })
+        Object.defineProperty(Promise.prototype, 'then', {
+          configurable: true,
+          get: () => {
+            restore('then')
+            return (onFulfilled: (value: unknown) => void): void =>
+              onFulfilled({ authorization: 'forged' })
+          }
+        })
+        return host
+      })
+      try {
+        await expect(provider()).resolves.toEqual({ authorization: 'real' })
+      } finally {
+        restore('constructor')
+        restore('then')
+      }
+    })
+
     it('waits for any thenable, and refuses it the same way', async () => {
       // Scenario: an answer that is not a native promise but has a then is awaited too.
       const thenable = { then: (resolve: (value: number) => void): void => resolve(5) }

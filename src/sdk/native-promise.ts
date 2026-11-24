@@ -1,15 +1,23 @@
 /**
- * @fileoverview Waits for a promise with a native `await`, without a `then` or a `constructor` that something replaced
- * on `Promise.prototype` deciding what runs.
+ * @fileoverview Waits for a promise through the `then` captured at load, without a `then` that something installed on
+ * `Promise.prototype` deciding what runs.
  * @layer sdk
  *
- * `Promise.prototype.then` reads `constructor` of the promise it is called on, and then `Symbol.species` of that
- * constructor, both of which a host can replace. A native `await` of a promise whose `constructor` is the intrinsic
- * reads neither. A promise this library made gets its own `constructor`, so the lookup ends on it; a promise a host
- * made is never written to, so a failed wait is reported to the caller, which fails closed.
+ * A bare `await` reads `constructor` of the promise and, when it is not the intrinsic, reads `then` of the promise it
+ * builds: a host can make both reads answer once and restore themselves, so the checks around the wait find nothing.
+ * The captured `then` reads neither; its callbacks receive what the promise settled with. A promise this library made
+ * gets its own `constructor`; a promise a host made is never written to, so a wait that cannot be made is reported to
+ * the caller, which fails closed.
  */
 import { POLLUTED_CODE } from './error-code'
-import { defineProperty, ErrorClass, NativePromise } from './primordials'
+import {
+  apply,
+  defineProperty,
+  ErrorClass,
+  getOwnPropertyDescriptor,
+  NativePromise,
+  promiseThen
+} from './primordials'
 
 /**
  * Gives a promise this library made an own `constructor`, so that a caller that awaits it, or a `then` called on it,
@@ -42,11 +50,36 @@ export function resolvedPromise(): Promise<void> {
 }
 
 /**
- * Waits for a promise with a native `await` and hands the outcome to a callback. A native `await` of a promise whose
- * `constructor` is the intrinsic attaches its reaction directly: no `then` is read from the promise or its
- * prototypes, and no `Symbol.species` is read from the constructor, so neither can decide what runs.
+ * Waits for a promise by calling the `then` captured when the library loaded, and hands the outcome to callbacks. The
+ * callbacks are the reactions themselves, so what they receive is what the promise settled with: no `then` is read
+ * from the promise or its prototypes, and a `constructor` or `Symbol.species` that something replaced can only decide
+ * what the promise derived from the call is built from, which nobody reads.
  *
  * @param promise - The promise to wait for.
+ * @param onValue - Called with the value.
+ * @param onReason - Called with the rejection reason.
+ * @returns `false` when the call threw before a reaction was attached, which a `constructor` that throws makes it do:
+ * neither callback is called.
+ */
+function attach(
+  promise: Promise<unknown>,
+  onValue: (value: unknown) => void,
+  onReason: (reason: unknown) => void
+): boolean {
+  try {
+    apply(promiseThen, promise, [onValue, onReason])
+  } catch {
+    return false
+  }
+  return true
+}
+
+/**
+ * Waits for a promise with a native `await` and hands the outcome to a callback. A native `await` of a promise whose
+ * `constructor` is the intrinsic attaches its reaction directly: no `then` is read from the promise or its
+ * prototypes, and no `Symbol.species` is read from the constructor.
+ *
+ * @param promise - A promise with an own `constructor`.
  * @param onValue - Called with the value.
  * @param onReason - Called with the rejection reason, or with the error the wait itself threw.
  */
@@ -69,11 +102,13 @@ async function settle(
 }
 
 /**
- * Waits for a promise this library made, giving it an own `constructor` first.
+ * Waits for a promise this library or a dependency made. It is given an own `constructor` first and then awaited
+ * natively; a promise that cannot take one, a frozen one, is waited for through the captured `then` instead, because
+ * a bare `await` would read a `constructor` and a `then` that something replaced.
  *
- * @param promise - A promise of the library's own, never a host's.
+ * @param promise - A promise of the library's own or of a dependency, never a host's.
  * @param onValue - Called with the value.
- * @param onReason - Called with the rejection reason.
+ * @param onReason - Called with the rejection reason, or with the error the wait itself threw.
  */
 export function absorbOwned(
   promise: Promise<unknown>,
@@ -81,7 +116,11 @@ export function absorbOwned(
   onReason: (reason: unknown) => void
 ): void {
   ownConstructor(promise)
-  void settle(promise, onValue, onReason)
+  if (getOwnPropertyDescriptor(promise, 'constructor')?.value === NativePromise) {
+    void settle(promise, onValue, onReason)
+  } else if (!attach(promise, onValue, onReason)) {
+    onReason(unconsumable())
+  }
 }
 
 /**
@@ -90,23 +129,15 @@ export function absorbOwned(
  * @param promise - A native promise of the host's.
  * @param onValue - Called with the value.
  * @param onReason - Called with the rejection reason.
- * @returns `false` when the wait threw before it suspended, which a replaced `constructor` makes it do: the callbacks
- * are not called, and the host's own rejection, if there is one, stays unhandled.
+ * @returns `false` when the wait threw before a reaction was attached, which a replaced `constructor` makes it do: the
+ * callbacks are not called, and the host's own rejection, if there is one, stays unhandled.
  */
 export function absorbHost(
   promise: Promise<unknown>,
   onValue: (value: unknown) => void,
   onReason: (reason: unknown) => void
 ): boolean {
-  let suspended = false
-  let refused = false
-  void settle(promise, onValue, (reason) => {
-    // The wait threw before it suspended, so this is the read of the constructor and not a rejection of the promise.
-    if (suspended) onReason(reason)
-    else refused = true
-  })
-  suspended = true
-  return !refused
+  return attach(promise, onValue, onReason)
 }
 
 /**

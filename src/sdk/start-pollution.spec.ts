@@ -205,3 +205,33 @@ describe('startTelemetry beside a polluted Object.prototype', () => {
     }
   })
 })
+
+describe('startTelemetry beside a Promise.prototype whose constructor was deleted before the load', () => {
+  it('answers with a promise and never throws at the caller', async () => {
+    // Scenario: a host deletes `Promise.prototype.constructor` before this copy loads; the call must still hand
+    // back a promise, and a process in that state is refused, not started.
+    const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    const original = Object.getOwnPropertyDescriptor(
+      Promise.prototype,
+      'constructor'
+    ) as PropertyDescriptor
+    let answer: unknown
+    let thrown: unknown
+    jest.isolateModules(() => {
+      Reflect.deleteProperty(Promise.prototype, 'constructor')
+      try {
+        const loaded = jest.requireActual('./start') as typeof import('./start')
+        answer = loaded.startTelemetry({ serviceName: 'svc' })
+      } catch (error) {
+        thrown = error
+      } finally {
+        Object.defineProperty(Promise.prototype, 'constructor', original)
+      }
+    })
+    emitWarning.mockRestore()
+    expect(thrown).toBeUndefined()
+    expect(answer).toBeInstanceOf(Promise)
+    await expect(answer).resolves.toMatchObject({ enabled: false })
+    expect(mockNodeSdk).not.toHaveBeenCalled()
+  })
+})

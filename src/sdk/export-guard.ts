@@ -112,8 +112,8 @@ function innermostTransport(exporter: unknown): Transport | undefined {
  * did would be read by the request that follows. An answer that is not a promise is handed back as it is, so a
  * synchronous provider stays synchronous.
  *
- * A promise of the host's is waited for with a native `await` and never written to, and the answer is settled by a
- * promise of this module's own with its own `constructor`: a `then` or a species that something replaced is not
+ * A promise of the host's is waited for through the `then` captured at load and never written to, and the answer is
+ * settled by a promise of this module's own with its own `constructor`: a `then` that something installed is not
  * read. A wait that cannot be made refuses the answer. The
  * check is the last thing before the value is resolved, with nothing between them, because resolving reads a `then`
  * on the value, and a `then` planted on a root prototype that erases itself when read would otherwise be read

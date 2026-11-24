@@ -39,9 +39,9 @@ describe('the Promise the guard builds from', () => {
     expect(loaded?.promisePrototype).not.toBe(Zoneish.prototype)
   })
 
-  it('takes the slot as it is, a value planted there, and nothing when it is gone', () => {
+  it('takes the slot as it is, a value planted there, and the global when it is gone', () => {
     // Scenario: the constructor slot holds a function, or was deleted, before load; the capture reads the data
-    // property and neither throws nor runs a getter, and the guard is what refuses the process.
+    // property and neither throws nor runs a getter, and a missing slot falls back to the global so the guard can refuse the process.
     const original = Object.getOwnPropertyDescriptor(
       Promise.prototype,
       'constructor'
@@ -61,6 +61,6 @@ describe('the Promise the guard builds from', () => {
     } finally {
       Object.defineProperty(Promise.prototype, 'constructor', original)
     }
-    expect(captured).toEqual([planted, undefined])
+    expect(captured).toEqual([planted, Promise])
   })
 })

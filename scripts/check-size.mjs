@@ -34,6 +34,11 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
+//   - 2026-11-24 (sdk, register and the sdk CommonJS bundle, at the measured size plus 30 B, rounded down in the KiB
+//     column; the PM's rule of the same day, applied again for the host-promise wait and the missing constructor slot):
+//     sdk 12,510 B measured, 12.24 KiB budget (12,533 B, 23 B of headroom); register 12,627 B, 12.36 KiB (12,657 B,
+//     30 B); sdk CommonJS 12,524 B, 12.25 KiB (12,544 B, 20 B). The growth is the captured `then`, the wait through it
+//     for a promise of a host or one that cannot be tagged, and the fallback for a constructor slot that is gone.
 //   - 2026-11-24 (every bundle but the register CommonJS stub, at the measured size plus 30 B, rounded down in the KiB
 //     column; the PM's rule of the same day, applied again for the audit fixes): sdk 12,473 B measured, 12.20 KiB budget
 //     (12,493 B, 20 B of headroom); register 12,587 B, 12.32 KiB (12,616 B, 29 B); nest 2,681 B, 2.64 KiB (2,703 B,
@@ -187,11 +192,11 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
 //   met by shortening the text of a warning.
 const BUDGETS = [
-  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 12.2 * 1024 },
-  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 12.32 * 1024 },
+  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 12.24 * 1024 },
+  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 12.36 * 1024 },
   { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.64 * 1024 },
   { name: 'observability (metrics)', path: 'dist/observability/index.mjs', brotli: 0.8 * 1024 },
-  { name: 'sdk (CommonJS)', path: 'dist/sdk/index.cjs', brotli: 12.24 * 1024 },
+  { name: 'sdk (CommonJS)', path: 'dist/sdk/index.cjs', brotli: 12.25 * 1024 },
   { name: 'register (CommonJS)', path: 'dist/register/index.cjs', brotli: 0.2 * 1024 },
   { name: 'nest (CommonJS)', path: 'dist/nest/index.cjs', brotli: 2.66 * 1024 },
   { name: 'observability (CommonJS)', path: 'dist/observability/index.cjs', brotli: 0.81 * 1024 }

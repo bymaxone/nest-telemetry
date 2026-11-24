@@ -463,6 +463,17 @@ describe('the built-ins that the SDK calls on a decision path', () => {
       expect(count).toBeGreaterThan(0)
     })
 
+    it('counts a constructor slot that was deleted before the load, and the count does not throw', () => {
+      // Scenario: a host deletes `Promise.prototype.constructor` before a copy loads; the capture falls back to the
+      // global and the guard counts the missing slot instead of throwing at the caller.
+      const original = slot()
+      const count = countedAfterLoad(() => {
+        Reflect.deleteProperty(Promise.prototype, 'constructor')
+        return () => Object.defineProperty(Promise.prototype, 'constructor', original)
+      })
+      expect(count).toBeGreaterThan(0)
+    })
+
     it('counts nothing for a global Promise that a host replaced with a subclass before the load', () => {
       // Scenario: a zone or Bluebird style host replaces `globalThis.Promise` before load; the engine's prototype is
       // untouched, so the process is not polluted and the start is not refused forever.
