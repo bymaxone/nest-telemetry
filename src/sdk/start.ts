@@ -264,19 +264,18 @@ function loadPackages(
   const modules = create(null) as Record<number, unknown>
   let waiting = imports.length
   let over = false
-  const settle = (): void => {
-    // Only reached when every import answered, so no refusal or untrusted import has settled the load before.
+  // The load is answered once, by whichever of the packages, a refusal or an untrusted import comes first: `done`
+  // builds and starts the SDK, so it must never run twice.
+  const once = (act: () => void): void => {
+    if (over) return
     over = true
-    done(pollutedNames() > 0 ? undefined : (named(modules) as LoadedPackages))
+    act()
   }
   for (let at = 0; at < imports.length; at += 1) {
     const source = imports[at]
     if (!isPromise(source)) {
       // Not a promise of the engine's: there is nothing to trust a value from. The others still get their handler.
-      if (!over) {
-        over = true
-        done(undefined)
-      }
+      once(() => done(undefined))
       continue
     }
     absorbOwned(
@@ -284,12 +283,13 @@ function loadPackages(
       (module: unknown): void => {
         modules[at] = module
         waiting -= 1
-        if (waiting === 0) settle()
+        // Only reached when every import answered, so nothing has answered the load before.
+        if (waiting === 0) {
+          once(() => done(pollutedNames() > 0 ? undefined : (named(modules) as LoadedPackages)))
+        }
       },
       (reason: unknown): void => {
-        if (over) return
-        over = true
-        fail(reason)
+        once(() => fail(reason))
       }
     )
   }

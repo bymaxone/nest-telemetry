@@ -38,7 +38,7 @@ export function ownConstructor<T>(promise: Promise<T>): Promise<T> {
       value: NativePromise
     } as PropertyDescriptor)
   } catch {
-    return promise
+    // A promise that refuses the property keeps its own constructor and is returned as it is.
   }
   return promise
 }
