@@ -151,4 +151,22 @@ describe('startTelemetry beside a polluted Object.prototype', () => {
       delete (Object.prototype as unknown as Record<string, unknown>)['plantedDuringTheImport']
     }
   })
+
+  it('answers a refusal with a handle that has no prototype, so a planted then is not read from it', async () => {
+    // Scenario: the refusal resolves the start with the disabled handle; resolving reads a then from the value's
+    // prototype chain, and a handle that inherits nothing has none to read.
+    Object.defineProperty(Object.prototype, 'plantedForThen', {
+      value: 1,
+      enumerable: true,
+      configurable: true,
+      writable: true
+    })
+    try {
+      const handle = await startTelemetry({ env: {} })
+      expect(handle.enabled).toBe(false)
+      expect(Object.getPrototypeOf(handle)).toBeNull()
+    } finally {
+      delete (Object.prototype as unknown as Record<string, unknown>)['plantedForThen']
+    }
+  })
 })

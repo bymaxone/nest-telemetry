@@ -54,11 +54,13 @@ import { warnAboutMissingWinstonTransport } from './winston-transport'
 const RESTART_MESSAGE =
   'Telemetry cannot start again after it was shut down in the same process: the modules the first start instrumented stay patched against its tracer provider, so a second SDK would export nothing for them. Start telemetry once per process; in a test suite, start it once in a global setup.'
 
-/** The handle of a boot that started nothing. */
-const DISABLED_HANDLE: TelemetryHandle = {
-  enabled: false,
-  shutdown: () => Promise.resolve()
-}
+/**
+ * The handle of a boot that started nothing. It has no prototype, so a promise that resolves with it reads no `then`
+ * from the root prototype, which is polluted when this is the answer to a refusal.
+ */
+const DISABLED_HANDLE = create(null) as TelemetryHandle & { enabled: false }
+DISABLED_HANDLE.enabled = false
+DISABLED_HANDLE.shutdown = (): Promise<void> => Promise.resolve()
 
 /**
  * Refuses to start beside a polluted `Object.prototype`: telemetry that cannot be trusted starts nothing and

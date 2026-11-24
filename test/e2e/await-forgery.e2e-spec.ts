@@ -43,6 +43,9 @@ const packages = async () => O.all([
     }
     Object.defineProperty(O.prototype, 'constructor', { configurable: true, get() { return Fake } })
   }
+  if (scenario === 'h2-before') {
+    Object.defineProperty(Object.prototype, 'then', { configurable: true, get() { delete Object.prototype.then; return function (resolve) { resolve({ enabled: true, forged: true }) } } })
+  }
   const started = startTelemetry({ env: { OTEL_SERVICE_NAME: 'forgery', OTEL_EXPORTER_OTLP_ENDPOINT: process.env.ENDPOINT } })
   if (scenario === 'h2') {
     Object.defineProperty(Object.prototype, 'then', { configurable: true, get() { delete Object.prototype.then; return function (resolve) { resolve(forgedList) } } })
@@ -99,5 +102,12 @@ describe('a start while the promise machinery was replaced after load', () => {
     // prototype puts itself back after one read, so an await would take the slow path through the replaced then;
     // the start consumes the imports with the then it read at load and awaits nothing.
     expect((await measure('h1')).forged).toBe(0)
+  })
+
+  it('answers a refused start with the disabled handle, not with a value a planted then resolves it to', async () => {
+    // Scenario: a getter on Object.prototype that erases itself on its first read is planted before the start; the
+    // start is refused, and the handle it answers with has no prototype, so the getter is never read from it and the
+    // caller gets the disabled handle and not the forged object.
+    expect(await measure('h2-before')).toEqual({ forged: 0, enabled: false, rejected: null })
   })
 })
