@@ -106,3 +106,6 @@ export const clockNow = performance.now
 
 /** The `performance` object that {@link clockNow} belongs to, as it was when this module loaded. */
 export const clockOwner = performance
+
+/** `Promise.prototype`, whose `constructor` a `then` reads for a species and the guard requires to be untouched. */
+export const promisePrototype = Promise.prototype

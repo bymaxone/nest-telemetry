@@ -42,7 +42,8 @@ import {
   setPendingStart
 } from './handle'
 import type { RunningHandle } from './handle'
-import { apply, create, isPromise, NativePromise, promiseThen } from './primordials'
+import { absorbHost, absorbOwned } from './native-promise'
+import { create, isPromise, NativePromise } from './primordials'
 import { pollutedNames } from './prototype-guard'
 import { createUrlQueryRedactor } from './redaction'
 import { selectResourceDetectors } from './resource-detectors'
@@ -87,7 +88,40 @@ function refusesPollution(): boolean {
  * @param options - The host's policy.
  * @returns The handle, which flushes and stops the SDK.
  */
-export async function startTelemetry(options: TelemetryOptions = {}): Promise<TelemetryHandle> {
+export function startTelemetry(options: TelemetryOptions = {}): Promise<TelemetryHandle> {
+  // No `async`: returning a handle from one reads a `then` on it, and a promise of ours answers only after a check.
+  return new NativePromise<TelemetryHandle>((resolve, reject) => {
+    try {
+      begin(options, resolve, reject)
+    } catch (error) {
+      reject(error)
+    }
+  })
+}
+
+/**
+ * Hands over a handle, or the disabled one when the process turned polluted: the check is the last thing before the
+ * promise reads the handle.
+ *
+ * @param resolve - Settles the promise of the call.
+ * @param handle - The handle to answer with.
+ */
+function answer(resolve: (handle: TelemetryHandle) => void, handle: TelemetryHandle): void {
+  resolve(pollutedNames() > 0 ? DISABLED_HANDLE : handle)
+}
+
+/**
+ * The first half of a start: the policy of the call, and a wait for a flush that is under way.
+ *
+ * @param options - The host's policy.
+ * @param resolve - Settles the promise of the call.
+ * @param reject - Fails the promise of the call.
+ */
+function begin(
+  options: TelemetryOptions,
+  resolve: (handle: TelemetryHandle) => void,
+  reject: (reason: unknown) => void
+): void {
   // Each option is read once and its kind checked, and the rest of the call works from the copy, so
   // the warning text and the effect of the call cannot disagree.
   const settled = settleOptions(options)
@@ -96,25 +130,54 @@ export async function startTelemetry(options: TelemetryOptions = {}): Promise<Te
     // Turning telemetry off by a later call hands back a disabled handle and leaves a running SDK
     // running.
     if (currentHandle()?.stopping === false || pendingStart()) warnAboutIgnoredOptions(settled)
-    return DISABLED_HANDLE
+    resolve(DISABLED_HANDLE)
+    return
   }
-  let running = currentHandle()
+  const running = currentHandle()
   if (running?.stopping === true) {
     // A start that arrives during a flush waits for it, and starts a fresh SDK once it settles.
     // Whether the flush succeeded is its own caller's concern.
-    await Promise.allSettled([running.shutdown()])
-    running = currentHandle()
+    const after = (): void => {
+      try {
+        proceed(settled, env, resolve, reject)
+      } catch (error) {
+        reject(error)
+      }
+    }
+    if (!absorbHost(running.shutdown(), after, after)) after()
+    return
   }
+  proceed(settled, env, resolve, reject)
+}
+
+/**
+ * The second half of a start: the running handle, the start in progress, or a new boot.
+ *
+ * @param settled - The options, settled once.
+ * @param env - The parsed environment.
+ * @param resolve - Settles the promise of the call.
+ * @param reject - Fails the promise of the call.
+ */
+function proceed(
+  settled: TelemetryOptions,
+  env: TelemetryEnvironment,
+  resolve: (handle: TelemetryHandle) => void,
+  reject: (reason: unknown) => void
+): void {
+  const running = currentHandle()
   if (running !== undefined) {
     warnAboutIgnoredOptions(settled)
-    return running
+    answer(resolve, running)
+    return
   }
   // A second caller that arrives while the first is still loading gets the same start, whichever
   // copy of the library it runs in, so two overlapping calls never build two SDKs.
   const joined = pendingStart()
   if (joined !== undefined) {
     warnAboutIgnoredOptions(settled)
-    return joined
+    const take = (handle: unknown): void => answer(resolve, handle as TelemetryHandle)
+    if (!absorbHost(joined, take, reject)) resolve(DISABLED_HANDLE)
+    return
   }
   if (hasStopped()) {
     emitWarning(RESTART_MESSAGE, {
@@ -123,10 +186,15 @@ export async function startTelemetry(options: TelemetryOptions = {}): Promise<Te
     })
     throw new Error(RESTART_MESSAGE)
   }
-  if (refusesPollution()) return DISABLED_HANDLE
-  const start = boot(settled, env).finally(clearPendingStart)
+  if (refusesPollution()) {
+    resolve(DISABLED_HANDLE)
+    return
+  }
+  const start = boot(settled, env)
   setPendingStart(start)
-  return start
+  // The pending start is cleared by a handler of ours, not by `finally`, which would look up `then` on the promise.
+  absorbOwned(start, clearPendingStart, clearPendingStart)
+  absorbOwned(start, (handle) => answer(resolve, handle as TelemetryHandle), reject)
 }
 
 /**
@@ -191,7 +259,8 @@ function loadPackages(
       }
       continue
     }
-    apply(promiseThen, source, [
+    absorbOwned(
+      source,
       (module: unknown): void => {
         modules[at] = module
         waiting -= 1
@@ -202,7 +271,7 @@ function loadPackages(
         over = true
         fail(reason)
       }
-    ])
+    )
   }
 }
 
@@ -347,7 +416,7 @@ function boot(options: TelemetryOptions, env: TelemetryEnvironment): Promise<Tel
         sdk.start()
         const handle = createHandle(() => sdk.shutdown(), shutdownTimeoutMs)
         registerHandle(handle)
-        resolve(handle)
+        answer(resolve, handle)
       } catch (error) {
         reject(error)
       }

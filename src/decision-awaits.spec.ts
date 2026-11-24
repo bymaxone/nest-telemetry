@@ -14,34 +14,13 @@ import ts from 'typescript'
 type Exemption = { file: string; text: string; reason: string }
 
 /** The files whose waits are decisions: what is exported, and what a start builds. */
-const DECISION_FILES = ['sdk/start.ts', 'sdk/export-guard.ts'] as const
+const DECISION_FILES = ['sdk/start.ts', 'sdk/export-guard.ts', 'sdk/native-promise.ts'] as const
+
+/** The constructions of a promise that are allowed, each from the captured intrinsic, with a reason. */
+const EXEMPT_CONSTRUCTIONS: Exemption[] = []
 
 /** The waits that are allowed, each with the reason it is not a decision. */
 const EXEMPT: readonly Exemption[] = [
-  {
-    file: 'sdk/start.ts',
-    text: 'async startTelemetry',
-    reason:
-      'It hands the handle to the host and decides nothing: the packages are loaded by a callback, not awaited.'
-  },
-  {
-    file: 'sdk/start.ts',
-    text: 'await Promise.allSettled([running.shutdown()])',
-    reason:
-      'A start that arrives during a flush waits for the flush to end; no export or build is decided by its outcome.'
-  },
-  {
-    file: 'sdk/start.ts',
-    text: 'Promise.allSettled(…)',
-    reason:
-      'The same wait: it only sequences a start behind the flush that is running, and its result is not read.'
-  },
-  {
-    file: 'sdk/start.ts',
-    text: 'boot(settled, env).finally(…)',
-    reason:
-      'It clears the record of a start in flight, and the handle it returns is what the boot settled, not a verdict.'
-  },
   {
     file: 'sdk/start.ts',
     text: 'Promise.resolve(…)',
@@ -50,31 +29,108 @@ const EXEMPT: readonly Exemption[] = [
   }
 ]
 
+/** A construction from the promise constructor captured when the library loaded: a swap to the global is caught. */
+const captured = (where: string, why: string): Exemption => ({
+  file: where.split('|')[0] as string,
+  text: `new NativePromise(…) [captured] in ${where.split('|')[1]}`,
+  reason: why
+})
+
+EXEMPT_CONSTRUCTIONS.push(
+  captured(
+    'sdk/start.ts|startTelemetry',
+    'The promise the call answers with, from the captured intrinsic, settled only after a check of the process.'
+  ),
+  captured(
+    'sdk/start.ts|boot',
+    'The promise the boot settles itself, built from the intrinsic captured at load, never from the global binding.'
+  ),
+  captured(
+    'sdk/export-guard.ts|refuseIfPolluted',
+    'The promise that answers for a provider: the intrinsic captured at load, settled after a check.'
+  ),
+  captured(
+    'sdk/export-guard.ts|refuseIfPolluted',
+    'The adoption of a thenable that is not a promise, so the one that is consumed is a native one.'
+  ),
+  captured(
+    'sdk/export-guard.ts|armTransport',
+    'The promise a guarded send answers with: the intrinsic captured at load, settled after a check.'
+  )
+)
+
 const ROOT = join(__dirname)
+
+/** Whether an expression is the global `Promise`, written plainly or as a member of something. */
+const isGlobalPromise = (node: ts.Expression): boolean =>
+  (ts.isIdentifier(node) && node.text === 'Promise') ||
+  (ts.isPropertyAccessExpression(node) && node.name.text === 'Promise')
+
+/** The name of the function a node sits in, so a construction is listed per site. */
+function enclosing(node: ts.Node): string {
+  for (let up: ts.Node | undefined = node.parent; up !== undefined; up = up.parent) {
+    if (ts.isFunctionDeclaration(up) && up.name !== undefined) return up.name.text
+  }
+  return '<module>'
+}
+
+/** `Promise`, and every local name bound to the global one, so `new` on an alias is seen as `new Promise`. */
+function promiseAliases(source: ts.SourceFile): Set<string> {
+  const aliases = new Set<string>(['Promise'])
+  const collect = (node: ts.Node): void => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer !== undefined &&
+      isGlobalPromise(node.initializer)
+    )
+      aliases.add(node.name.text)
+    ts.forEachChild(node, collect)
+  }
+  collect(source)
+  return aliases
+}
+
+/** What a `new` expression is listed as, or `undefined` when it builds something else. */
+function constructionOf(node: ts.NewExpression, aliases: Set<string>): string | undefined {
+  if (!ts.isIdentifier(node.expression)) return undefined
+  if (aliases.has(node.expression.text)) return `new ${node.expression.text}(…)`
+  return node.expression.text === 'NativePromise'
+    ? `new NativePromise(…) [captured] in ${enclosing(node)}`
+    : undefined
+}
+
+/** What any other node that waits is listed as, or `undefined`. */
+function waitOf(node: ts.Node, source: ts.SourceFile): string | undefined {
+  if (ts.isAwaitExpression(node)) return node.getText(source)
+  if (
+    ts.isCallExpression(node) &&
+    ts.isPropertyAccessExpression(node.expression) &&
+    ((ts.isIdentifier(node.expression.expression) &&
+      node.expression.expression.text === 'Promise') ||
+      ['then', 'catch', 'finally'].includes(node.expression.name.text))
+  )
+    return `${node.expression.getText(source)}(…)`
+  if (
+    (ts.isFunctionDeclaration(node) ||
+      ts.isFunctionExpression(node) ||
+      ts.isArrowFunction(node) ||
+      ts.isMethodDeclaration(node)) &&
+    node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) === true
+  )
+    return `async ${node.name?.getText(source) ?? '<anonymous>'}`
+  return undefined
+}
 
 /** The waits of one file: the source text of each node that waits, or a short form for a long function. */
 function waitsOf(file: string): string[] {
   const path = join(ROOT, file)
   const source = ts.createSourceFile(path, readFileSync(path, 'utf8'), ts.ScriptTarget.Latest, true)
+  const aliases = promiseAliases(source)
   const found: string[] = []
   const visit = (node: ts.Node): void => {
-    if (ts.isAwaitExpression(node)) found.push(node.getText(source))
-    else if (
-      ts.isCallExpression(node) &&
-      ts.isPropertyAccessExpression(node.expression) &&
-      ((ts.isIdentifier(node.expression.expression) &&
-        node.expression.expression.text === 'Promise') ||
-        ['then', 'catch', 'finally'].includes(node.expression.name.text))
-    )
-      found.push(`${node.expression.getText(source)}(…)`)
-    else if (
-      (ts.isFunctionDeclaration(node) ||
-        ts.isFunctionExpression(node) ||
-        ts.isArrowFunction(node) ||
-        ts.isMethodDeclaration(node)) &&
-      node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) === true
-    )
-      found.push(`async ${node.name?.getText(source) ?? '<anonymous>'}`)
+    const listed = ts.isNewExpression(node) ? constructionOf(node, aliases) : waitOf(node, source)
+    if (listed !== undefined) found.push(listed)
     ts.forEachChild(node, visit)
   }
   visit(source)
@@ -86,12 +142,16 @@ describe('the waits on the decision paths', () => {
     // Scenario: an await, a Promise static, a then or an async function that was added to a decision file
     // without a listing fails here, and so does a listing whose wait is gone.
     const now = DECISION_FILES.flatMap((file) => waitsOf(file).map((text) => `${file}|${text}`))
-    const listed = EXEMPT.map((entry) => `${entry.file}|${entry.text}`)
+    const listed = [...EXEMPT, ...EXEMPT_CONSTRUCTIONS].map(
+      (entry) => `${entry.file}|${entry.text}`
+    )
     expect(now.sort()).toEqual(listed.sort())
   })
 
   it('gives every listing a reason that says it decides nothing', () => {
     // Scenario: a wait with no reason, or a reason that is only a word, is an unverifiable exemption.
-    expect(EXEMPT.filter((entry) => entry.reason.trim().length < 30)).toEqual([])
+    expect(
+      [...EXEMPT, ...EXEMPT_CONSTRUCTIONS].filter((entry) => entry.reason.trim().length < 30)
+    ).toEqual([])
   })
 })

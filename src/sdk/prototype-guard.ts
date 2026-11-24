@@ -15,7 +15,9 @@ import {
   functionPrototype,
   getPrototypeOf,
   hasOwn,
+  NativePromise,
   ownKeys,
+  promisePrototype,
   rootPrototype,
   runInFreshRealm
 } from './primordials'
@@ -289,7 +291,12 @@ export function pollutedNames(): number {
   for (let at = 0; at < total; at += 1) {
     if (!unchanged(names[at] as string | symbol, now, descriptors, sourceOf, loaded)) found += 1
   }
-  return found + changedBuiltins(pristine.targets, sourceOf) + thenOnSiblings()
+  return (
+    found +
+    changedBuiltins(pristine.targets, sourceOf) +
+    thenOnSiblings() +
+    promiseConstructorChanged()
+  )
 }
 
 /**
@@ -301,6 +308,17 @@ export function pollutedNames(): number {
  */
 function thenOnSiblings(): number {
   return (hasOwn(arrayPrototype, 'then') ? 1 : 0) + (hasOwn(functionPrototype, 'then') ? 1 : 0)
+}
+
+/**
+ * Counts a change of the `constructor` slot of `Promise.prototype`, which every `then` reads for a species: it must
+ * still be the data property that holds the promise constructor this module loaded with.
+ *
+ * @returns Zero when untouched, one otherwise.
+ */
+function promiseConstructorChanged(): number {
+  const slot = getOwnPropertyDescriptor(promisePrototype, 'constructor')
+  return slot !== undefined && hasOwn(slot, 'value') && slot.value === NativePromise ? 0 : 1
 }
 
 /**

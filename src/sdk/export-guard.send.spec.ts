@@ -13,15 +13,40 @@ type Send = (data: unknown, timeout: unknown) => unknown
 
 const polluted = jest.mocked(pollutedNames)
 
+/** Runs `run` while a getter on `Promise.prototype.constructor` throws, as a `then` reads it for a species. */
+function whileConstructorThrows<T>(run: () => T): T {
+  const original = Object.getOwnPropertyDescriptor(
+    Promise.prototype,
+    'constructor'
+  ) as PropertyDescriptor
+  Object.defineProperty(Promise.prototype, 'constructor', {
+    configurable: true,
+    get(): never {
+      throw new Error('hostile constructor')
+    }
+  })
+  try {
+    return run()
+  } finally {
+    Object.defineProperty(Promise.prototype, 'constructor', original)
+  }
+}
+
 beforeEach(() => {
   polluted.mockReset()
   polluted.mockReturnValue(0)
 })
 
 /** An OTLP-shaped exporter whose innermost transport sends with the function given. */
-function exporterSending(send: Send): { send(data: unknown, timeout: unknown): Promise<unknown> } {
+function exporterSending(
+  send: Send,
+  parameters: Record<string, unknown> = {}
+): {
+  send(data: unknown, timeout: unknown): Promise<unknown>
+  _parameters: Record<string, (...args: unknown[]) => unknown>
+} {
   class Inner {
-    _parameters = {}
+    _parameters = parameters
     send = send
   }
   class Retrying {
@@ -88,5 +113,66 @@ describe('the settling of a guarded send', () => {
     } finally {
       Promise.prototype.then = original
     }
+  })
+
+  it('refuses a result that the transport gave while the process turned polluted, instead of resolving it', async () => {
+    // Scenario: the transport answers after a name was planted: resolving with its object would read a `then` from
+    // the root prototype, so the check runs right before the resolve and the result is the refusal.
+    const guarded = exporterSending(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(() => {
+            polluted.mockReturnValue(1)
+            resolve({ status: 'success' })
+          }, 0)
+        })
+    )
+    const settled = await guarded.send('data', 1)
+    expect(settled).toMatchObject({ status: 'failure' })
+    expect(Object.getPrototypeOf(settled)).toBeNull()
+  })
+
+  it('refuses with a failed result, and does not reject, when the host promise cannot be consumed', async () => {
+    // Scenario: a getter on Promise.prototype.constructor throws when the guard attaches its handlers to the promise
+    // the transport answered with; the host's promise is not written to, and the attempt fails closed.
+    const guarded = exporterSending(() => Promise.resolve({ status: 'success' }))
+    const settled = whileConstructorThrows(() => guarded.send('data', 1))
+    const refused = (await settled) as object
+    expect(Object.getPrototypeOf(refused)).toBeNull()
+    expect(refused).toMatchObject({ status: 'failure' })
+  })
+
+  it('answers a provider thenable through a promise of its own whose constructor is not read', async () => {
+    // Scenario: a provider answers with a thenable that is not a promise; the guard adopts it into a promise it made,
+    // which has its own constructor, so a throwing getter on the prototype is not reached and the value arrives.
+    const guarded = exporterSending(() => ({ status: 'success' }), {
+      headers: () => ({ then: (resolve: (value: unknown) => void) => resolve({ a: '1' }) })
+    })
+    const settled = whileConstructorThrows(() => guarded._parameters['headers']?.())
+    await expect(settled).resolves.toEqual({ a: '1' })
+  })
+
+  it('rejects a provider promise of the host that cannot be consumed, and does not pass its value on', async () => {
+    // Scenario: the host's provider answers with a native promise and the constructor getter throws when the guard
+    // attaches to it; the host's promise is not written to, and the answer is refused.
+    const guarded = exporterSending(() => ({ status: 'success' }), {
+      headers: () => Promise.resolve({ a: '1' })
+    })
+    const settled = whileConstructorThrows(() => guarded._parameters['headers']?.())
+    await expect(settled).rejects.toMatchObject({ code: 'BYMAX_TELEMETRY_REALM_POLLUTED' })
+  })
+
+  it('names the pollution when a provider promise is dropped and the constructor getter throws', () => {
+    // Scenario: the prototype is polluted and the provider answered with a native promise; attaching the handler that
+    // drops it throws under the planted getter, and the guard still throws the pollution error, not the getter's.
+    const guarded = exporterSending(() => ({ status: 'success' }), {
+      headers: () => Promise.resolve({ a: '1' })
+    })
+    polluted.mockReturnValue(0)
+    const provider = guarded._parameters['headers'] as () => unknown
+    polluted.mockReturnValueOnce(0).mockReturnValue(1)
+    expect(() => whileConstructorThrows(provider)).toThrow(
+      'Object.prototype or a built-in of this process was changed, so the batch was dropped.'
+    )
   })
 })

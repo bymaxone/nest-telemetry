@@ -106,13 +106,13 @@ describe('a transport behind a guarded exporter', () => {
 
   it('guards the transport once, however many exports are made', () => {
     // Scenario: a second export does not stack a second wrapper on the attempt or on the providers: one send asks
-    // the guard once.
+    // the guard twice: at the entry, and right before the answer is resolved. A stacked wrapper would make it four.
     const { exporter, inner } = shaped()
     exporter.export(['one'], () => undefined)
     exporter.export(['two'], () => undefined)
     polluted.mockClear()
     return inner.send('data', 1).then(() => {
-      expect(polluted).toHaveBeenCalledTimes(1)
+      expect(polluted).toHaveBeenCalledTimes(2)
     })
   })
 

@@ -6,6 +6,7 @@
  * other through the entry point. They share no module state, only `globalThis`, so the handle lives
  * there under a registry symbol that no application key can collide with.
  */
+import { create, defineProperty } from './primordials'
 import type { TelemetryHandle } from './types'
 import { reportWarning } from './warning-sink'
 
@@ -106,6 +107,42 @@ function shutdownDeadline(requested: number | undefined): number {
 }
 
 /**
+ * Stops the SDK, bounded by a deadline.
+ *
+ * @param stopSdk - Stops the SDK.
+ * @param shutdownTimeoutMs - The host's deadline, or `undefined`.
+ * @param finish - Marks the shutdown finished, once the SDK stopped or the deadline passed.
+ * @returns A promise that settles when the shutdown does.
+ */
+function beginFlush(
+  stopSdk: () => Promise<void>,
+  shutdownTimeoutMs: number | undefined,
+  finish: () => void
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const deadline = shutdownDeadline(shutdownTimeoutMs)
+    const timer = setTimeout(() => {
+      reportWarning({
+        code: 'BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT',
+        text: `The telemetry flush did not finish within ${deadline} ms, so shutdown stopped waiting for it. Spans still queued may be lost. Raise shutdownTimeoutMs or check that the collector answers.`,
+        fields: { timeoutMs: deadline }
+      })
+      finish()
+      resolve()
+    }, deadline)
+    timer.unref()
+    new Promise<void>((started) => {
+      started(stopSdk())
+    })
+      .finally(() => {
+        clearTimeout(timer)
+        finish()
+      })
+      .then(resolve, reject)
+  })
+}
+
+/**
  * Creates the handle of a started SDK.
  *
  * Every caller of `shutdown` gets the one flush: a caller that arrives while it is pending waits for
@@ -129,45 +166,30 @@ export function createHandle(
 ): RunningHandle {
   let flush: Promise<void> | undefined
   let finished = false
-  const handle: RunningHandle = {
-    enabled: true,
-    get stopping() {
-      return flush !== undefined && !finished
-    },
-    shutdown: () => {
-      if (finished) {
-        return Promise.resolve()
-      }
-      flush ??= new Promise<void>((resolve, reject) => {
-        const deadline = shutdownDeadline(shutdownTimeoutMs)
-        const finish = (): void => {
-          finished = true
-          Reflect.set(globalThis, STOPPED_KEY, true)
-          if (currentHandle() === handle) {
-            Reflect.deleteProperty(globalThis, HANDLE_KEY)
-          }
-        }
-        const timer = setTimeout(() => {
-          reportWarning({
-            code: 'BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT',
-            text: `The telemetry flush did not finish within ${deadline} ms, so shutdown stopped waiting for it. Spans still queued may be lost. Raise shutdownTimeoutMs or check that the collector answers.`,
-            fields: { timeoutMs: deadline }
-          })
-          finish()
-          resolve()
-        }, deadline)
-        timer.unref()
-        new Promise<void>((started) => {
-          started(stopSdk())
-        })
-          .finally(() => {
-            clearTimeout(timer)
-            finish()
-          })
-          .then(resolve, reject)
-      })
-      return flush
+  // No prototype: a promise that resolves with the handle reads no `then` from the root prototype.
+  const handle = create(null) as {
+    enabled: boolean
+    stopping: boolean
+    shutdown: () => Promise<void>
+  }
+  defineProperty(handle, 'stopping', {
+    __proto__: null,
+    enumerable: true,
+    get: (): boolean => flush !== undefined && !finished
+  } as PropertyDescriptor)
+  handle.enabled = true
+  handle.shutdown = (): Promise<void> => {
+    if (finished) {
+      return Promise.resolve()
     }
+    flush ??= beginFlush(stopSdk, shutdownTimeoutMs, () => {
+      finished = true
+      Reflect.set(globalThis, STOPPED_KEY, true)
+      if (currentHandle() === handle) {
+        Reflect.deleteProperty(globalThis, HANDLE_KEY)
+      }
+    })
+    return flush
   }
   return handle
 }

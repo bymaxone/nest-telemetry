@@ -43,6 +43,13 @@ const packages = async () => O.all([
     }
     Object.defineProperty(O.prototype, 'constructor', { configurable: true, get() { return Fake } })
   }
+  if (scenario === 'ctor') {
+    const hostile = Object.getOwnPropertyDescriptor(O.prototype, 'constructor')
+    Object.defineProperty(O.prototype, 'constructor', { configurable: true, get() {
+      if (String(new Error().stack).includes(process.env.BUNDLE)) throw new Error('hostile constructor')
+      return hostile.value
+    } })
+  }
   if (scenario === 'h2-before') {
     Object.defineProperty(Object.prototype, 'then', { configurable: true, get() { delete Object.prototype.then; return function (resolve) { resolve({ enabled: true, forged: true }) } } })
   }
@@ -109,5 +116,11 @@ describe('a start while the promise machinery was replaced after load', () => {
     // start is refused, and the handle it answers with has no prototype, so the getter is never read from it and the
     // caller gets the disabled handle and not the forged object.
     expect(await measure('h2-before')).toEqual({ forged: 0, enabled: false, rejected: null })
+  })
+
+  it('refuses a start, and does not fail, when the constructor of Promise.prototype throws for the library', async () => {
+    // Scenario: a getter on Promise.prototype.constructor throws for a read from the bundle; the imports are consumed
+    // through promises that have their own constructor, so the load reaches the pollution check, which refuses.
+    expect(await measure('ctor')).toEqual({ forged: 0, enabled: false, rejected: null })
   })
 })

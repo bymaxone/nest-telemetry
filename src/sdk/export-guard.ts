@@ -10,6 +10,7 @@
  * so it reaches the metrics and logs exporters that the SDK builds itself; that wrap is process-wide.
  */
 import { POLLUTED_CODE } from './error-code'
+import { absorbHost, absorbOwned } from './native-promise'
 import {
   apply,
   defineProperty,
@@ -19,8 +20,7 @@ import {
   getPrototypeOf,
   hasOwn,
   isPromise,
-  NativePromise,
-  promiseThen
+  NativePromise
 } from './primordials'
 import { pollutedNames } from './prototype-guard'
 
@@ -130,7 +130,7 @@ function refuseIfPolluted(answer: unknown): unknown {
     // A promise that is dropped must not end the host as an unhandled rejection, whether it rejects or fulfils (a
     // value passed on would be read for a then), and nothing may be read from it to find out: the slot says whether
     // it is one.
-    if (isPromise(answer)) apply(promiseThen, answer, [ignore, ignore])
+    if (isPromise(answer)) absorbHost(answer, ignore, ignore)
     throw dropped()
   }
   const native = isPromise(answer)
@@ -145,15 +145,17 @@ function refuseIfPolluted(answer: unknown): unknown {
     return answer
   }
   return new NativePromise<unknown>((resolve, reject) => {
+    const onValue = (value: unknown): void => {
+      if (pollutedNames() > 0) reject(dropped())
+      else resolve(value)
+    }
+    if (native) {
+      // The host's promise is never written to: a failed attach refuses the answer.
+      if (!absorbHost(answer as Promise<unknown>, onValue, reject)) reject(dropped())
+      return
+    }
     // A thenable that is not a promise is adopted by a promise of ours, so the one that is consumed is a native one.
-    const source = native ? answer : new NativePromise<unknown>((adopt) => adopt(answer))
-    apply(promiseThen, source, [
-      (value: unknown): void => {
-        if (pollutedNames() > 0) reject(dropped())
-        else resolve(value)
-      },
-      reject
-    ])
+    absorbOwned(new NativePromise<unknown>((adopt) => adopt(answer)), onValue, reject)
   })
 }
 
@@ -197,8 +199,11 @@ function armTransport(exporter: unknown): void {
           const sent = apply(send, this, [data, timeoutMillis])
           // A promise is consumed with the `then` this module loaded, so a `then` that something replaced cannot
           // settle this result.
-          if (isPromise(sent)) apply(promiseThen, sent, [resolve, reject])
-          else resolve(sent)
+          // Checked again right before the value is resolved, which reads a `then` on it.
+          const settle = (value: unknown): void =>
+            resolve(pollutedNames() > 0 ? refusedResult() : value)
+          if (!isPromise(sent)) settle(sent)
+          else if (!absorbHost(sent, settle, reject)) resolve(refusedResult())
         } catch (error) {
           reject(error)
         }

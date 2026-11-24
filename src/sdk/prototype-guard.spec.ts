@@ -389,4 +389,30 @@ describe('the built-ins that the SDK calls on a decision path', () => {
       expect(pollutedNames()).toBe(0)
     }
   })
+
+  it('counts a changed constructor of Promise.prototype, and nothing once it is back', () => {
+    // Scenario: a then reads the constructor of the promise it is called on, so a getter or another function there
+    // is a change the guard refuses to export beside.
+    const original = Object.getOwnPropertyDescriptor(
+      Promise.prototype,
+      'constructor'
+    ) as PropertyDescriptor
+    const before = pollutedNames()
+    try {
+      Object.defineProperty(Promise.prototype, 'constructor', {
+        configurable: true,
+        get: () => Promise
+      })
+      expect(pollutedNames()).toBe(before + 1)
+      Object.defineProperty(Promise.prototype, 'constructor', {
+        configurable: true,
+        writable: true,
+        value: function Other() {}
+      })
+      expect(pollutedNames()).toBe(before + 1)
+    } finally {
+      Object.defineProperty(Promise.prototype, 'constructor', original)
+    }
+    expect(pollutedNames()).toBe(before)
+  })
 })

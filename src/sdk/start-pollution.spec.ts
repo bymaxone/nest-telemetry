@@ -82,6 +82,41 @@ describe('startTelemetry beside a polluted Object.prototype', () => {
     }
   })
 
+  it('hands out a handle that has no prototype, so resolving with it reads no then', async () => {
+    // Scenario: a promise that resolves with an object reads its `then` through the prototype chain, so the handle
+    // of a started SDK has no prototype to read one from.
+    const handle = await startTelemetry({ serviceName: 'api', env: {} })
+    expect(handle.enabled).toBe(true)
+    expect(Object.getPrototypeOf(handle)).toBeNull()
+  })
+
+  it('answers a later call with the disabled handle when a then is planted, and reads that then never', async () => {
+    // Scenario: a call that returns the running handle checks the process right before it resolves, so a self-erasing
+    // `then` planted on the root prototype is seen, and is not read for the value.
+    await startTelemetry({ serviceName: 'api', env: {} })
+    let reads = 0
+    let seen = -1
+    let handle: Awaited<ReturnType<typeof startTelemetry>> | undefined
+    Object.defineProperty(Object.prototype, 'then', {
+      configurable: true,
+      get() {
+        reads += 1
+        delete (Object.prototype as unknown as Record<string, unknown>)['then']
+        return (resolve: (value: unknown) => void): void => resolve({ forged: true })
+      }
+    })
+    try {
+      jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+      handle = await startTelemetry({ serviceName: 'api', env: {} })
+      seen = reads
+    } finally {
+      delete (Object.prototype as unknown as Record<string, unknown>)['then']
+    }
+    expect(seen).toBe(0)
+    expect((handle as { forged?: boolean } | undefined)?.forged).toBeUndefined()
+    expect(handle?.enabled).toBe(false)
+  })
+
   it('hands the warning an own, empty detail and an own ctor, so a planted one is not shown', async () => {
     // Scenario: process.emitWarning reads detail and ctor from the options it is given, which would inherit a
     // planted one and show it; the options of the refusal own both, undefined, so the warning carries the count only.

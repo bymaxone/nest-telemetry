@@ -18,15 +18,25 @@ heading here.
   `then` with a constructor that is put back could hand back a forged `NodeSDK` or forged headers while the checks
   passed. The decisions now consume native promises with the `then` the library read when it loaded, settle through
   a native promise from the intrinsic constructor, and check the process immediately before they settle. A `then` on
-  `Array.prototype` or `Function.prototype` counts as a pollution like one on `Object.prototype`. A refusal fails
-  closed: the disabled handle at start, a failed export at send.
+  `Array.prototype` or `Function.prototype`, and a changed `constructor` of `Promise.prototype`, which every `then`
+  reads for a species, count as a pollution like one on `Object.prototype`; a promise the library made gets its own
+  `constructor`, and a promise a host made is never written to. The handle of a started SDK has no prototype, and
+  the check is the last thing before a promise of the library resolves with a handle or a send result. A refusal
+  fails closed: the disabled handle at start, a failed export at send. The five package loads are not part of this
+  claim: see the first of the known limits.
 
 ### Known limits
 
+- The five packages are loaded by `import()`, and Node's module loader fills those promises through the live
+  `Promise.prototype.then`. A host that replaces `then`, swaps a module namespace and puts `then` back can have a
+  package of its own built; module resolution belongs to the host, which can also replace a module through loader
+  hooks or `require.cache`, so the library does not claim to close this route.
 - A host provider that resolves a plain object reads a `then` planted on `Object.prototype` itself, before the
   library sees the value; the library cannot close that from its side.
 - The OpenTelemetry and OTLP exporter internals read statics and `then` on their own, outside the decisions above.
 - A `then` that is planted and erased again between the check at entry and the settling is not seen.
+- When a host's own promise cannot be consumed because its `constructor` was replaced, the batch or answer is refused,
+  but that promise's own rejection, if it has one, stays unhandled.
 
 ### Planned for the next minor
 
