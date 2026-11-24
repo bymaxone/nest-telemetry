@@ -42,7 +42,7 @@ import {
   setPendingStart
 } from './handle'
 import type { RunningHandle } from './handle'
-import { absorbHost, absorbOwned } from './native-promise'
+import { absorbHost, absorbOwned, ownConstructor, resolvedPromise } from './native-promise'
 import { create, isPromise, NativePromise } from './primordials'
 import { pollutedNames } from './prototype-guard'
 import { createUrlQueryRedactor } from './redaction'
@@ -59,9 +59,9 @@ const RESTART_MESSAGE =
  * The handle of a boot that started nothing. It has no prototype, so a promise that resolves with it reads no `then`
  * from the root prototype, which is polluted when this is the answer to a refusal.
  */
-const DISABLED_HANDLE = create(null) as TelemetryHandle & { enabled: false }
+export const DISABLED_HANDLE = create(null) as TelemetryHandle & { enabled: false }
 DISABLED_HANDLE.enabled = false
-DISABLED_HANDLE.shutdown = (): Promise<void> => Promise.resolve()
+DISABLED_HANDLE.shutdown = (): Promise<void> => resolvedPromise()
 
 /**
  * Refuses to start beside a polluted `Object.prototype`: telemetry that cannot be trusted starts nothing and
@@ -90,13 +90,15 @@ function refusesPollution(): boolean {
  */
 export function startTelemetry(options: TelemetryOptions = {}): Promise<TelemetryHandle> {
   // No `async`: returning a handle from one reads a `then` on it, and a promise of ours answers only after a check.
-  return new NativePromise<TelemetryHandle>((resolve, reject) => {
-    try {
-      begin(options, resolve, reject)
-    } catch (error) {
-      reject(error)
-    }
-  })
+  return ownConstructor(
+    new NativePromise<TelemetryHandle>((resolve, reject) => {
+      try {
+        begin(options, resolve, reject)
+      } catch (error) {
+        reject(error)
+      }
+    })
+  )
 }
 
 /**

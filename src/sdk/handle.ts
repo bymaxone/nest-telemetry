@@ -6,7 +6,8 @@
  * other through the entry point. They share no module state, only `globalThis`, so the handle lives
  * there under a registry symbol that no application key can collide with.
  */
-import { create, defineProperty } from './primordials'
+import { absorbHost, absorbOwned, ownConstructor, resolvedPromise } from './native-promise'
+import { create, defineProperty, NativePromise } from './primordials'
 import type { TelemetryHandle } from './types'
 import { reportWarning } from './warning-sink'
 
@@ -119,27 +120,38 @@ function beginFlush(
   shutdownTimeoutMs: number | undefined,
   finish: () => void
 ): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    const deadline = shutdownDeadline(shutdownTimeoutMs)
-    const timer = setTimeout(() => {
-      reportWarning({
-        code: 'BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT',
-        text: `The telemetry flush did not finish within ${deadline} ms, so shutdown stopped waiting for it. Spans still queued may be lost. Raise shutdownTimeoutMs or check that the collector answers.`,
-        fields: { timeoutMs: deadline }
-      })
-      finish()
-      resolve()
-    }, deadline)
-    timer.unref()
-    new Promise<void>((started) => {
-      started(stopSdk())
-    })
-      .finally(() => {
+  return ownConstructor(
+    new NativePromise<void>((resolve, reject) => {
+      const deadline = shutdownDeadline(shutdownTimeoutMs)
+      const timer = setTimeout(() => {
+        reportWarning({
+          code: 'BYMAX_TELEMETRY_SHUTDOWN_TIMEOUT',
+          text: `The telemetry flush did not finish within ${deadline} ms, so shutdown stopped waiting for it. Spans still queued may be lost. Raise shutdownTimeoutMs or check that the collector answers.`,
+          fields: { timeoutMs: deadline }
+        })
+        finish()
+        resolve()
+      }, deadline)
+      timer.unref()
+      const stopped = (): void => {
         clearTimeout(timer)
         finish()
-      })
-      .then(resolve, reject)
-  })
+      }
+      absorbOwned(
+        new NativePromise<void>((started) => {
+          started(stopSdk())
+        }),
+        () => {
+          stopped()
+          resolve()
+        },
+        (reason) => {
+          stopped()
+          reject(reason)
+        }
+      )
+    })
+  )
 }
 
 /**
@@ -180,7 +192,7 @@ export function createHandle(
   handle.enabled = true
   handle.shutdown = (): Promise<void> => {
     if (finished) {
-      return Promise.resolve()
+      return resolvedPromise()
     }
     flush ??= beginFlush(stopSdk, shutdownTimeoutMs, () => {
       finished = true
@@ -203,9 +215,23 @@ export function createHandle(
  *
  * @returns A promise that resolves once buffered spans are exported.
  */
-export async function shutdownTelemetry(): Promise<void> {
-  // A start still loading the packages has no handle to drain yet. Wait for it, so the SDK it
-  // builds is stopped rather than left running; whether the start succeeded is its caller's concern.
-  await Promise.allSettled([pendingStart()])
-  await currentHandle()?.shutdown()
+export function shutdownTelemetry(): Promise<void> {
+  // No `async`: a caller awaits a promise that carries its own constructor, and nothing is read from a handle's promise.
+  return ownConstructor(
+    new NativePromise<void>((resolve, reject) => {
+      const drain = (): void => {
+        try {
+          const handle = currentHandle()
+          if (handle === undefined || !absorbHost(handle.shutdown(), () => resolve(), reject))
+            resolve()
+        } catch (error) {
+          reject(error)
+        }
+      }
+      const pending = pendingStart()
+      // A start still loading the packages has no handle to drain yet. Wait for it, so the SDK it builds is
+      // stopped rather than left running; whether the start succeeded is its caller's concern.
+      if (pending === undefined || !absorbHost(pending, drain, drain)) drain()
+    })
+  )
 }

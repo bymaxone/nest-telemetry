@@ -32,6 +32,34 @@ function whileConstructorThrows<T>(run: () => T): T {
   }
 }
 
+/**
+ * Waits for `promise` the way a native `await` does: the `then` of the engine is applied while
+ * `Promise.prototype.constructor` is a getter that throws, because that is when a caller reads the constructor of
+ * what the library handed back. The slot is restored at once, before anything else runs.
+ */
+function awaitedWhileConstructorThrows<T>(promise: Promise<T>): Promise<T> {
+  const original = Object.getOwnPropertyDescriptor(
+    Promise.prototype,
+    'constructor'
+  ) as PropertyDescriptor
+  const then = Promise.prototype.then
+  return new Promise<T>((resolve, reject) => {
+    Object.defineProperty(Promise.prototype, 'constructor', {
+      configurable: true,
+      get(): never {
+        throw new Error('hostile constructor')
+      }
+    })
+    try {
+      Reflect.apply(then, promise, [resolve, reject])
+    } catch (error) {
+      reject(error)
+    } finally {
+      Object.defineProperty(Promise.prototype, 'constructor', original)
+    }
+  })
+}
+
 beforeEach(() => {
   polluted.mockReset()
   polluted.mockReturnValue(0)
@@ -174,5 +202,22 @@ describe('the settling of a guarded send', () => {
     expect(() => whileConstructorThrows(provider)).toThrow(
       'Object.prototype or a built-in of this process was changed, so the batch was dropped.'
     )
+  })
+
+  it('hands back a send that the transport awaits after the constructor of promises was replaced', async () => {
+    // Scenario: the transport awaits the promise the guard returned, after the guard's last check; its own
+    // constructor ends the lookup, so the result arrives and the host's getter is never called.
+    const guarded = exporterSending(() => Promise.resolve({ status: 'success' }))
+    const answer = guarded.send('data', 1)
+    await expect(awaitedWhileConstructorThrows(answer)).resolves.toEqual({ status: 'success' })
+  })
+
+  it('hands back a provider answer that the transport awaits after the constructor was replaced', async () => {
+    // Scenario: the request awaits the headers the guarded provider returned for a thenable, under the replaced slot.
+    const guarded = exporterSending(() => ({ status: 'success' }), {
+      headers: () => ({ then: (resolve: (value: unknown) => void) => resolve({ a: '1' }) })
+    })
+    const answer = guarded._parameters['headers']?.() as Promise<unknown>
+    await expect(awaitedWhileConstructorThrows(answer)).resolves.toEqual({ a: '1' })
   })
 })

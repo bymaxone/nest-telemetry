@@ -8,7 +8,7 @@ import { register } from 'node:module'
 import { emitWarning } from '../sdk/emit-warning'
 import { readTelemetryEnvironment } from '../sdk/environment'
 import { describeFailure } from '../sdk/error-code'
-import { startTelemetry } from '../sdk/start'
+import { DISABLED_HANDLE, startTelemetry } from '../sdk/start'
 import type { TelemetryHandle, TelemetryOptions } from '../sdk/types'
 
 /** The loader hook that lets OpenTelemetry instrument native ES modules. */
@@ -84,7 +84,8 @@ async function startOrWarn(
       `Telemetry could not be started (${describeFailure(error)}), so the application continues without it.`,
       { type: 'Warning', code: 'BYMAX_TELEMETRY_START_FAILED' }
     )
-    return { enabled: false, shutdown: () => Promise.resolve() }
+    // The handle that has no prototype: an async function that returns an object reads a `then` from the root one.
+    return DISABLED_HANDLE
   }
 }
 

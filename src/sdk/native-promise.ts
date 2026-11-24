@@ -11,6 +11,37 @@
 import { apply, defineProperty, NativePromise, promiseThen } from './primordials'
 
 /**
+ * Gives a promise this library made an own `constructor`, so that a caller that awaits it, or a `then` called on it,
+ * ends the lookup on the intrinsic instead of on a `Promise.prototype.constructor` that something replaced. A
+ * promise that cannot take the property, a frozen one, is returned as it is.
+ *
+ * @param promise - A promise the library made, never a host's.
+ * @returns The same promise.
+ */
+export function ownConstructor<T>(promise: Promise<T>): Promise<T> {
+  try {
+    defineProperty(promise, 'constructor', {
+      __proto__: null,
+      value: NativePromise,
+      configurable: true,
+      writable: true
+    } as PropertyDescriptor)
+  } catch {
+    return promise
+  }
+  return promise
+}
+
+/**
+ * A promise that is already fulfilled, with an own `constructor`, built without a `Promise` static.
+ *
+ * @returns A fulfilled promise of the library's own.
+ */
+export function resolvedPromise(): Promise<void> {
+  return ownConstructor(new NativePromise<void>((resolve) => resolve()))
+}
+
+/**
  * Attaches handlers to a promise this library made, giving it an own `constructor` first.
  *
  * @param promise - A promise of the library's own, never a host's.
@@ -22,12 +53,7 @@ export function absorbOwned(
   onValue: (value: unknown) => void,
   onReason: (reason: unknown) => void
 ): void {
-  defineProperty(promise, 'constructor', {
-    __proto__: null,
-    value: NativePromise,
-    configurable: true,
-    writable: true
-  } as PropertyDescriptor)
+  ownConstructor(promise)
   apply(promiseThen, promise, [onValue, onReason])
 }
 

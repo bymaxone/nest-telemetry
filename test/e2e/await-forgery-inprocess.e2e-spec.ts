@@ -10,9 +10,12 @@ import { guardExports } from '../../src/sdk/export-guard'
 import {
   clearHandle,
   clearPendingStart,
+  createHandle,
   registerHandle,
-  setPendingStart
+  setPendingStart,
+  shutdownTelemetry
 } from '../../src/sdk/handle'
+import { ownConstructor } from '../../src/sdk/native-promise'
 import { startTelemetry } from '../../src/sdk/start'
 
 let sdkFails = false
@@ -298,5 +301,31 @@ describe('a guarded send and its providers beside a promise that cannot be consu
     } finally {
       delete (Object.prototype as unknown as Record<string, unknown>)['zzPlantedLate']
     }
+  })
+})
+
+describe('the promises the library returns on a failure', () => {
+  it('rejects the shutdown of a handle whose flush fails, with the reason of the failure', async () => {
+    // Scenario: the SDK fails to stop; the caller of the handle's shutdown sees the reason and nothing else.
+    const handle = createHandle(() => Promise.reject(new Error('flush failed')))
+    await expect(handle.shutdown()).rejects.toThrow('flush failed')
+  })
+
+  it('rejects the module-level shutdown when the registered handle throws', async () => {
+    // Scenario: a handle registered by another copy throws when asked to stop; the caller of the shutdown hears of it.
+    registerHandle({
+      enabled: true,
+      stopping: false,
+      shutdown: () => {
+        throw new Error('sync failure')
+      }
+    })
+    await expect(shutdownTelemetry()).rejects.toThrow('sync failure')
+  })
+
+  it('hands back a frozen promise as it is, without throwing', () => {
+    // Scenario: a promise that cannot take an own constructor is returned unchanged.
+    const frozen = Object.freeze(new Promise<void>(() => undefined))
+    expect(ownConstructor(frozen)).toBe(frozen)
   })
 })

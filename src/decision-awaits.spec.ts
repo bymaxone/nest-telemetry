@@ -14,20 +14,18 @@ import ts from 'typescript'
 type Exemption = { file: string; text: string; reason: string }
 
 /** The files whose waits are decisions: what is exported, and what a start builds. */
-const DECISION_FILES = ['sdk/start.ts', 'sdk/export-guard.ts', 'sdk/native-promise.ts'] as const
+const DECISION_FILES = [
+  'sdk/start.ts',
+  'sdk/export-guard.ts',
+  'sdk/native-promise.ts',
+  'sdk/handle.ts'
+] as const
 
 /** The constructions of a promise that are allowed, each from the captured intrinsic, with a reason. */
 const EXEMPT_CONSTRUCTIONS: Exemption[] = []
 
 /** The waits that are allowed, each with the reason it is not a decision. */
-const EXEMPT: readonly Exemption[] = [
-  {
-    file: 'sdk/start.ts',
-    text: 'Promise.resolve(…)',
-    reason:
-      'The shutdown of a handle that started nothing: an already resolved promise for the host.'
-  }
-]
+const EXEMPT: readonly Exemption[] = []
 
 /** A construction from the promise constructor captured when the library loaded: a swap to the global is caught. */
 const captured = (where: string, why: string): Exemption => ({
@@ -54,8 +52,24 @@ EXEMPT_CONSTRUCTIONS.push(
     'The adoption of a thenable that is not a promise, so the one that is consumed is a native one.'
   ),
   captured(
-    'sdk/export-guard.ts|armTransport',
+    'sdk/export-guard.ts|guardedSend',
     'The promise a guarded send answers with: the intrinsic captured at load, settled after a check.'
+  ),
+  captured(
+    'sdk/native-promise.ts|resolvedPromise',
+    'An already fulfilled promise built from the captured intrinsic, so no Promise static is read.'
+  ),
+  captured(
+    'sdk/handle.ts|beginFlush',
+    'The promise the flush answers with: the intrinsic captured at load, settled once the SDK stopped or the deadline passed.'
+  ),
+  captured(
+    'sdk/handle.ts|beginFlush',
+    'The promise that adopts what stopping the SDK returns, so the one that is consumed is a native one of ours.'
+  ),
+  captured(
+    'sdk/handle.ts|shutdownTelemetry',
+    'The promise a caller of the module-level shutdown awaits, from the captured intrinsic and tagged with its own constructor.'
   )
 )
 

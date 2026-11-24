@@ -10,7 +10,7 @@
  * so it reaches the metrics and logs exporters that the SDK builds itself; that wrap is process-wide.
  */
 import { POLLUTED_CODE } from './error-code'
-import { absorbHost, absorbOwned } from './native-promise'
+import { absorbHost, absorbOwned, ownConstructor } from './native-promise'
 import {
   apply,
   defineProperty,
@@ -144,19 +144,21 @@ function refuseIfPolluted(answer: unknown): unknown {
   ) {
     return answer
   }
-  return new NativePromise<unknown>((resolve, reject) => {
-    const onValue = (value: unknown): void => {
-      if (pollutedNames() > 0) reject(dropped())
-      else resolve(value)
-    }
-    if (native) {
-      // The host's promise is never written to: a failed attach refuses the answer.
-      if (!absorbHost(answer as Promise<unknown>, onValue, reject)) reject(dropped())
-      return
-    }
-    // A thenable that is not a promise is adopted by a promise of ours, so the one that is consumed is a native one.
-    absorbOwned(new NativePromise<unknown>((adopt) => adopt(answer)), onValue, reject)
-  })
+  return ownConstructor(
+    new NativePromise<unknown>((resolve, reject) => {
+      const onValue = (value: unknown): void => {
+        if (pollutedNames() > 0) reject(dropped())
+        else resolve(value)
+      }
+      if (native) {
+        // The host's promise is never written to: a failed attach refuses the answer.
+        if (!absorbHost(answer as Promise<unknown>, onValue, reject)) reject(dropped())
+        return
+      }
+      // A thenable that is not a promise is adopted by a promise of ours, so the one that is consumed is a native one.
+      absorbOwned(new NativePromise<unknown>((adopt) => adopt(answer)), onValue, reject)
+    })
+  )
 }
 
 /**
@@ -173,24 +175,19 @@ function refusedResult(): unknown {
 }
 
 /**
- * Guards every attempt of a transport: before the attempt starts, and again after the transport loaded what it
- * needs and before it reads its headers, metadata or credentials, and once more after they were read, so a name planted while an attempt waits, for
- * the first load or for a retry, is seen. An attempt that is refused sends nothing and is not retried.
+ * The `send` of a guarded transport: refuses while the process is polluted, and checks again right before it resolves.
  *
- * @param exporter - An OTLP exporter whose export is being made.
+ * @param send - The transport's own `send`.
+ * @returns The guarded one.
  */
-function armTransport(exporter: unknown): void {
-  const transport = innermostTransport(exporter)
-  if (transport === undefined || hasOwn(transport, ARMED)) return
-  const send = transport.send
-  defineProperty(transport, 'send', {
-    __proto__: null,
-    configurable: true,
-    writable: true,
-    value: function (this: unknown, data: unknown, timeoutMillis: unknown): Promise<unknown> {
-      // No `async`: returning from one resolves a promise with the value, which reads a `then` on it. The check comes
-      // last before the refused result is resolved, and the result has no prototype to read one from.
-      return new NativePromise<unknown>((resolve, reject) => {
+function guardedSend(
+  send: Transport['send']
+): (this: unknown, data: unknown, timeoutMillis: unknown) => Promise<unknown> {
+  return function (this: unknown, data: unknown, timeoutMillis: unknown): Promise<unknown> {
+    // No `async`: returning from one resolves a promise with the value, which reads a `then` on it. The check comes
+    // last before the refused result is resolved, and the result has no prototype to read one from.
+    return ownConstructor(
+      new NativePromise<unknown>((resolve, reject) => {
         if (pollutedNames() > 0) {
           resolve(refusedResult())
           return
@@ -208,7 +205,26 @@ function armTransport(exporter: unknown): void {
           reject(error)
         }
       })
-    }
+    )
+  }
+}
+
+/**
+ * Guards every attempt of a transport: before the attempt starts, and again after the transport loaded what it
+ * needs and before it reads its headers, metadata or credentials, and once more after they were read, so a name planted while an attempt waits, for
+ * the first load or for a retry, is seen. An attempt that is refused sends nothing and is not retried.
+ *
+ * @param exporter - An OTLP exporter whose export is being made.
+ */
+function armTransport(exporter: unknown): void {
+  const transport = innermostTransport(exporter)
+  if (transport === undefined || hasOwn(transport, ARMED)) return
+  const send = transport.send
+  defineProperty(transport, 'send', {
+    __proto__: null,
+    configurable: true,
+    writable: true,
+    value: guardedSend(send)
   } as PropertyDescriptor)
   const parameters = own(transport, '_parameters') as Record<string, unknown> | undefined
   for (let at = 0; at < PROVIDERS.length; at += 1) {
