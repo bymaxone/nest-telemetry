@@ -514,4 +514,26 @@ describe('Promise[Symbol.species] in the baseline', () => {
     expect(counted.every((count) => count > 0)).toBe(true)
     expect(pollutedNames()).toBe(0)
   })
+
+  it('counts a data species beside an Object.prototype.get that names the original getter', () => {
+    // Scenario: the slot became data holding a fake constructor while `Object.prototype.get` names the real getter, so
+    // a `get` read through the chain would match; the data slot still differs from the fresh realm's accessor through
+    // its own `value`, and counts. The own-only read itself is held by the test of a getter planted under a field name.
+    const original = species.get as () => unknown
+    let counted = 0
+    try {
+      Object.defineProperty(Object.prototype, 'get', { configurable: true, value: original })
+      Object.defineProperty(Promise, Symbol.species, {
+        __proto__: null,
+        configurable: true,
+        value: Object
+      } as PropertyDescriptor)
+      counted = pollutedNames()
+    } finally {
+      Object.defineProperty(Promise, Symbol.species, species)
+      Reflect.deleteProperty(Object.prototype, 'get')
+    }
+    expect(counted).toBeGreaterThan(0)
+    expect(pollutedNames()).toBe(0)
+  })
 })

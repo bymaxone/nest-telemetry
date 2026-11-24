@@ -45,6 +45,8 @@ heading here.
 - When a host's own promise cannot be consumed, because its `constructor` was replaced by something that throws or
   names a `Symbol.species` that throws, the batch or answer is refused, but that promise's own rejection, if it has
   one, stays unhandled: the library never writes to a promise a host made, so it cannot take the reaction first.
+- A `Promise[Symbol.species]` getter that erases itself inside a third-party call is not observable: the realm checks
+  compare the accessor before and after, and a dependency's own `then` reads it in between.
 - When `Promise.prototype.constructor` was deleted before the library loaded, the start is refused as polluted, and the
   promise it answers with comes from a fresh realm: `instanceof Promise` is `false` for it, while `await` and `.then`
   work as usual. This happens only on that refused path.
