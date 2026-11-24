@@ -34,7 +34,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
-//   - 2026-11-24 (register only, PM grant 2026-11-24 (16b.17(f) boot.ts:51 pin), owner standing rule, at the measured
+//   - 2026-11-24 (register only, PM grant 2026-11-24, owner standing rule, at the measured
 //     size plus 30 B, rounded down in the KiB column): register 12,743 B measured, 12.47 KiB budget (12,769 B, 26 B of
 //     headroom). The growth over the 12,706 B of the entry below, 37 B, is the start of the preload answering through a promise of its own.
 //   - 2026-11-24 (every bundle but the register CommonJS stub, at the measured size plus 30 B, rounded down in the KiB
