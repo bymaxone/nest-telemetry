@@ -34,6 +34,10 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
+//   - 2026-11-24 (sdk ESM only, PM grant 2026-11-24, owner standing rule, at the measured size plus 30 B, rounded down in
+//     the KiB column): sdk 12,611 B measured, 12.34 KiB budget (12,636 B, 25 B of headroom). The growth over the 12,605 B
+//     of the 12.31 KiB budget is the `!==` that replaced `<` in seven loops, which removed eight Stryker directives; the
+//     register and the CommonJS budgets still hold and are unchanged.
 //   - 2026-11-24 (register only, PM grant 2026-11-24, owner standing rule, at the measured
 //     size plus 30 B, rounded down in the KiB column): register 12,743 B measured, 12.47 KiB budget (12,769 B, 26 B of
 //     headroom). The growth over the 12,706 B of the entry below, 37 B, is the start of the preload answering through a promise of its own.
@@ -206,7 +210,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
 //   met by shortening the text of a warning.
 const BUDGETS = [
-  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 12.31 * 1024 },
+  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 12.34 * 1024 },
   { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 12.47 * 1024 },
   { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.79 * 1024 },
   { name: 'observability (metrics)', path: 'dist/observability/index.mjs', brotli: 0.89 * 1024 },

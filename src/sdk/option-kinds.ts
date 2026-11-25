@@ -63,8 +63,7 @@ const isIndex = (key: string): boolean =>
  */
 function hasIndexKey(list: object): boolean {
   const own = keys(list)
-  const count = own.length
-  for (let at = 0; at !== count; at += 1) {
+  for (let at = 0; at !== own.length; at += 1) {
     if (isIndex(own[at] as string)) return true
   }
   return false
