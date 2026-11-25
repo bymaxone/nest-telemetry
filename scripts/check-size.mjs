@@ -36,8 +36,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 // Calibration history (newest first):
 //   - 2026-11-24 (sdk ESM only, PM grant 2026-11-24, owner standing rule, at the measured size plus 30 B, rounded down in
 //     the KiB column): sdk 12,611 B measured, 12.34 KiB budget (12,636 B, 25 B of headroom). The growth over the 12,605 B
-//     of the 12.31 KiB budget is the `!==` that replaced `<` in seven loops, which removed eight Stryker directives; the
-//     register and the CommonJS budgets still hold and are unchanged.
+//     of the 12.31 KiB budget is the `!==` that replaced `<` in seven loops; the register and the CommonJS budgets
+//     still hold and are unchanged.
 //   - 2026-11-24 (register only, PM grant 2026-11-24, owner standing rule, at the measured
 //     size plus 30 B, rounded down in the KiB column): register 12,743 B measured, 12.47 KiB budget (12,769 B, 26 B of
 //     headroom). The growth over the 12,706 B of the entry below, 37 B, is the start of the preload answering through a promise of its own.

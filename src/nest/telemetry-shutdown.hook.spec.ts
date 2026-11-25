@@ -5,7 +5,9 @@
  */
 import 'reflect-metadata'
 
-import { Logger } from '@nestjs/common'
+import { Logger, Module } from '@nestjs/common'
+import { ModuleRef } from '@nestjs/core'
+import { Test } from '@nestjs/testing'
 
 import { clearHandle, createHandle, registerHandle } from '../sdk/handle'
 import { clearWarningSink, reportWarning } from '../sdk/warning-sink'
@@ -435,5 +437,33 @@ describe('an asynchronous structured logger that rejects', () => {
     reportWarning(EXPORT)
     await settle()
     expect(unhandled).not.toHaveBeenCalled()
+  })
+})
+
+describe('a structured logger bound in a sibling module of a real Nest container', () => {
+  it('receives the failed flush, though the hook lives in a module that does not import it', async () => {
+    // Scenario: the application binds TELEMETRY_LOGGER in its own non-global module. The hook's
+    // module reference defaults to the hook's own module, so only a lookup across modules finds it.
+    const logger = { errorStructured: jest.fn() }
+    @Module({ providers: [{ provide: TELEMETRY_LOGGER, useValue: logger }] })
+    class LoggerModule {}
+    @Module({
+      providers: [
+        {
+          provide: TelemetryShutdownHook,
+          useFactory: (ref: ModuleRef): TelemetryShutdownHook => new TelemetryShutdownHook(ref),
+          inject: [ModuleRef]
+        }
+      ]
+    })
+    class HookModule {}
+    const container = await Test.createTestingModule({
+      imports: [LoggerModule, HookModule]
+    }).compile()
+    const failure = new Error('collector refused')
+    registerHandle(createHandle(() => Promise.reject(failure)))
+    await container.get(TelemetryShutdownHook).onApplicationShutdown()
+    expect(logger.errorStructured).toHaveBeenCalledWith('TRACING_FLUSH_FAILED', failure)
+    await container.close()
   })
 })

@@ -108,6 +108,12 @@ describe('createHandle', () => {
     expect(handle.stopping).toBe(false)
   })
 
+  it('lists stopping among its own keys, so a spread or a JSON copy of the handle carries it', () => {
+    // Scenario: a host copies the handle with a spread; a hidden `stopping` would be lost.
+    const handle = createHandle(() => Promise.resolve())
+    expect(Object.keys(handle).sort()).toEqual(['enabled', 'shutdown', 'stopping'])
+  })
+
   it('stops the SDK once however often shutdown is called in sequence', async () => {
     // Scenario: a repeated signal makes a second shutdown after the first settled.
     const stop = jest.fn(() => Promise.resolve())
