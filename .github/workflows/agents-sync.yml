@@ -27,7 +27,7 @@ jobs:
     # Pinned to a release commit, unlike the other first-party reusables, which use the `@v1` alias:
     # this one is handed the sync App's private key, so what runs with it is a reviewed commit and not
     # a tag that moves (the exception the shared block in AGENTS.md states).
-    uses: bymaxone/.github/.github/workflows/agents-sync.yml@7339966397283327fe69cb964ab6532351cdff78 # v1.12.5
+    uses: bymaxone/.github/.github/workflows/agents-sync.yml@dab24c222938a760d09e3f5f312cb5ffb1620cc5 # v1.12.9
     permissions:
       contents: write
       pull-requests: write
