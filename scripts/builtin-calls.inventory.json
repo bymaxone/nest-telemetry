@@ -13,6 +13,11 @@
     "class": "inert",
     "reason": "Wrapper-prone, so not in the guard's table: it only sequences the start or the shutdown, or builds a resolved promise, and decides nothing about what is exported or redacted; the export decision awaits native promises and reads no then."
   },
+  "src/observability/telemetry-metrics.ts|static|Math.max": {
+    "count": 1,
+    "class": "inert",
+    "reason": "Only picks the amount a scrape adds to the failed-export counter; the result reaches one metric sample and decides nothing about what is exported, redacted or started."
+  },
   "src/register/boot.ts|static|Promise.allSettled": {
     "count": 1,
     "class": "inert",

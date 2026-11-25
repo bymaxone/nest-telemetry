@@ -4,7 +4,7 @@
  * @layer nest
  */
 import { BYMAX_METRICS_CONTRIBUTOR_METADATA } from '@bymax-one/nest-core/metrics'
-import { Registry } from 'prom-client'
+import { Counter, Registry } from 'prom-client'
 
 import { warnOnExportFailure } from '../sdk/export-failure'
 import type { ObservableExporter } from '../sdk/export-failure'
@@ -86,6 +86,29 @@ describe('TelemetryMetrics', () => {
     expect(await sample(registry)).toBe(`${NAME} 3`)
     failExports(1)
     expect(await sample(registry)).toBe(`${NAME} 4`)
+  })
+
+  it('leaves the scrape text byte for byte as a counter that was never incremented, and as the scrape before', async () => {
+    // Scenario: a scrape with nothing new adds 0; prom-client must show the same text as a counter nobody
+    // touched on the first scrape, the same text as the scrape before when no failure came, and the same
+    // text again when the count went back.
+    const registry = new Registry()
+    new TelemetryMetrics().registerMetrics(registry)
+    const untouched = new Registry()
+    new Counter({
+      name: NAME,
+      help: 'Span export batches the collector did not accept, so the batch was dropped.',
+      registers: [untouched]
+    })
+    const first = await registry.metrics()
+    expect(first).toBe(await untouched.metrics())
+    expect(await registry.metrics()).toBe(first)
+    failExports(2)
+    const after = await registry.metrics()
+    expect(after).not.toBe(first)
+    expect(await registry.metrics()).toBe(after)
+    Reflect.deleteProperty(globalThis, COUNT_KEY)
+    expect(await registry.metrics()).toBe(after)
   })
 
   it('publishes only this one metric', async () => {

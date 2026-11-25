@@ -63,8 +63,8 @@ const isIndex = (key: string): boolean =>
  */
 function hasIndexKey(list: object): boolean {
   const own = keys(list)
-  // Stryker disable next-line EqualityOperator: one step past the end reads `undefined`, which `isIndex` rejects, so the result is the same
-  for (let at = 0; at < own.length; at += 1) {
+  const count = own.length
+  for (let at = 0; at !== count; at += 1) {
     if (isIndex(own[at] as string)) return true
   }
   return false
@@ -435,8 +435,7 @@ function holdsSetting(holder: object): boolean {
 function refuseAncestorKeys(path: string, value: object): void {
   if (isProxy(value)) return
   let holder: object | null = getPrototypeOf(value)
-  // Stryker disable next-line EqualityOperator: requireObject refuses a chain of MAX_CHAIN prototypes before this walk starts, so the walk never reaches the hop that the bound would add.
-  for (let hops = 0; holder !== null && hops < MAX_CHAIN; hops++) {
+  for (let hops = 0; holder !== null && hops !== MAX_CHAIN; hops++) {
     if (holder !== rootPrototype && holdsSetting(holder)) {
       throw new TelemetryOptionError(path, 'set on the object itself, not on a prototype')
     }

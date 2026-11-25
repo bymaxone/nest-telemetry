@@ -124,8 +124,8 @@ function describeAll(objects: readonly object[]): Record<number, Descriptors> {
   for (let at = 0; at < GUARDED_BUILTINS.length; at += 1) {
     const names = (GUARDED_BUILTINS[at] as GuardedRow)[1]
     const row = create(null) as Descriptors
-    // Stryker disable next-line EqualityOperator: one step past the row reads a name that no guarded object owns, so no descriptor is kept and nothing changes.
-    for (let each = 0; each < names.length; each += 1) {
+    const count = names.length
+    for (let each = 0; each !== count; each += 1) {
       const name = names[each] as string | symbol
       const descriptor = getOwnPropertyDescriptor(objects[at] as object, name)
       if (descriptor !== undefined) row[name] = descriptor
@@ -242,15 +242,15 @@ function unchanged(
   const now = hasOwn(have, name) ? have[name] : undefined
   const was = hasOwn(want, name) ? want[name] : undefined
   if (field(now, 'enumerable') !== field(was, 'enumerable')) return false
-  // Stryker disable next-line EqualityOperator: one step past the table reads a flag named undefined, which a descriptor never owns, so nothing changes.
-  for (let at = 0; at < FLAGS.length; at += 1) {
+  const flagCount = FLAGS.length
+  for (let at = 0; at !== flagCount; at += 1) {
     const flag = FLAGS[at] as (typeof FLAGS)[number]
     // A flag tighter than the engine's, a frozen realm, is safe; a looser one is not.
     if (field(now, flag) === true && field(was, flag) !== true) return false
   }
   const met = hasOwn(loaded, name) ? loaded[name] : undefined
-  // Stryker disable next-line EqualityOperator: one step past the table reads a field named undefined, which a descriptor never owns, so nothing changes.
-  for (let at = 0; at < CONTENT.length; at += 1) {
+  const contentCount = CONTENT.length
+  for (let at = 0; at !== contentCount; at += 1) {
     const key = CONTENT[at] as (typeof CONTENT)[number]
     if (!alike(field(now, key), field(was, key), sourceOf)) return false
     // And it is the function this module met, not another native one put in its place.
@@ -288,8 +288,8 @@ export function pollutedNames(): number {
     }
   }
   const fresh = ownKeys(descriptors)
-  // Stryker disable next-line EqualityOperator: one step past the fresh names looks up a name that is not there, which is the same on both sides, so it is never counted.
-  for (let at = 0; at < fresh.length; at += 1) {
+  const freshCount = fresh.length
+  for (let at = 0; at !== freshCount; at += 1) {
     const name = fresh[at] as string | symbol
     if (seen[name] !== true) {
       seen[name] = true
@@ -360,8 +360,8 @@ function changedBuiltins(
     const now = describeAll(readBuiltins())
     for (let at = 0; at < GUARDED_BUILTINS.length; at += 1) {
       const names = (GUARDED_BUILTINS[at] as GuardedRow)[1]
-      // Stryker disable next-line EqualityOperator: one step past the row compares a name that neither realm owns, so it is the same on both sides and nothing is counted.
-      for (let each = 0; each < names.length; each += 1) {
+      const count = names.length
+      for (let each = 0; each !== count; each += 1) {
         const name = names[each] as string | symbol
         const same = unchanged(
           name,
