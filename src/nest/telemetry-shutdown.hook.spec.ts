@@ -460,10 +460,13 @@ describe('a structured logger bound in a sibling module of a real Nest container
     const container = await Test.createTestingModule({
       imports: [LoggerModule, HookModule]
     }).compile()
-    const failure = new Error('collector refused')
-    registerHandle(createHandle(() => Promise.reject(failure)))
-    await container.get(TelemetryShutdownHook).onApplicationShutdown()
-    expect(logger.errorStructured).toHaveBeenCalledWith('TRACING_FLUSH_FAILED', failure)
-    await container.close()
+    try {
+      const failure = new Error('collector refused')
+      registerHandle(createHandle(() => Promise.reject(failure)))
+      await container.get(TelemetryShutdownHook).onApplicationShutdown()
+      expect(logger.errorStructured).toHaveBeenCalledWith('TRACING_FLUSH_FAILED', failure)
+    } finally {
+      await container.close()
+    }
   })
 })
