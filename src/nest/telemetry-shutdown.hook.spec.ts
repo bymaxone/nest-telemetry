@@ -144,7 +144,7 @@ describe('TelemetryShutdownHook', () => {
       registerHandle(createHandle(() => Promise.reject(failure)))
       await new TelemetryShutdownHook(moduleRef()).onApplicationShutdown()
       expect(error).toHaveBeenCalledTimes(1)
-      // The message is the text the entry had before it became an object, word for word.
+      // The message is pinned word for word: an alert may match any part of its text.
       expect(error).toHaveBeenCalledWith({
         event: 'TELEMETRY_FLUSH_FAILED',
         message:
