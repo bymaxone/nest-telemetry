@@ -34,6 +34,9 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
+//   - 2026-11-26 (nest only, PM grant of the same day, at the measured size plus 30 B): nest 2,862 B measured, 2,892 B
+//     budget, written as 2.825 KiB. The growth is the object entry, with its `event` and `code` fields, that the Nest
+//     logger gets for a failed flush.
 //   - 2026-11-24 (sdk ESM only, PM grant 2026-11-24, owner standing rule, at the measured size plus 30 B, rounded down in
 //     the KiB column): sdk 12,611 B measured, 12.34 KiB budget (12,636 B, 25 B of headroom). The growth over the 12,605 B
 //     of the 12.31 KiB budget is the `!==` that replaced `<` in seven loops; the register and the CommonJS budgets
@@ -207,9 +210,6 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //     instead of the error's message and stack (about 0.1 KiB: the code reader and the longer text), and
 //     the absorbed promise of an asynchronous logger (about 0.04 KiB), with the fallback report when it rejects
 //     (about 0.17 KiB: the Nest logger entry as its own method, the process warning and the absorbing catch).
-//   - 2026-11-26 (nest only, PM grant of the same day, at the measured size plus 30 B): nest 2,862 B measured, 2,892 B
-//     budget, written as 2.825 KiB. The growth is the object entry, with its `event` and `code` fields, that the Nest
-//     logger gets for a failed flush.
 //   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
 //   met by shortening the text of a warning.
 const BUDGETS = [
