@@ -127,6 +127,14 @@ describe('the hook the instrumentation is configured with', () => {
           throw new Error('broken')
         }
       })
+    ],
+    [
+      'a thenable whose then is async and rejects',
+      () => ({
+        async then(): Promise<never> {
+          throw new Error('rejected')
+        }
+      })
     ]
   ])('does not ignore for %s, and reports the first only', (_kind, answer) => {
     // Scenario: every kind of thenable counts as "not ignored".
