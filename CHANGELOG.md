@@ -19,9 +19,9 @@ heading here.
   `[object Object]`, so update it first. The `TELEMETRY_LOGGER` calls are unchanged.
 - **An `ignoreIncomingRequest` that returns a promise no longer ignores the request.** The HTTP instrumentation
   read the promise itself as `true`, so an `async` hook dropped every server span whatever it resolved with, and
-  one that rejected ended the process. A promise or another thenable now counts as "not ignored", its rejection
-  is absorbed, and the first one emits the `BYMAX_TELEMETRY_IGNORE_HOOK_ASYNC` warning. A synchronous hook
-  behaves as before.
+  one that rejected ended the process by default. A promise or another thenable now counts as "not ignored", its
+  rejection is absorbed, and the first one emits the `BYMAX_TELEMETRY_IGNORE_HOOK_ASYNC` warning. A synchronous
+  hook behaves as before.
 
 ### Added
 
