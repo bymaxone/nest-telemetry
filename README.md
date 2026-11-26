@@ -457,8 +457,25 @@ pnpm check:runtime     # packed-tarball consumer proofs
 | `UnsafeOptions`                 | type                                                       | The literal-`true` redaction opt-outs                                                                                                                         |
 | `InstrumentationOptions`        | type                                                       | `fs`, `sendLogs` and `overrides`                                                                                                                              |
 | `IncomingRequestTarget`         | type                                                       | What an incoming-request predicate sees: the request `url`                                                                                                    |
+| `TelemetryOptionError`          | type                                                       | The error of a refused option: an `Error` with the `code` `BYMAX_TELEMETRY_OPTION_INVALID` and the refused `option`                                           |
 
 `ignorePaths` throws, when it is called, an error whose `code` is `BYMAX_TELEMETRY_OPTION_INVALID` and whose `option` is `ignorePaths patterns` for anything that is not an array of at most 1000 regular expressions, and the error that an unreadable list raised is its `cause`, which can hold text of the host's own value where the message never does. It copies the array by index and each pattern without its `g` and `y` flags, which would keep state between calls. Anchor the patterns at both ends, with no nested quantifiers: an unanchored one also matches routes that merely contain the word, and `/^\/(a+)+$/` took 2.5 s and 5.5 s in two runs on a 28-character path (as of 2026-11-13, not a test; the tests pin the refusal of a path over 2,048 characters), and the time grows exponentially with the length.
+
+`TelemetryOptionError` is a type and not a class the package exports, so recognize the error by its `code` and not with `instanceof`:
+
+```ts
+import { startTelemetry, type TelemetryOptionError } from '@bymax-one/nest-telemetry'
+
+const isOptionError = (error: unknown): error is TelemetryOptionError =>
+  error instanceof Error && 'code' in error && error.code === 'BYMAX_TELEMETRY_OPTION_INVALID'
+
+try {
+  await startTelemetry({ serviceName: 'my-service' })
+} catch (error) {
+  if (!isOptionError(error)) throw error
+  console.error(`The ${error.option} option was refused`)
+}
+```
 
 ### Register: `@bymax-one/nest-telemetry/register`
 

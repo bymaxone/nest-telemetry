@@ -18,10 +18,16 @@ heading here.
   string must accept an object. `@bymax-one/nest-logger` before 1.4.23 writes an object message as
   `[object Object]`, so update it first. The `TELEMETRY_LOGGER` calls are unchanged.
 
-### Planned for the next minor
+### Added
 
-- **Export the option error class** with `code` and `option` typed in the declarations, so a host can test for
-  it. It is a public addition, so it waits for a minor release.
+- **The type of the option error, `TelemetryOptionError`.** It is the error `startTelemetry` rejects with, and
+  `ignorePaths` throws, for an option of the wrong kind: an `Error` whose `code` is
+  `BYMAX_TELEMETRY_OPTION_INVALID` and whose `option` is a string. It is a type only, so nothing changes at run
+  time and there is no class to use with `instanceof`: test the `code`.
+
+### Apply to a derived backend
+
+This type needs no change. A cast or a local interface written for this error can be replaced with the exported type.
 
 ## [1.0.13] - 2026-11-24
 

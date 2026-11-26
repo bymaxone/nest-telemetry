@@ -11,6 +11,18 @@ export interface IncomingRequestTarget {
 }
 
 /**
+ * The error `startTelemetry` rejects with, and `ignorePaths` throws, for an option of the wrong kind.
+ * It is a type only: the package exports no class, so test an error by its `code`, not with
+ * `instanceof`.
+ */
+export interface TelemetryOptionError extends Error {
+  /** The stable code of this error. */
+  readonly code: 'BYMAX_TELEMETRY_OPTION_INVALID'
+  /** The option that was refused, as the host wrote it. */
+  readonly option: string
+}
+
+/**
  * Switches that turn a redaction off. Each one is a literal `true`, so turning redaction off is
  * always an explicit, greppable act, and each one emits a process warning at boot.
  */

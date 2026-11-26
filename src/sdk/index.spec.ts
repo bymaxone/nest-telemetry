@@ -5,6 +5,8 @@
  */
 import * as entry from './index'
 
+import type { TelemetryOptionError } from './index'
+
 describe('sdk entry point', () => {
   it('exposes exactly the public runtime API', () => {
     // Scenario: the barrel is loaded the way a consumer loads it; its export list is the public
@@ -23,5 +25,24 @@ describe('sdk entry point', () => {
     expect(entry.DEFAULT_REDACTED_QUERY_PARAMS).toContain('token')
     expect(typeof entry.startTelemetry).toBe('function')
     expect(typeof entry.shutdownTelemetry).toBe('function')
+  })
+
+  it('types the error of a refused option, so a host reads its code and option', () => {
+    // Scenario: a host recognizes the thrown error by its `code`, with no class to compare against,
+    // and the declared type gives it `code` and `option`.
+    const caught = ((): unknown => {
+      try {
+        entry.ignorePaths('/health' as unknown as RegExp[])
+        return undefined
+      } catch (error) {
+        return error
+      }
+    })()
+    const refused = caught as TelemetryOptionError
+    const code: 'BYMAX_TELEMETRY_OPTION_INVALID' = refused.code
+    const option: string = refused.option
+    expect(refused).toBeInstanceOf(Error)
+    expect(code).toBe('BYMAX_TELEMETRY_OPTION_INVALID')
+    expect(option).toBe('ignorePaths patterns')
   })
 })

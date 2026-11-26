@@ -24,6 +24,7 @@ import {
   toNumber,
   toText
 } from './primordials'
+import type { TelemetryOptionError as OptionError } from './types'
 
 /** The kinds that Node tells apart and that never hold the settings of a host. */
 const BRANDS = [
@@ -73,7 +74,7 @@ function hasIndexKey(list: object): boolean {
 export const MAX_OPTION_ENTRIES = 1000
 
 /** The error a start rejects with when an option has the wrong kind. */
-export class TelemetryOptionError extends Error {
+export class TelemetryOptionError extends Error implements OptionError {
   /** The stable code of this error. */
   readonly code = 'BYMAX_TELEMETRY_OPTION_INVALID'
   /** The option that was refused, as the host wrote it. */
