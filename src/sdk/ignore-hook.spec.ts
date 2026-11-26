@@ -108,6 +108,22 @@ describe('guardIgnoreHook', () => {
     expect(codes(emitWarning)).toEqual([CODE])
   })
 
+  type Settle = (value: unknown) => void
+
+  it.each<[string, (onValue: Settle, onReason: Settle) => unknown]>([
+    ['returns from its then', () => Promise.reject(new Error('returned'))],
+    ['resolves with', (onValue) => onValue(Promise.reject(new Error('resolved')))],
+    ['rejects with', (_onValue, onReason) => onReason(Promise.reject(new Error('reason')))]
+  ])('takes the rejection of a promise that a thenable %s', async (_how, then) => {
+    // Scenario: the thenable only does this because the guard called its then, so the guard takes it.
+    const unhandled = jest.fn()
+    process.on('unhandledRejection', unhandled)
+    expect(guardIgnoreHook(() => ({ then }))(request)).toBe(false)
+    await new Promise((resolve) => setImmediate(resolve))
+    process.off('unhandledRejection', unhandled)
+    expect(unhandled).not.toHaveBeenCalled()
+  })
+
   it('does not ignore the request when the then of a thenable throws', () => {
     // Scenario: a broken thenable must not turn into an exception of the hook.
     const answer = {

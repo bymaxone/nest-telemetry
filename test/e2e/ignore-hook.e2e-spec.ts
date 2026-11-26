@@ -22,7 +22,8 @@ const SCRIPT = `
 const hooks = {
   sync: () => true,
   rejects: async () => { throw new Error('HOOK-SECRET') },
-  resolvesTrue: async () => true
+  resolvesTrue: async () => true,
+  asyncThen: () => ({ async then() { throw new Error('HOOK-SECRET') } })
 }
 const codes = []
 process.on('warning', (warning) => codes.push(warning.code))
@@ -149,7 +150,8 @@ describe('an ignoreIncomingRequest on real requests', () => {
   it.each([
     ['sync', false, 0],
     ['rejects', true, 1],
-    ['resolvesTrue', true, 1]
+    ['resolvesTrue', true, 1],
+    ['asyncThen', true, 1]
   ])(
     'with a %s hook keeps the process and serves the requests',
     async (hook, serverSpans, warnings) => {

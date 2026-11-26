@@ -7,8 +7,14 @@ import { absorbHost, ignore } from './native-promise'
 import { apply, isPromise } from './primordials'
 import { reportWarning } from './warning-sink'
 
+/** Takes the rejection of a value that is itself a promise; anything else is left alone. */
+function absorbPromise(value: unknown): void {
+  if (isPromise(value)) absorbHost(value, ignore, ignore)
+}
+
 /**
- * Takes the rejection of an answer that is a promise or another thenable.
+ * Takes the rejection of an answer that is a promise or another thenable. Calling the `then` of a
+ * thenable can make promises of its own, so what it returns and what it settles with are taken too.
  *
  * @param answer - What the hook returned.
  * @returns Whether it was one. Nothing is read from a primitive, so a `then` on a root prototype of
@@ -23,7 +29,7 @@ function absorbThenable(answer: unknown): boolean {
   const then = (answer as { readonly then?: unknown }).then
   if (typeof then !== 'function') return false
   try {
-    apply(then, answer, [ignore, ignore])
+    absorbPromise(apply(then, answer, [absorbPromise, absorbPromise]))
   } catch {
     // A `then` that throws has nothing left to reject.
   }
