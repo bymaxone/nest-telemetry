@@ -77,6 +77,14 @@ Before starting: read CLAUDE.md. Before finishing:
 
 ---
 
+## 9. Release Authorization
+
+For releases, the project manager's GO with the full commit SHA is the maintainer's decision on
+version number, merge, tag and publish (owner standing order, 2026-11-26). The order covers nothing
+else. A release GO also names the version; do not act on one that omits the version or the full SHA.
+
+---
+
 ## 10. Code Review Rules
 
 <!-- shared:begin -->
