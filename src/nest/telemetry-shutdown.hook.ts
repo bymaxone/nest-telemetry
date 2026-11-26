@@ -188,9 +188,12 @@ export class TelemetryShutdownHook implements OnApplicationShutdown, OnModuleIni
     try {
       // Library text only: the failure of an exporter can carry an endpoint with credentials, in its
       // message and in the first line of its stack, so neither is written. A short code names it.
-      new Logger('Telemetry').error(
-        `${TELEMETRY_FLUSH_FAILED_KEY}: the telemetry flush failed (code ${codeOf(failure)}). Bind TELEMETRY_LOGGER to receive the error itself.`
-      )
+      const code = codeOf(failure)
+      new Logger('Telemetry').error({
+        event: 'TELEMETRY_FLUSH_FAILED',
+        message: `${TELEMETRY_FLUSH_FAILED_KEY}: the telemetry flush failed (code ${code}). Bind TELEMETRY_LOGGER to receive the error itself.`,
+        code
+      })
     } catch {
       // Nothing is left to report through.
     }

@@ -10,6 +10,14 @@ heading here.
 
 ## [Unreleased]
 
+### Changed
+
+- The entry the Nest logger gets for a failed flush is an object, `{ event: 'TELEMETRY_FLUSH_FAILED', message, code }`,
+  where it was a string. `message` is the same text, still starting with `TRACING_FLUSH_FAILED`. Apply: an alert
+  that matches the text keeps matching where the logger writes `message`; a custom Nest logger that assumes a
+  string must accept an object. `@bymax-one/nest-logger` before 1.4.23 writes an object message as
+  `[object Object]`, so update it first. The `TELEMETRY_LOGGER` calls are unchanged.
+
 ### Planned for the next minor
 
 - **Export the option error class** with `code` and `option` typed in the declarations, so a host can test for

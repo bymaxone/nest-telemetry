@@ -36,6 +36,13 @@ afterEach(() => {
   clearWarningSink()
 })
 
+/** The whole object the Nest logger gets for a failed flush that carries `code`. */
+const flushFailed = (code: string): Record<string, string> => ({
+  event: 'TELEMETRY_FLUSH_FAILED',
+  message: `TRACING_FLUSH_FAILED: the telemetry flush failed (code ${code}). Bind TELEMETRY_LOGGER to receive the error itself.`,
+  code
+})
+
 describe('constants', () => {
   it('keeps the failure key the template already logs, so an existing alert keeps matching', () => {
     // Scenario: the key is an alert's match string, so it must not change.
@@ -100,9 +107,7 @@ describe('TelemetryShutdownHook', () => {
       registerHandle(createHandle(() => Promise.reject(new Error('collector refused'))))
       const ref: IProviderLookup = { get: () => provided }
       await expect(new TelemetryShutdownHook(ref).onApplicationShutdown()).resolves.toBeUndefined()
-      expect(error).toHaveBeenCalledWith(
-        expect.stringContaining('TRACING_FLUSH_FAILED: the telemetry flush failed')
-      )
+      expect(error).toHaveBeenCalledWith(flushFailed('UNKNOWN'))
     })
 
     it('falls back to the Nest logger when the structured logger throws', async () => {
@@ -116,9 +121,7 @@ describe('TelemetryShutdownHook', () => {
         new TelemetryShutdownHook(moduleRef({ errorStructured })).onApplicationShutdown()
       ).resolves.toBeUndefined()
       expect(errorStructured).toHaveBeenCalledTimes(1)
-      expect(error).toHaveBeenCalledWith(
-        expect.stringContaining('TRACING_FLUSH_FAILED: the telemetry flush failed')
-      )
+      expect(error).toHaveBeenCalledWith(flushFailed('UNKNOWN'))
     })
 
     it('still resolves when the Nest logger throws too', async () => {
@@ -141,11 +144,13 @@ describe('TelemetryShutdownHook', () => {
       registerHandle(createHandle(() => Promise.reject(failure)))
       await new TelemetryShutdownHook(moduleRef()).onApplicationShutdown()
       expect(error).toHaveBeenCalledTimes(1)
-      expect(error).toHaveBeenCalledWith(
-        expect.stringMatching(
-          /^TRACING_FLUSH_FAILED: the telemetry flush failed \(code ECONNREFUSED\)\./
-        )
-      )
+      // The message is pinned word for word: an alert may match any part of its text.
+      expect(error).toHaveBeenCalledWith({
+        event: 'TELEMETRY_FLUSH_FAILED',
+        message:
+          'TRACING_FLUSH_FAILED: the telemetry flush failed (code ECONNREFUSED). Bind TELEMETRY_LOGGER to receive the error itself.',
+        code: 'ECONNREFUSED'
+      })
       // The entry is written under the library's own context, so it can be told apart in the output.
       expect(Reflect.get(error.mock.contexts[0] as object, 'context')).toBe('Telemetry')
     })
@@ -179,8 +184,8 @@ describe('TelemetryShutdownHook', () => {
       const accepted = typeof code === 'string' || typeof code === 'number'
       const token = accepted && /^[A-Z0-9_]{1,40}$/.test(String(code)) ? String(code) : 'UNKNOWN'
       expect(error).toHaveBeenCalledTimes(1)
-      expect(error).toHaveBeenCalledWith(expect.stringContaining(`(code ${token}).`))
-      expect(String(error.mock.calls[0]?.[0])).not.toContain('\n')
+      expect(error).toHaveBeenCalledWith(flushFailed(token))
+      expect(JSON.stringify(error.mock.calls)).not.toContain('\\n')
     })
 
     it.each([
@@ -203,6 +208,8 @@ describe('TelemetryShutdownHook', () => {
         const written = JSON.stringify(error.mock.calls)
         expect(written).not.toContain('hunter2')
         expect(written).not.toContain('collector.example')
+        expect(written).toContain('"event":"TELEMETRY_FLUSH_FAILED"')
+        expect(written).toContain('"code":"UNKNOWN"')
         expect(written).toContain('(code UNKNOWN)')
       }
     )
@@ -371,9 +378,7 @@ describe('an asynchronous structured logger that rejects', () => {
     await settle()
     expect(rejecting).toHaveBeenCalledTimes(1)
     expect(error).toHaveBeenCalledTimes(1)
-    expect(error).toHaveBeenCalledWith(
-      expect.stringContaining('TRACING_FLUSH_FAILED: the telemetry flush failed (code UNKNOWN)')
-    )
+    expect(error).toHaveBeenCalledWith(flushFailed('UNKNOWN'))
     expect(unhandled).not.toHaveBeenCalled()
   })
 

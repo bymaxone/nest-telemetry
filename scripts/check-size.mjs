@@ -34,6 +34,9 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
+//   - 2026-11-26 (nest only, PM grant of the same day, at the measured size plus 30 B): nest 2,862 B measured, 2,892 B
+//     budget, written as 2.825 KiB. The growth is the object entry, with its `event` and `code` fields, that the Nest
+//     logger gets for a failed flush.
 //   - 2026-11-24 (sdk ESM only, PM grant 2026-11-24, owner standing rule, at the measured size plus 30 B, rounded down in
 //     the KiB column): sdk 12,611 B measured, 12.34 KiB budget (12,636 B, 25 B of headroom). The growth over the 12,605 B
 //     of the 12.31 KiB budget is the `!==` that replaced `<` in seven loops; the register and the CommonJS budgets
@@ -212,7 +215,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const BUDGETS = [
   { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 12.34 * 1024 },
   { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 12.47 * 1024 },
-  { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.79 * 1024 },
+  { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.825 * 1024 },
   { name: 'observability (metrics)', path: 'dist/observability/index.mjs', brotli: 0.89 * 1024 },
   { name: 'sdk (CommonJS)', path: 'dist/sdk/index.cjs', brotli: 12.35 * 1024 },
   { name: 'register (CommonJS)', path: 'dist/register/index.cjs', brotli: 0.2 * 1024 },
