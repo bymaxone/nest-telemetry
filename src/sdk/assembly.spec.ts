@@ -37,6 +37,12 @@ function environment(raw: NodeJS.ProcessEnv = {}): TelemetryEnvironment {
   return readTelemetryEnvironment(raw)
 }
 
+/** The ignore hook the HTTP instrumentation was configured with. */
+function ignoreHookOf(config: object): (request: object) => unknown {
+  const entry = (config as Record<string, Record<string, unknown>>)[HTTP]
+  return entry?.['ignoreIncomingRequestHook'] as (request: object) => unknown
+}
+
 describe('planSignals', () => {
   it('keeps metrics and logs off when no exporter is named', () => {
     // Scenario: the OTel default for both is otlp, which would send them a second time; with
@@ -162,12 +168,22 @@ describe('buildInstrumentationConfig', () => {
 
   it('passes the host predicate to the HTTP instrumentation', () => {
     // Scenario: probe paths are the host's policy, handed over as a predicate.
-    const predicate = (): boolean => true
+    const predicate = jest.fn(() => true)
     const config = buildInstrumentationConfig({ ignoreIncomingRequest: predicate }, noLogs)
     expect(config[HTTP]).toEqual({
       redactedQueryParams: [...DEFAULT_REDACTED_QUERY_PARAMS],
-      ignoreIncomingRequestHook: predicate
+      ignoreIncomingRequestHook: expect.any(Function)
     })
+    expect(ignoreHookOf(config)({ url: '/health' })).toBe(true)
+    expect(predicate).toHaveBeenCalledWith({ url: '/health' })
+  })
+
+  it('does not let an asynchronous predicate ignore a request', () => {
+    // Scenario: a promise is truthy, so it must not reach the instrumentation.
+    jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
+    const predicate = (async () => true) as unknown as () => boolean
+    const config = buildInstrumentationConfig({ ignoreIncomingRequest: predicate }, noLogs)
+    expect(ignoreHookOf(config)({ url: '/health' })).toBe(false)
   })
 
   it('forwards pino logs when the environment exports logs and the host is silent', () => {
@@ -225,15 +241,17 @@ describe('buildInstrumentationConfig', () => {
   it('keeps the outgoing-URL parameter redaction when the span-end redaction is opted out', () => {
     // Scenario: disableUrlRedaction switches off the span-end redaction only; the parameter list
     // for outgoing request URLs stays on, and the predicate still applies.
-    const predicate = (): boolean => false
+    const predicate = jest.fn(() => false)
     const config = buildInstrumentationConfig(
       { unsafe: { disableUrlRedaction: true }, ignoreIncomingRequest: predicate },
       noLogs
     )
     expect(config[HTTP]).toEqual({
       redactedQueryParams: [...DEFAULT_REDACTED_QUERY_PARAMS],
-      ignoreIncomingRequestHook: predicate
+      ignoreIncomingRequestHook: expect.any(Function)
     })
+    expect(ignoreHookOf(config)({})).toBe(false)
+    expect(predicate).toHaveBeenCalledWith({})
   })
 
   it('drops the Redis serializer only when the host opts out explicitly', () => {
@@ -336,12 +354,11 @@ describe('buildInstrumentationConfig', () => {
       expect(
         buildInstrumentationConfig({ instrumentations: { overrides } }, noLogs)[HTTP]
       ).toMatchObject({ ignoreIncomingRequestHook: viaOverride })
-      expect(
-        buildInstrumentationConfig(
-          { instrumentations: { overrides }, ignoreIncomingRequest: viaOption },
-          noLogs
-        )[HTTP]
-      ).toMatchObject({ ignoreIncomingRequestHook: viaOption })
+      const both = buildInstrumentationConfig(
+        { instrumentations: { overrides }, ignoreIncomingRequest: viaOption },
+        noLogs
+      )
+      expect(ignoreHookOf(both)({})).toBe(false)
     })
 
     it.each([IOREDIS, REDIS] as const)(

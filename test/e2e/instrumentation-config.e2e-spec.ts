@@ -120,8 +120,10 @@ describe('the configuration handed to the real auto-instrumentations', () => {
     expect(config[FS]).toEqual({ enabled: true })
     expect(config[HTTP]).toEqual({
       redactedQueryParams: [...DEFAULT_REDACTED_QUERY_PARAMS, 'session'],
-      ignoreIncomingRequestHook: predicate
+      ignoreIncomingRequestHook: expect.any(Function)
     })
+    const hook = config[HTTP]?.['ignoreIncomingRequestHook'] as typeof predicate
+    expect([hook({ url: '/health' }), hook({ url: '/orders' })]).toEqual([true, false])
     expect(config[PINO]).toEqual({ disableLogSending: false })
   })
 

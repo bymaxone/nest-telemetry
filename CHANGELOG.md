@@ -17,6 +17,11 @@ heading here.
   that matches the text keeps matching where the logger writes `message`; a custom Nest logger that assumes a
   string must accept an object. `@bymax-one/nest-logger` before 1.4.23 writes an object message as
   `[object Object]`, so update it first. The `TELEMETRY_LOGGER` calls are unchanged.
+- **An `ignoreIncomingRequest` that returns a promise no longer ignores the request.** The HTTP instrumentation
+  read the promise itself as `true`, so an `async` hook dropped every server span whatever it resolved with, and
+  one that rejected ended the process. A promise or another thenable now counts as "not ignored", its rejection
+  is absorbed, and the first one emits the `BYMAX_TELEMETRY_IGNORE_HOOK_ASYNC` warning. A synchronous hook
+  behaves as before.
 
 ### Added
 
@@ -28,6 +33,9 @@ heading here.
 ### Apply to a derived backend
 
 This type needs no change. A cast or a local interface written for this error can be replaced with the exported type.
+
+An `ignoreIncomingRequest` that is `async`, or that returns a promise, must be made synchronous: until then the
+requests it was meant to ignore are traced. A synchronous hook needs no change.
 
 ## [1.0.13] - 2026-11-24
 

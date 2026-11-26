@@ -80,7 +80,10 @@ export interface TelemetryOptions {
   readonly serviceName?: string
   /** Service version. */
   readonly serviceVersion?: string
-  /** Returns `true` for an incoming request that must produce no server span. Defaults to none. */
+  /**
+   * Returns `true` for an incoming request that must produce no server span. Defaults to none.
+   * It must be synchronous: a promise or another thenable does not ignore the request.
+   */
   readonly ignoreIncomingRequest?: (request: IncomingRequestTarget) => boolean
   /** Instrumentation choices. */
   readonly instrumentations?: InstrumentationOptions
