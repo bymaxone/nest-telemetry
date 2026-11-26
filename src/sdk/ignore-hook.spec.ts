@@ -76,7 +76,21 @@ describe('guardIgnoreHook', () => {
     process.off('unhandledRejection', unhandled)
     expect(unhandled).not.toHaveBeenCalled()
     expect(codes(emitWarning)).toEqual([CODE])
+    expect(String(emitWarning.mock.calls[0]?.[0])).toContain('ignoreIncomingRequest')
     expect(String(emitWarning.mock.calls[0]?.[0])).not.toContain('secret')
+  })
+
+  it('takes the rejection of a promise whose own then is not callable', async () => {
+    // Scenario: it is still a promise, so it must neither ignore the request nor stay unhandled.
+    const unhandled = jest.fn()
+    process.on('unhandledRejection', unhandled)
+    const answer = Promise.reject(new Error('shadowed'))
+    Object.defineProperty(answer, 'then', { value: undefined })
+    expect(guardIgnoreHook(() => answer)(request)).toBe(false)
+    await new Promise((resolve) => setImmediate(resolve))
+    process.off('unhandledRejection', unhandled)
+    expect(unhandled).not.toHaveBeenCalled()
+    expect(codes(emitWarning)).toEqual([CODE])
   })
 
   it.each([
