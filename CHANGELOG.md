@@ -8,7 +8,7 @@ The `release.yml` workflow extracts the section matching the pushed `vX.Y.Z` tag
 as the GitHub Release body, so each released version needs a matching `## [X.Y.Z]`
 heading here.
 
-## [Unreleased]
+## [1.0.14] - 2026-11-26
 
 ### Changed
 
@@ -681,6 +681,7 @@ First release.
 - Verification from the packed tarball: real `node --import` processes in a CommonJS and a native-ESM
   application, with planted secrets absent from the exported body and negative controls.
 
+[1.0.14]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.14
 [1.0.13]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.13
 [1.0.12]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.12
 [1.0.11]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.11
