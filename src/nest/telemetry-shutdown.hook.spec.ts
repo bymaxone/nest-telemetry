@@ -101,7 +101,7 @@ describe('TelemetryShutdownHook', () => {
       const ref: IProviderLookup = { get: () => provided }
       await expect(new TelemetryShutdownHook(ref).onApplicationShutdown()).resolves.toBeUndefined()
       expect(error).toHaveBeenCalledWith(
-        expect.stringContaining('TRACING_FLUSH_FAILED: the telemetry flush failed')
+        expect.objectContaining({ event: 'TELEMETRY_FLUSH_FAILED' })
       )
     })
 
@@ -117,7 +117,7 @@ describe('TelemetryShutdownHook', () => {
       ).resolves.toBeUndefined()
       expect(errorStructured).toHaveBeenCalledTimes(1)
       expect(error).toHaveBeenCalledWith(
-        expect.stringContaining('TRACING_FLUSH_FAILED: the telemetry flush failed')
+        expect.objectContaining({ event: 'TELEMETRY_FLUSH_FAILED' })
       )
     })
 
@@ -141,11 +141,13 @@ describe('TelemetryShutdownHook', () => {
       registerHandle(createHandle(() => Promise.reject(failure)))
       await new TelemetryShutdownHook(moduleRef()).onApplicationShutdown()
       expect(error).toHaveBeenCalledTimes(1)
-      expect(error).toHaveBeenCalledWith(
-        expect.stringMatching(
-          /^TRACING_FLUSH_FAILED: the telemetry flush failed \(code ECONNREFUSED\)\./
-        )
-      )
+      // The message is the text the entry had before it became an object, word for word.
+      expect(error).toHaveBeenCalledWith({
+        event: 'TELEMETRY_FLUSH_FAILED',
+        message:
+          'TRACING_FLUSH_FAILED: the telemetry flush failed (code ECONNREFUSED). Bind TELEMETRY_LOGGER to receive the error itself.',
+        code: 'ECONNREFUSED'
+      })
       // The entry is written under the library's own context, so it can be told apart in the output.
       expect(Reflect.get(error.mock.contexts[0] as object, 'context')).toBe('Telemetry')
     })
@@ -179,8 +181,14 @@ describe('TelemetryShutdownHook', () => {
       const accepted = typeof code === 'string' || typeof code === 'number'
       const token = accepted && /^[A-Z0-9_]{1,40}$/.test(String(code)) ? String(code) : 'UNKNOWN'
       expect(error).toHaveBeenCalledTimes(1)
-      expect(error).toHaveBeenCalledWith(expect.stringContaining(`(code ${token}).`))
-      expect(String(error.mock.calls[0]?.[0])).not.toContain('\n')
+      expect(error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: 'TELEMETRY_FLUSH_FAILED',
+          message: expect.stringContaining(`(code ${token}).`),
+          code: token
+        })
+      )
+      expect(JSON.stringify(error.mock.calls)).not.toContain('\\n')
     })
 
     it.each([
@@ -203,6 +211,7 @@ describe('TelemetryShutdownHook', () => {
         const written = JSON.stringify(error.mock.calls)
         expect(written).not.toContain('hunter2')
         expect(written).not.toContain('collector.example')
+        expect(written).toContain('"event":"TELEMETRY_FLUSH_FAILED"')
         expect(written).toContain('(code UNKNOWN)')
       }
     )
@@ -372,7 +381,12 @@ describe('an asynchronous structured logger that rejects', () => {
     expect(rejecting).toHaveBeenCalledTimes(1)
     expect(error).toHaveBeenCalledTimes(1)
     expect(error).toHaveBeenCalledWith(
-      expect.stringContaining('TRACING_FLUSH_FAILED: the telemetry flush failed (code UNKNOWN)')
+      expect.objectContaining({
+        event: 'TELEMETRY_FLUSH_FAILED',
+        message: expect.stringContaining(
+          'TRACING_FLUSH_FAILED: the telemetry flush failed (code UNKNOWN)'
+        )
+      })
     )
     expect(unhandled).not.toHaveBeenCalled()
   })

@@ -207,12 +207,15 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //     instead of the error's message and stack (about 0.1 KiB: the code reader and the longer text), and
 //     the absorbed promise of an asynchronous logger (about 0.04 KiB), with the fallback report when it rejects
 //     (about 0.17 KiB: the Nest logger entry as its own method, the process warning and the absorbing catch).
+//   - 2026-11-26 (nest only, PM grant of the same day, at the measured size plus 30 B): nest 2,862 B measured, 2,892 B
+//     budget, written as 2.825 KiB. The growth is the object entry, with its `event` and `code` fields, that the Nest
+//     logger gets for a failed flush.
 //   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
 //   met by shortening the text of a warning.
 const BUDGETS = [
   { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 12.34 * 1024 },
   { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 12.47 * 1024 },
-  { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.79 * 1024 },
+  { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.825 * 1024 },
   { name: 'observability (metrics)', path: 'dist/observability/index.mjs', brotli: 0.89 * 1024 },
   { name: 'sdk (CommonJS)', path: 'dist/sdk/index.cjs', brotli: 12.35 * 1024 },
   { name: 'register (CommonJS)', path: 'dist/register/index.cjs', brotli: 0.2 * 1024 },

@@ -42,7 +42,7 @@ describe('TelemetryModule when the flush fails, in a real Nest application', () 
     const app = await Test.createTestingModule({ imports: [TelemetryModule] }).compile()
     await app.init()
     await expect(app.close()).resolves.toBeUndefined()
-    expect(error).toHaveBeenCalledWith(expect.stringContaining('(code 502)'))
+    expect(error).toHaveBeenCalledWith(expect.objectContaining({ code: '502' }))
   })
 
   it('writes a code that is not a plain token as UNKNOWN, never as text', async () => {
@@ -55,6 +55,7 @@ describe('TelemetryModule when the flush fails, in a real Nest application', () 
     await app.init()
     await expect(app.close()).resolves.toBeUndefined()
     const written = JSON.stringify(error.mock.calls)
+    expect(written).toContain('"event":"TELEMETRY_FLUSH_FAILED"')
     expect(written).toContain('(code UNKNOWN)')
     expect(written).not.toContain('hunter2')
   })
@@ -78,6 +79,7 @@ describe('TelemetryModule when the flush fails, in a real Nest application', () 
     await expect(app.close()).resolves.toBeUndefined()
     expect(error).toHaveBeenCalledTimes(1)
     const written = JSON.stringify(error.mock.calls)
+    expect(written).toContain('"event":"TELEMETRY_FLUSH_FAILED"')
     expect(written).toContain('(code UNKNOWN)')
     expect(written).not.toContain('hunter2')
   })
@@ -90,7 +92,12 @@ describe('TelemetryModule when the flush fails, in a real Nest application', () 
     await app.init()
     await expect(app.close()).resolves.toBeUndefined()
     expect(error).toHaveBeenCalledWith(
-      expect.stringContaining('TRACING_FLUSH_FAILED: the telemetry flush failed (code UNKNOWN)')
+      expect.objectContaining({
+        event: 'TELEMETRY_FLUSH_FAILED',
+        message: expect.stringContaining(
+          'TRACING_FLUSH_FAILED: the telemetry flush failed (code UNKNOWN)'
+        )
+      })
     )
   })
 
@@ -118,7 +125,12 @@ describe('TelemetryModule when the flush fails, in a real Nest application', () 
     await app.init()
     await expect(app.close()).resolves.toBeUndefined()
     expect(error).toHaveBeenCalledWith(
-      expect.stringContaining('TRACING_FLUSH_FAILED: the telemetry flush failed (code UNKNOWN)')
+      expect.objectContaining({
+        event: 'TELEMETRY_FLUSH_FAILED',
+        message: expect.stringContaining(
+          'TRACING_FLUSH_FAILED: the telemetry flush failed (code UNKNOWN)'
+        )
+      })
     )
   })
 
@@ -175,7 +187,12 @@ describe('TelemetryModule when the flush fails, in a real Nest application', () 
       expect(errorStructured).toHaveBeenCalledTimes(1)
       expect(unhandled).not.toHaveBeenCalled()
       expect(nestLogger).toHaveBeenCalledWith(
-        expect.stringContaining('TRACING_FLUSH_FAILED: the telemetry flush failed (code UNKNOWN)')
+        expect.objectContaining({
+          event: 'TELEMETRY_FLUSH_FAILED',
+          message: expect.stringContaining(
+            'TRACING_FLUSH_FAILED: the telemetry flush failed (code UNKNOWN)'
+          )
+        })
       )
     } finally {
       process.off('unhandledRejection', unhandled)
