@@ -6,6 +6,7 @@ import type { InstrumentationConfigMap } from '@opentelemetry/auto-instrumentati
 
 import { emitWarning } from './emit-warning'
 import type { RatioSampler, TelemetryEnvironment } from './environment'
+import { guardIgnoreHook } from './ignore-hook'
 import { readOwnOrClass, requireBoolean, requireObject, settleOverrides } from './option-kinds'
 import { buildRedactedQueryParams, serializeRedisCommandName } from './redaction'
 import type { InstrumentationOptions, TelemetryOptions, UnsafeOptions } from './types'
@@ -308,7 +309,8 @@ export function buildInstrumentationConfig(
   }) as Record<string, unknown>
   const ignoreIncomingRequest = options.ignoreIncomingRequest
   if (isPresent(ignoreIncomingRequest)) {
-    merged[HTTP_INSTRUMENTATION]['ignoreIncomingRequestHook'] = ignoreIncomingRequest
+    merged[HTTP_INSTRUMENTATION]['ignoreIncomingRequestHook'] =
+      guardIgnoreHook(ignoreIncomingRequest)
   }
   if (redactRedis) {
     for (const name of [IOREDIS_INSTRUMENTATION, REDIS_INSTRUMENTATION]) {

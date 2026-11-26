@@ -156,7 +156,7 @@ describe('startTelemetry', () => {
     it('assembles the SDK from the options and the environment', async () => {
       // Scenario: one boot wires resource, redaction processor, batch processor and
       // instrumentations in the order that makes redaction run first.
-      const predicate = (): boolean => true
+      const predicate = jest.fn(() => true)
       await startTelemetry({
         serviceName: 'api',
         serviceVersion: '1.0.0',
@@ -175,10 +175,16 @@ describe('startTelemetry', () => {
       expect(mockAutoInstrumentations).toHaveBeenCalledWith(
         expect.objectContaining({
           '@opentelemetry/instrumentation-http': expect.objectContaining({
-            ignoreIncomingRequestHook: predicate
+            ignoreIncomingRequestHook: expect.any(Function)
           })
         })
       )
+      const given = mockAutoInstrumentations.mock.calls[0]?.[0] as Record<
+        string,
+        { ignoreIncomingRequestHook(request: object): unknown }
+      >
+      given['@opentelemetry/instrumentation-http']?.ignoreIncomingRequestHook({ url: '/probe' })
+      expect(predicate).toHaveBeenCalledWith({ url: '/probe' })
       const config = mockNodeSdk.mock.calls[0] as unknown as [Record<string, unknown>]
       const [options] = config
       expect(options['resource']).toEqual({ kind: 'resource' })

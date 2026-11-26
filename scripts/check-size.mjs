@@ -34,6 +34,10 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //      tighten it. Avoid >2x headroom: it silently lets bloat through.
 //
 // Calibration history (newest first):
+//   - 2026-11-26 (sdk, register and the sdk CommonJS bundle, PM grant of the same day, at the measured size plus 30 B):
+//     sdk 12,836 B measured, 12,866 B budget, written as 12.565 KiB; register 12,974 B, 13,004 B, as 12.7 KiB; sdk
+//     CommonJS 12,881 B, 12,911 B, as 12.609 KiB. The growth is the guard that keeps a promise returned by the ignore
+//     hook from dropping a request, with its warning.
 //   - 2026-11-26 (nest only, PM grant of the same day, at the measured size plus 30 B): nest 2,862 B measured, 2,892 B
 //     budget, written as 2.825 KiB. The growth is the object entry, with its `event` and `code` fields, that the Nest
 //     logger gets for a failed flush.
@@ -213,11 +217,11 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
 //   met by shortening the text of a warning.
 const BUDGETS = [
-  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 12.34 * 1024 },
-  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 12.47 * 1024 },
+  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 12.565 * 1024 },
+  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 12.7 * 1024 },
   { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.825 * 1024 },
   { name: 'observability (metrics)', path: 'dist/observability/index.mjs', brotli: 0.89 * 1024 },
-  { name: 'sdk (CommonJS)', path: 'dist/sdk/index.cjs', brotli: 12.35 * 1024 },
+  { name: 'sdk (CommonJS)', path: 'dist/sdk/index.cjs', brotli: 12.609 * 1024 },
   { name: 'register (CommonJS)', path: 'dist/register/index.cjs', brotli: 0.2 * 1024 },
   { name: 'nest (CommonJS)', path: 'dist/nest/index.cjs', brotli: 2.82 * 1024 },
   { name: 'observability (CommonJS)', path: 'dist/observability/index.cjs', brotli: 0.91 * 1024 }
