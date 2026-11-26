@@ -79,10 +79,9 @@ Before starting: read CLAUDE.md. Before finishing:
 
 ## 9. Release Authorization
 
-Standing order of the maintainer, 2026-11-26: the project manager's GO naming the full commit SHA is
-the maintainer's decision on the version number, merge, tag and publish of every release. A GO
-without the full SHA authorizes none of the four, and the order covers nothing else. It satisfies the
-rule in CLAUDE.md that a version bump needs the maintainer's instruction naming the number.
+For releases, the project manager's GO, naming the version and the full commit SHA, is the
+maintainer's decision on version number, merge, tag and publish (owner standing order, 2026-11-26).
+A GO missing either one authorizes none of the four, and the order covers nothing else.
 
 ---
 
