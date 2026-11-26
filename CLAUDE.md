@@ -73,8 +73,9 @@ it. Before the first publish there is no published version to patch, and the `Un
 first version is edited in place.
 
 The first publish (1.0.0) and every version bump need the maintainer's explicit instruction naming the
-number. Never infer a bump from an event. For releases, the project manager's GO, naming the version
-and the full commit SHA, is the maintainer's decision on version number, merge, tag and publish (owner
-standing order, 2026-11-26).
+number. Never infer a bump from an event. For releases, the project manager's GO with the full
+commit SHA is the maintainer's decision on version number, merge, tag and publish (owner standing
+order, 2026-11-26). A release GO also names the version; do not act on one that omits the version or
+the full SHA.
 
 For full architecture and patterns, see **[AGENTS.md](./AGENTS.md)** (load on demand — not every session).
