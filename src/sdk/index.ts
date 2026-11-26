@@ -6,6 +6,7 @@ export type {
   IncomingRequestTarget,
   InstrumentationOptions,
   TelemetryHandle,
+  TelemetryOptionError,
   TelemetryOptions,
   UnsafeOptions
 } from './types'
