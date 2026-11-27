@@ -193,7 +193,7 @@ An instrumentation records an error on its span as the status message and as an 
 
 **Always, with no opt-out:** the input that a `JSON.parse` message quotes is removed. V8 writes messages such as `Unexpected token 'p', "password=hunter2" is not valid JSON`, so a malformed request body would otherwise reach the tracing backend. In each of those texts, a text that holds `is not valid JSON` is replaced up to the last occurrence by `[redacted] `, whatever shape it has, keeping a recognised leading error class name and what follows the words (after a message that names a token, such as the one above, only stack frames are kept there): `SyntaxError: [redacted] is not valid JSON`. A message that was cut before that ending but holds `Unexpected token 'x', ` is redacted whole too. The other `JSON.parse` messages of Node 24 carry no input. This covers a text of your own that holds those words too.
 
-**Only with `redactExceptionText` on:** every other message, such as the one a database driver writes (PostgreSQL quotes the value it rejected) or one your code builds. The status message and `exception.message` become `[redacted]`, and `exception.stacktrace` keeps the frames under `[redacted]` and any recognised error class name; `exception.type` stays. Frames followed by other text, such as a cause, are dropped too. If your code changed a message after its stack was captured, a line of the old message written exactly like a frame, right above the real ones, can remain.
+**Only with `redactExceptionText` on:** every other message, such as the one a database driver writes (PostgreSQL quotes the value it rejected) or one your code builds. The status message and `exception.message` become `[redacted]`, and `exception.stacktrace` keeps the frames under `[redacted]` and any recognised error class name; `exception.type` stays. Frames followed by other text, such as a cause, are dropped too, and a stack longer than 32,768 characters recorded with a message keeps no frames. A message or stack that is not a string becomes `[redacted]`. If your code changed a message after its stack was captured, a line of the old message written exactly like a frame, right above the real ones, can remain.
 
 ```typescript
 await startTelemetry({ redactExceptionText: true })
@@ -205,9 +205,13 @@ With the `./register` preload, or wherever the option is not given, the variable
 BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT=true node --import @bymax-one/nest-telemetry/register dist/main.js
 ```
 
-Only `true` and `1`, written exactly, turn it on. Unset, empty, `false` and `0` leave it off, and any other value leaves it off with a `BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT_UNKNOWN` warning. The option wins when both are given.
+Only `true` and `1`, written exactly, turn it on. Unset, empty, `false` and `0` leave it off, and any other value leaves it off with a `BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT_UNKNOWN` warning. The option wins when both are given: `false` keeps it off with the variable set, and `true` turns it on whatever the variable holds.
 
-Neither reaches other attributes (`grpc.error_message`, SQL text), span names or log records.
+Both read arrays of text too. If the redaction itself fails, the span still ends, the status message becomes `[redacted]` and every `exception.*` attribute is removed.
+
+One limit of the default: when `OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT` cuts a text before `is not valid JSON`, it is recognised only by `Unexpected token 'x', `. Another text that quotes data that way, written by your code, a library or a later engine, is exported as cut; `redactExceptionText` covers it.
+
+Neither reaches other span attributes (`error.message`, `grpc.error_message`, SQL text), link attributes, span names or log records.
 
 `ignoreIncomingRequest` must be synchronous, because the HTTP instrumentation reads its answer at once:
 

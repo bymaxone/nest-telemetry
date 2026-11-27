@@ -176,7 +176,7 @@
     "class": "guarded"
   },
   "src/sdk/exception-redaction.ts|iterate|for-of": {
-    "count": 1,
+    "count": 3,
     "class": "guarded",
     "iterates": ["array"]
   },
@@ -188,6 +188,10 @@
     "count": 7,
     "class": "guarded"
   },
+  "src/sdk/exception-redaction.ts|method|.map": {
+    "count": 1,
+    "class": "guarded"
+  },
   "src/sdk/exception-redaction.ts|method|.slice": {
     "count": 3,
     "class": "guarded"
@@ -197,11 +201,19 @@
     "class": "guarded"
   },
   "src/sdk/exception-redaction.ts|method|.startsWith": {
-    "count": 2,
+    "count": 3,
     "class": "guarded"
   },
   "src/sdk/exception-redaction.ts|method|.test": {
     "count": 2,
+    "class": "guarded"
+  },
+  "src/sdk/exception-redaction.ts|static|Array.isArray": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/exception-redaction.ts|static|Object.keys": {
+    "count": 1,
     "class": "guarded"
   },
   "src/sdk/export-failure.ts|static|Symbol.for": {

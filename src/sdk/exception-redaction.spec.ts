@@ -238,6 +238,31 @@ describe('redactStackText, with a message that also occurs in a frame', () => {
   })
 })
 
+describe('redactStackText, with a long stack', () => {
+  const header = 'Error: hunter2'
+  const frame = '    at boot (file:///app/main.js:3:10)'
+
+  /** A stack of exactly `length` characters that ends in one frame. */
+  function stackOf(length: number): string {
+    return `${header}${'x'.repeat(length - header.length - frame.length - 1)}\n${frame}`
+  }
+
+  it('searches a stack of 32,768 characters and keeps its frames', () => {
+    // Scenario: the longest stack that is searched for its message.
+    expect(redactStackText(stackOf(32_768), 'hunter2')).toBe(`Error: [redacted]\n${frame}`)
+  })
+
+  it('keeps no frame of a longer stack that has a message to look for', () => {
+    // Scenario: the search could stall the host, so nothing of the stack is kept.
+    expect(redactStackText(stackOf(32_769), 'hunter2')).toBe('Error: [redacted]')
+  })
+
+  it('keeps the frames of a longer stack when there is no message to look for', () => {
+    // Scenario: reading the trailing frames needs no search.
+    expect(redactStackText(stackOf(32_769), undefined)).toBe(`Error: [redacted]\n${frame}`)
+  })
+})
+
 describe('createExceptionTextRedactor', () => {
   it('redacts the parse error of the status and of each event, and nothing else', () => {
     // Scenario: a span with two exceptions, one of which is not a parse error.
@@ -288,6 +313,80 @@ describe('createExceptionTextRedactor', () => {
     })
     expect(span.events[1]?.attributes).toEqual({ 'exception.message': '[redacted]' })
     expect(span.events[2]?.attributes).toEqual({ other: 'kept' })
+  })
+
+  it('scrubs each string of an array value and leaves the other elements', () => {
+    // Scenario: an event added by hand may carry arrays where the SDK writes strings.
+    const span = fakeSpan(undefined, {
+      'exception.message': [QUOTED, 'timeout', null],
+      'exception.stacktrace': [`SyntaxError: ${QUOTED}\n${FRAMES}`, 7]
+    })
+
+    end(span, false)
+
+    expect(span.events[0]?.attributes).toEqual({
+      'exception.message': ['[redacted] is not valid JSON', 'timeout', null],
+      'exception.stacktrace': [`SyntaxError: [redacted] is not valid JSON\n${FRAMES}`, 7]
+    })
+  })
+
+  it.each([[['hunter2']], [7], [true]])(
+    'replaces a message and a stack that are %j when every message is asked for',
+    (value) => {
+      // Scenario: a value that is not a string cannot be read for frames, so none of it is kept.
+      const span = fakeSpan(undefined, {
+        'exception.message': value,
+        'exception.stacktrace': value
+      })
+
+      end(span, true)
+
+      expect(span.events[0]?.attributes).toEqual({
+        'exception.message': '[redacted]',
+        'exception.stacktrace': '[redacted]'
+      })
+    }
+  )
+
+  it('leaves a value that is neither a string nor an array when only parse errors are redacted', () => {
+    // Scenario: a number quotes no input.
+    const span = fakeSpan(undefined, { 'exception.stacktrace': 7 })
+
+    end(span, false)
+
+    expect(span.events[0]?.attributes).toEqual({ 'exception.stacktrace': 7 })
+  })
+
+  it('drops the exception attributes and the status message when the redaction fails', () => {
+    // Scenario: a value that throws when read must not reach the exporter, nor the caller of end().
+    const broken = {
+      'exception.type': 'Error',
+      'exception.message': 'hunter2',
+      other: 'kept',
+      get 'exception.stacktrace'(): string {
+        throw new Error('unreadable')
+      }
+    }
+    const span = fakeSpan('hunter2', broken, { 'exception.message': 'hunter2' }, undefined)
+
+    expect(() => end(span, false)).not.toThrow()
+
+    expect(span.status).toEqual({ code: 2, message: '[redacted]' })
+    expect(span.events[0]?.attributes).toEqual({ other: 'kept' })
+    expect(span.events[1]?.attributes).toEqual({})
+  })
+
+  it('still drops the exception attributes when the status cannot be written', () => {
+    // Scenario: the failure is the span itself, and one event cannot be changed either.
+    const frozen = Object.freeze({ 'exception.message': 'hunter2' })
+    const span = fakeSpan('hunter2', frozen, { 'exception.message': 'hunter2' })
+    span.setStatus = (): void => {
+      throw new Error('unwritable')
+    }
+
+    expect(() => end(span, true)).not.toThrow()
+
+    expect(span.events[1]?.attributes).toEqual({})
   })
 
   it.each([undefined, '', 7])('does not write a status message that is %j', (message) => {

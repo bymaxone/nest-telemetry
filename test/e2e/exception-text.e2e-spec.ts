@@ -290,8 +290,74 @@ describe('parse-error text through the real SDK', () => {
     expect(body).toContain('"nothing"')
     expect(body.includes('plain words')).toBe(!redactExceptionText)
     expect(body).toContain(redactExceptionText ? 'TypeError: [redacted]\\n    at ' : 'TypeError')
-    expect(body.includes('"intValue":7')).toBe(!redactExceptionText)
+    // The closing brace keeps a number that only starts with 7, such as the process id, out.
+    expect(body.includes('"intValue":7}')).toBe(!redactExceptionText)
   })
+})
+
+describe('values and failures the SDK lets through', () => {
+  it.each([
+    ['with the default', false],
+    ['with redactExceptionText', true]
+  ])('exports no input from arrays %s', async (_what, redactExceptionText) => {
+    // Scenario: an event added by hand carries arrays of text where the SDK writes strings.
+    const quoted = parseError(`password=${SECRET.slice(0, 6)}`)?.message ?? ''
+    const started = await startTelemetry({ env: {}, redactExceptionText })
+    const span = trace.getTracer('e2e').startSpan('arrays')
+    span.addEvent('exception', {
+      'exception.message': [quoted, null],
+      'exception.stacktrace': [`SyntaxError: ${quoted}`]
+    })
+    span.end()
+    await started.shutdown()
+
+    expect(collector.bodies.join('\n')).toContain('[redacted]')
+    expect(leaked()).toEqual([])
+  })
+
+  it('keeps no frame of a very long stack with redactExceptionText', async () => {
+    // Scenario: searching a very long stack for its message could stall the host.
+    const started = await startTelemetry({ env: {}, redactExceptionText: true })
+    record('long', new Error(SECRET.repeat(2_000)))
+    await started.shutdown()
+
+    const body = collector.bodies.join('\n')
+    expect(body).toContain('"Error: [redacted]"')
+    expect(leaked()).toEqual([])
+  })
+
+  it.each([
+    ['once', 1],
+    ['every time', 2]
+  ])(
+    'ends the span and exports no exception text when writing it fails %s',
+    async (_what, failures) => {
+      // Scenario: the redaction throws; end() must return and nothing unredacted may leave.
+      const started = await startTelemetry({ env: {} })
+      const span = trace.getTracer('e2e').startSpan('failing')
+      span.addEvent('nothing')
+      span.addEvent('exception', { 'exception.message': SECRET, kept: 'kept-value' })
+      span.setStatus({ code: SpanStatusCode.ERROR, message: 'plain words' })
+      const write = span.setStatus.bind(span)
+      let left = failures
+      span.setStatus = (status) => {
+        if (left > 0) {
+          left -= 1
+          throw new Error('unwritable')
+        }
+        return write(status)
+      }
+
+      expect(() => span.end()).not.toThrow()
+      await started.shutdown()
+
+      const body = collector.bodies.join('\n')
+      expect(body).toContain('kept-value')
+      expect(body).not.toContain('exception.message')
+      expect(body.includes('plain words')).toBe(failures === 2)
+      expect(leaked()).toEqual([])
+    }
+  )
 })
 
 describe('BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT', () => {

@@ -24,9 +24,10 @@ heading here.
 - The input a `JSON.parse` message quotes is no longer exported. A malformed request body, a password in it
   included, reached the tracing backend through the span status message and the `exception.message` and
   `exception.stacktrace` of the span events. Any of those texts holding `is not valid JSON` is now redacted up
-  to those words; there is no opt-out. Apply: nothing to configure; an alert that matches the quoted text of a
-  parse error must match `[redacted] is not valid JSON` instead.
-- Size: the bundles that hold the start logic grow by about 1 KiB compressed, which is this redaction;
+  to those words; there is no opt-out. If the redaction itself fails, the status message becomes `[redacted]`
+  and the `exception.*` attributes are removed. Apply: nothing to configure; an alert that matches the quoted
+  text of a parse error must match `[redacted] is not valid JSON` instead.
+- Size: the bundles that hold the start logic grow by about 1.2 KiB compressed, which is this redaction;
   their size budgets were raised by that much.
 
 ## [1.0.14] - 2026-11-26

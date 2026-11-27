@@ -6,6 +6,7 @@
  * Nothing here imports an OpenTelemetry package at runtime; the type imports are erased. A boot
  * with telemetry disabled loads this module, so it must not pull the SDK graph in.
  */
+import type { Attributes, AttributeValue } from '@opentelemetry/api'
 import type { SpanProcessor } from '@opentelemetry/sdk-trace'
 
 import { resolvedPromise } from './native-promise'
@@ -28,6 +29,12 @@ const STACK_CLASS = /^(?:[A-Za-z]{0,40}(?:Error|Exception)|error): /
 
 /** The ending of a stack frame line: a position, or one of the places V8 names instead of one. */
 const FRAME_END = /(?::\d{1,10}:\d{1,10}|<anonymous>|native|index \d{1,10})\)?$/
+
+/**
+ * The longest stack searched for its message. The search can cost the product of both lengths, and
+ * it runs while a span ends.
+ */
+const SEARCHED_STACK_LIMIT = 32_768
 
 /**
  * Removes the input that a `JSON.parse` message quotes.
@@ -82,7 +89,8 @@ function leadingFrames(text: string): string {
  * The frames are the unbroken run of frame lines at the end. When the recorded message is found in
  * the stack, outside the frame lines, nothing up to the end of its last such copy can count as a
  * frame, so a message that imitates one goes too. A copy inside a frame, such as a function or a
- * file named like the message, is the frame's own text.
+ * file named like the message, is the frame's own text. A stack over {@link SEARCHED_STACK_LIMIT}
+ * with a message to look for keeps no frames.
  *
  * @param stack - The recorded stack.
  * @param message - The recorded message, when it is a string.
@@ -91,6 +99,7 @@ function leadingFrames(text: string): string {
 export function redactStackText(stack: string, message: unknown): string {
   let rest = stack
   if (typeof message === 'string' && message !== '') {
+    if (stack.length > SEARCHED_STACK_LIMIT) return `${classHead(stack)}${REDACTED}`
     const at = lastOutsideFrames(stack, message)
     if (at >= 0) rest = stack.slice(at + message.length)
   }
@@ -129,10 +138,74 @@ function isFrame(line: string): boolean {
   return line.startsWith('    at ') && FRAME_END.test(line)
 }
 
+/** A span as the ending hook receives it. */
+type EndingSpan = Parameters<NonNullable<SpanProcessor['onEnding']>>[0]
+
+/** Removes the quoted input from a string, or from each string of an array. */
+function redactParseErrorValue(value: AttributeValue): AttributeValue {
+  if (typeof value === 'string') return redactParseErrorText(value)
+  if (!Array.isArray(value)) return value
+  const elements: readonly unknown[] = value
+  return elements.map((element) =>
+    typeof element === 'string' ? redactParseErrorText(element) : element
+  ) as AttributeValue
+}
+
+/** Redacts the status message and the exception attributes of each event of a span. */
+function redactSpanText(span: EndingSpan, everyMessage: boolean): void {
+  const { code, message } = span.status
+  if (typeof message === 'string' && message !== '') {
+    span.setStatus({ code, message: everyMessage ? REDACTED : redactParseErrorText(message) })
+  }
+  for (const { attributes } of span.events) {
+    if (attributes === undefined) continue
+    const recorded = attributes['exception.message']
+    const stack = attributes['exception.stacktrace']
+    // The stack is read against the recorded message, so it is redacted before the message is.
+    if (stack !== undefined) {
+      if (!everyMessage) attributes['exception.stacktrace'] = redactParseErrorValue(stack)
+      else {
+        // Frames can be told apart only in a string.
+        attributes['exception.stacktrace'] =
+          typeof stack === 'string' ? redactStackText(stack, recorded) : REDACTED
+      }
+    }
+    if (recorded === undefined) continue
+    attributes['exception.message'] = everyMessage ? REDACTED : redactParseErrorValue(recorded)
+  }
+}
+
+/** Runs one step of the fallback; what it throws must not reach the caller of `Span.end()`. */
+function attempt(step: () => void): void {
+  try {
+    step()
+  } catch {
+    // Nothing more can be removed through this step, and the host must not see the failure.
+  }
+}
+
+/** Fails closed: replaces the status message and removes every exception attribute. */
+function dropExceptionText(span: EndingSpan): void {
+  attempt(() => {
+    span.setStatus({ code: span.status.code, message: REDACTED })
+  })
+  for (const event of span.events) {
+    attempt(() => {
+      const held: Attributes = event.attributes ?? {}
+      for (const key of Object.keys(held)) {
+        if (key.startsWith('exception.')) delete held[key]
+      }
+    })
+  }
+}
+
 /**
  * Creates the span processor that redacts the exception text of every span as it ends: the status
  * message and the `exception.message` and `exception.stacktrace` of each event. The type of the
- * exception is not touched.
+ * exception is not touched. When the redaction itself fails, the status message is replaced and
+ * every `exception.*` attribute is removed.
+ *
+ * It uses `onEnding`, which `@opentelemetry/sdk-trace` marks experimental.
  *
  * @param everyMessage - Replaces every message, not only the input a parse error quotes.
  * @returns The span processor.
@@ -141,28 +214,10 @@ export function createExceptionTextRedactor(everyMessage: boolean): SpanProcesso
   return {
     onStart: () => undefined,
     onEnding: (span): void => {
-      const { code, message } = span.status
-      if (typeof message === 'string' && message !== '') {
-        span.setStatus({
-          code,
-          message: everyMessage ? REDACTED : redactParseErrorText(message)
-        })
-      }
-      for (const { attributes } of span.events) {
-        if (attributes === undefined) continue
-        const recorded = attributes['exception.message']
-        const stack = attributes['exception.stacktrace']
-        // The stack is read against the recorded message, so it is redacted before the message is.
-        if (typeof stack === 'string') {
-          attributes['exception.stacktrace'] = everyMessage
-            ? redactStackText(stack, recorded)
-            : redactParseErrorText(stack)
-        }
-        if (recorded === undefined) continue
-        if (everyMessage) attributes['exception.message'] = REDACTED
-        else if (typeof recorded === 'string') {
-          attributes['exception.message'] = redactParseErrorText(recorded)
-        }
+      try {
+        redactSpanText(span, everyMessage)
+      } catch {
+        dropExceptionText(span)
       }
     },
     onEnd: () => undefined,

@@ -214,19 +214,19 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //     instead of the error's message and stack (about 0.1 KiB: the code reader and the longer text), and
 //     the absorbed promise of an asynchronous logger (about 0.04 KiB), with the fallback report when it rejects
 //     (about 0.17 KiB: the Nest logger entry as its own method, the process warning and the absorbing catch).
-//   - 1.0.15, the exception text redactor (QA-103): input quoted by a `JSON.parse` message reached
-//     exported spans. Removing it, with the `redactExceptionText` option and its environment variable
-//     for the preload, is about 1 KiB in each bundle that holds the start logic. Measured sdk
-//     13,898 B, register 14,061 B, sdk CommonJS 13,937 B; budgets measured + 30 B: 13,928 B,
-//     14,091 B and 13,967 B (the KiB column is rounded up to four places).
+//   - the exception text redactor, with the `redactExceptionText` option and its environment variable
+//     for the preload, is about 1.2 KiB in each bundle that holds the start logic: input quoted by a
+//     `JSON.parse` message must not reach an exported span. Measured sdk 14,089 B, register 14,251 B, sdk
+//     CommonJS 14,130 B; budgets measured + 30 B: 14,119 B, 14,281 B and 14,160 B (the KiB column is rounded
+//     up to four places).
 //   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
 //   met by shortening the text of a warning.
 const BUDGETS = [
-  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 13.6016 * 1024 },
-  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 13.7608 * 1024 },
+  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 13.7881 * 1024 },
+  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 13.9463 * 1024 },
   { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.825 * 1024 },
   { name: 'observability (metrics)', path: 'dist/observability/index.mjs', brotli: 0.89 * 1024 },
-  { name: 'sdk (CommonJS)', path: 'dist/sdk/index.cjs', brotli: 13.6397 * 1024 },
+  { name: 'sdk (CommonJS)', path: 'dist/sdk/index.cjs', brotli: 13.8282 * 1024 },
   { name: 'register (CommonJS)', path: 'dist/register/index.cjs', brotli: 0.2 * 1024 },
   { name: 'nest (CommonJS)', path: 'dist/nest/index.cjs', brotli: 2.82 * 1024 },
   { name: 'observability (CommonJS)', path: 'dist/observability/index.cjs', brotli: 0.91 * 1024 }
