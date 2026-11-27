@@ -21,7 +21,7 @@ heading here.
 
 ### Security
 
-- The input a `JSON.parse` message quotes is no longer exported. A malformed request body, a password in it
+- Span errors no longer export the input `JSON.parse` quotes. A malformed request body, a password in it
   included, reached the tracing backend through the span status message and the `exception.message` and
   `exception.stacktrace` of the span events. Any of those texts holding `is not valid JSON` is now redacted up
   to those words; there is no opt-out. If the redaction itself fails, the status message becomes `[redacted]`
