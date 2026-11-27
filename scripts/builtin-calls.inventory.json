@@ -148,7 +148,7 @@
     "class": "guarded"
   },
   "src/sdk/environment.ts|method|.includes": {
-    "count": 2,
+    "count": 5,
     "class": "guarded"
   },
   "src/sdk/environment.ts|method|.map": {

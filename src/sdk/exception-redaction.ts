@@ -15,8 +15,8 @@ import { REDACTED_QUERY_VALUE as REDACTED } from './redaction'
 const PARSE_ERROR_END = 'is not valid JSON'
 
 /**
- * The start of the V8 messages that quote their input, up to the token. A message cut short before
- * its ending is still recognized by it.
+ * The start of a V8 message that quotes a token and its input. A message cut short before its
+ * ending is still recognized by it.
  */
 const TOKEN_START = "Unexpected token '"
 
@@ -34,8 +34,8 @@ const FRAME_END = /(?::\d{1,10}:\d{1,10}|<anonymous>|native|index \d{1,10})\)?$/
  *
  * Everything up to the last `is not valid JSON` goes, whatever shape it has: the quoted input may
  * hold quotes, newlines and those very words, and a shape this library does not know must not be
- * kept. Only the class name of a stack and what follows the ending, the frames, remain. A quoting
- * message cut short before its ending is redacted from its token on.
+ * kept. Only a leading class name, the ending and what follows it remain. A quoting message cut
+ * short before its ending is redacted whole, but for the class name.
  *
  * @param text - A status message, an exception message or a stack.
  * @returns The text without the quoted input, or the same text when it quotes none.

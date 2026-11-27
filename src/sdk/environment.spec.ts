@@ -355,6 +355,38 @@ describe('readTelemetryEnvironment', () => {
   })
 })
 
+describe('BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT', () => {
+  const read = (value: string | undefined) =>
+    readTelemetryEnvironment({ BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT: value })
+
+  it.each(['true', '1'])('turns the exception text redaction on for %p', (value) => {
+    // Scenario: the two words that enable it.
+    expect(read(value)).toMatchObject({
+      redactExceptionText: true,
+      redactExceptionTextUnknown: false
+    })
+  })
+
+  it.each([undefined, '', 'false', '0'])('leaves it off without a word for %p', (value) => {
+    // Scenario: unset, empty and the two words that say off are not mistakes.
+    expect(read(value)).toMatchObject({
+      redactExceptionText: false,
+      redactExceptionTextUnknown: false
+    })
+  })
+
+  it.each(['TRUE', 'True', ' true ', 'yes', 'on', '2', 'true\n', ' '])(
+    'leaves it off and marks %j as unknown',
+    (value) => {
+      // Scenario: the parse is exact, so a near miss enables nothing and is reported.
+      expect(read(value)).toMatchObject({
+        redactExceptionText: false,
+        redactExceptionTextUnknown: true
+      })
+    }
+  )
+})
+
 describe('a variable of the environment that is not a string', () => {
   const NON_STRINGS = [5, true, null, {}, [], () => 'x', Symbol('x'), 10n] as const
   const READ_BY_TELEMETRY_ENVIRONMENT = [
@@ -366,7 +398,8 @@ describe('a variable of the environment that is not a string', () => {
     'OTEL_BSP_MAX_EXPORT_BATCH_SIZE',
     'OTEL_NODE_RESOURCE_DETECTORS',
     'OTEL_METRICS_EXPORTER',
-    'OTEL_LOGS_EXPORTER'
+    'OTEL_LOGS_EXPORTER',
+    'BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT'
   ]
 
   it.each(READ_BY_TELEMETRY_ENVIRONMENT)(

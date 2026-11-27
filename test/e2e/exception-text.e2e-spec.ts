@@ -282,3 +282,52 @@ describe('parse-error text through the real SDK', () => {
     expect(body.includes('"intValue":7')).toBe(!redactExceptionText)
   })
 })
+
+describe('BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT', () => {
+  const NAME = 'BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT'
+  const CODE = 'BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT_UNKNOWN'
+
+  /** The warnings with the code of an unknown value, as the text of each. */
+  const unknownWarnings = (): string[] =>
+    jest
+      .mocked(process.emitWarning)
+      .mock.calls.filter((call) => (call[1] as { code?: string } | undefined)?.code === CODE)
+      .map((call) => String(call[0]))
+
+  it.each(['true', '1'])('replaces every message when it is %p', async (value) => {
+    // Scenario: an application on the preload has no options object, so the variable turns it on.
+    const error = new Error(`duplicate key ${SECRET}`)
+
+    const spans = await exported({ env: { [NAME]: value } }, { driver: error })
+
+    expect(leaked()).toEqual([])
+    expect(spans.get('driver')?.status).toBe('[redacted]')
+    expect(unknownWarnings()).toEqual([])
+  })
+
+  it('stays off and warns, without the value, for a value it does not know', async () => {
+    // Scenario: a typo must not be taken for off in silence, and the value is not repeated.
+    const error = new Error('duplicate key')
+
+    const spans = await exported({ env: { [NAME]: 'yes-please' } }, { driver: error })
+
+    expect(spans.get('driver')?.status).toBe('duplicate key')
+    expect(unknownWarnings()).toHaveLength(1)
+    expect(unknownWarnings()[0]).not.toContain('yes-please')
+  })
+
+  it.each([
+    [false, 'true', 'duplicate key'],
+    [true, 'false', '[redacted]'],
+    [true, 'yes-please', '[redacted]']
+  ])('lets the option %p win over the variable %p', async (redactExceptionText, value, status) => {
+    // Scenario: the host's own code decides when both are given, and nothing is said of a
+    // variable that has no effect.
+    const error = new Error('duplicate key')
+
+    const spans = await exported({ redactExceptionText, env: { [NAME]: value } }, { driver: error })
+
+    expect(spans.get('driver')?.status).toBe(status)
+    expect(unknownWarnings()).toEqual([])
+  })
+})

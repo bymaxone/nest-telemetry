@@ -15,6 +15,9 @@ heading here.
 - `redactExceptionText`, an option of `startTelemetry`: replaces the span status message and the
   `exception.message` of every exception event with `[redacted]`, and keeps `exception.type` and the stack
   frames. Off by default. Apply: turn it on where messages can carry user data, such as database driver errors.
+- `BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT`: `true` or `1` turns that redaction on when the option is not given,
+  which is how an application on the `./register` preload gets it. Any value other than those, `false`, `0` and
+  empty leaves it off with a `BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT_UNKNOWN` warning. Apply: set it to `true`.
 
 ### Security
 
@@ -23,7 +26,7 @@ heading here.
   `exception.stacktrace` of the span events. Any of those texts holding `is not valid JSON` is now redacted up
   to those words; there is no opt-out. Apply: nothing to configure; an alert that matches the quoted text of a
   parse error must match `[redacted] is not valid JSON` instead.
-- Size: the bundles that hold the start logic grow by about 0.65 KiB compressed, which is this redaction;
+- Size: the bundles that hold the start logic grow by about 0.8 KiB compressed, which is this redaction;
   their size budgets were raised by that much.
 
 ## [1.0.14] - 2026-11-26

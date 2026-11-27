@@ -76,7 +76,17 @@ export interface TelemetryEnvironment {
   readonly oversizedTimers: readonly string[]
   /** Names in `OTEL_NODE_RESOURCE_DETECTORS`, or `undefined` when it is unset or blank. */
   readonly resourceDetectors: readonly string[] | undefined
+  /** Whether `BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT` is exactly `true` or `1`. */
+  readonly redactExceptionText: boolean
+  /** Whether that variable holds a value other than `true`, `1`, `false`, `0` or nothing. */
+  readonly redactExceptionTextUnknown: boolean
 }
+
+/** The values of `BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT` that turn it on. */
+const ON_VALUES = ['true', '1']
+
+/** Its values that leave it off and are not a mistake. */
+const OFF_VALUES = ['', 'false', '0']
 
 /**
  * Splits an exporter-list variable the way the SDK does: comma-separated, trimmed, blanks dropped.
@@ -155,7 +165,10 @@ export function readTelemetryEnvironment(
   if (maxExportBatchSize !== undefined) tuning.maxExportBatchSize = maxExportBatchSize
   const serviceName = read(source, 'OTEL_SERVICE_NAME')?.trim()
   const detectors = read(source, 'OTEL_NODE_RESOURCE_DETECTORS')
+  const toggle = read(source, 'BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT') ?? ''
   return {
+    redactExceptionText: ON_VALUES.includes(toggle),
+    redactExceptionTextUnknown: !ON_VALUES.includes(toggle) && !OFF_VALUES.includes(toggle),
     sdkDisabled: read(source, 'OTEL_SDK_DISABLED')?.trim().toLowerCase() === 'true',
     serviceName: serviceName === '' ? undefined : serviceName,
     metricsExporters: readExporterList(read(source, 'OTEL_METRICS_EXPORTER')),

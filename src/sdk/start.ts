@@ -22,6 +22,7 @@ import {
   warnAboutIgnoredOptions,
   warnAboutMissingServiceName,
   warnAboutOversizedTimers,
+  warnAboutRedactExceptionText,
   warnAboutSamplerName,
   warnAboutSamplerRatio,
   warnAboutUnsafeOptions
@@ -384,8 +385,8 @@ function buildSdk(
     ),
     spanProcessors: [
       // Ordered before the batch processor, so each span is redacted in place before it is exported.
-      // The exception text redactor has no opt-out: the input of a parse error is never exported.
-      createExceptionTextRedactor(options.redactExceptionText === true),
+      // The exception text redactor has no opt-out for the input a parse error quotes.
+      createExceptionTextRedactor(options.redactExceptionText ?? env.redactExceptionText),
       ...(unsafe?.disableUrlRedaction === true ? [] : [createUrlQueryRedactor()]),
       new sdkTrace.BatchSpanProcessor({
         exporter: warnOnExportFailure(
@@ -418,6 +419,7 @@ function boot(options: TelemetryOptions, env: TelemetryEnvironment): Promise<Tel
     warnAboutUnsafeOptions({ unsafe })
     warnAboutMissingServiceName(service, env)
     warnAboutOversizedTimers(env)
+    warnAboutRedactExceptionText(options.redactExceptionText, env)
     warnAboutSamplerName(readSamplerNearMiss())
     warnAboutSamplerRatio(readRatioSampler())
     warnAboutMissingWinstonTransport(instrumentations.sendLogs ?? planSignals(env).sendLogs)
