@@ -342,39 +342,44 @@ describe('values and failures the SDK lets through', () => {
     expect(leaked()).toEqual([])
   })
 
-  it.each([
-    ['once', 1],
-    ['every time', 2]
-  ])(
-    'ends the span and exports no exception text when writing it fails %s',
-    async (_what, failures) => {
-      // Scenario: the redaction throws; end() must return and nothing unredacted may leave.
-      const started = await startTelemetry({ env: {} })
-      const span = trace.getTracer('e2e').startSpan('failing')
-      span.addEvent('nothing')
-      span.addEvent('exception', { 'exception.message': SECRET, kept: 'kept-value' })
-      span.setStatus({ code: SpanStatusCode.ERROR, message: 'plain words' })
-      const write = span.setStatus.bind(span)
-      let left = failures
-      span.setStatus = (status) => {
-        if (left > 0) {
-          left -= 1
-          throw new Error('unwritable')
-        }
-        return write(status)
+  it('ends the span and exports no exception text when the redaction throws', async () => {
+    // Scenario: an attribute throws when read; end() must return and nothing unredacted may leave.
+    const started = await startTelemetry({ env: {} })
+    const span = trace.getTracer('e2e').startSpan('failing')
+    span.addEvent('exception', { 'exception.message': SECRET })
+    span.setStatus({ code: SpanStatusCode.ERROR, message: 'plain words' })
+    const [event] = (span as unknown as { events: { attributes: object }[] }).events
+    Object.defineProperty(event?.attributes, 'exception.stacktrace', {
+      enumerable: true,
+      get: () => {
+        throw new Error('unreadable')
       }
+    })
 
-      expect(() => span.end()).not.toThrow()
-      await started.shutdown()
+    expect(() => span.end()).not.toThrow()
+    await started.shutdown()
 
-      const body = collector.bodies.join('\n')
-      expect(body).toContain('kept-value')
-      expect(body).not.toContain('exception.message')
-      expect(body).not.toContain('plain words')
-      expect(body).toContain('"message":"[redacted]"')
-      expect(leaked()).toEqual([])
-    }
-  )
+    const body = collector.bodies.join('\n')
+    expect(body).toContain('failing')
+    expect(body).not.toContain('exception.message')
+    expect(body).not.toContain('plain words')
+    expect(body).toContain('"message":"[redacted]"')
+    expect(leaked()).toEqual([])
+  })
+
+  it('exports the redacted text of a span whose setStatus ignores the call', async () => {
+    // Scenario: something wrapped setStatus after the status was set.
+    const started = await startTelemetry({ env: {}, redactExceptionText: true })
+    const span = trace.getTracer('e2e').startSpan('wrapped')
+    span.setStatus({ code: SpanStatusCode.ERROR, message: SECRET })
+    span.setStatus = () => span
+
+    span.end()
+    await started.shutdown()
+
+    expect(collector.bodies.join('\n')).toContain('"message":"[redacted]"')
+    expect(leaked()).toEqual([])
+  })
 })
 
 describe('BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT', () => {

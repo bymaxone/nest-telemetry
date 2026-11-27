@@ -19,16 +19,11 @@ interface FakeSpan {
 }
 
 /** A span with a status message and one event per set of attributes. */
-function fakeSpan(
-  message: unknown,
-  ...events: (Attributes | undefined)[]
-): FakeSpan & { writes: number } {
+function fakeSpan(message: unknown, ...events: (Attributes | undefined)[]): FakeSpan {
   const span = {
-    writes: 0,
     status: { code: 2, message } as SpanStatus,
     events: events.map((attributes) => (attributes === undefined ? {} : { attributes })),
     setStatus(status: SpanStatus): void {
-      span.writes += 1
       span.status = status
     }
   }
@@ -395,12 +390,10 @@ describe('createExceptionTextRedactor', () => {
     expect(span.events[0]?.attributes).toEqual({ 'exception.stacktrace': 7 })
   })
 
-  it('drops the exception attributes and the status message when the redaction fails', () => {
+  it('replaces the status message and removes every event when the redaction fails', () => {
     // Scenario: a value that throws when read must not reach the exporter, nor the caller of end().
     const broken = {
-      'exception.type': 'Error',
       'exception.message': 'hunter2',
-      other: 'kept',
       get 'exception.stacktrace'(): string {
         throw new Error('unreadable')
       }
@@ -410,43 +403,137 @@ describe('createExceptionTextRedactor', () => {
     expect(() => end(span, false)).not.toThrow()
 
     expect(span.status).toEqual({ code: 2, message: '[redacted]' })
-    expect(span.events[0]?.attributes).toEqual({ other: 'kept' })
-    expect(span.events[1]?.attributes).toEqual({})
+    expect(span.events).toEqual([])
   })
 
-  it('replaces the status message when setting the status throws', () => {
-    // Scenario: `setStatus` is what failed, so the fallback cannot use it.
+  it.each([
+    [
+      'ignores the call',
+      (span: FakeSpan): void => {
+        span.setStatus = (): void => undefined
+      }
+    ],
+    [
+      'throws',
+      (span: FakeSpan): void => {
+        span.setStatus = (): void => {
+          throw new Error('unwritable')
+        }
+      }
+    ],
+    [
+      'holds a frozen status',
+      (span: FakeSpan): void => {
+        span.status = Object.freeze({ code: 2, message: 'hunter2' })
+      }
+    ]
+  ])('replaces the status message of a span whose setStatus or status %s', (_what, alter) => {
+    // Scenario: the new status does not depend on the method or on the old object.
     const span = fakeSpan('hunter2')
-    span.setStatus = (): void => {
-      throw new Error('unwritable')
+    alter(span)
+
+    end(span, true)
+
+    expect(span.status).toEqual({ code: 2, message: '[redacted]' })
+  })
+
+  it.each([
+    ['frozen', Object.freeze({ 'exception.message': 'hunter2', other: 'kept' })],
+    [
+      'with a setter that ignores the write',
+      {
+        other: 'kept',
+        get 'exception.message'(): string {
+          return 'hunter2'
+        },
+        set 'exception.message'(_value: string) {
+          // The write is ignored.
+        }
+      }
+    ]
+  ])('replaces a message held by attributes %s', (_what, attributes) => {
+    // Scenario: the event gets new attributes, so the old object does not have to take a write.
+    const span = fakeSpan(undefined, attributes)
+
+    end(span, true)
+
+    expect(span.events[0]?.attributes).toEqual({ 'exception.message': '[redacted]', other: 'kept' })
+  })
+
+  it('removes every event when one cannot take new attributes', () => {
+    // Scenario: nothing can be written to the event itself, so it cannot stay.
+    const span = fakeSpan(undefined, { 'exception.message': 'hunter2' })
+    span.events[0] = Object.freeze({ attributes: { 'exception.message': 'hunter2' } })
+
+    expect(() => end(span, true)).not.toThrow()
+
+    expect(span.events).toEqual([])
+  })
+
+  it('removes every event when they cannot be iterated', () => {
+    // Scenario: the removal does not read the events one by one.
+    const span = fakeSpan('hunter2', { 'exception.message': 'hunter2' })
+    span.events[Symbol.iterator] = (): never => {
+      throw new Error('unreadable')
     }
 
     expect(() => end(span, true)).not.toThrow()
 
     expect(span.status).toEqual({ code: 2, message: '[redacted]' })
+    expect(span.events).toHaveLength(0)
   })
 
-  it('still drops the exception attributes when the status cannot be written', () => {
-    // Scenario: the failure is the span itself, and one event cannot be changed either.
-    const frozen = Object.freeze({ 'exception.message': 'hunter2' })
-    const span = fakeSpan('hunter2', frozen, { 'exception.message': 'hunter2' })
-    span.status = Object.freeze({ code: 2, message: 'hunter2' })
-    span.setStatus = (): void => {
-      throw new Error('unwritable')
-    }
+  it('removes the events of a span whose status cannot be replaced', () => {
+    // Scenario: one write of the fallback failing does not stop the other.
+    const span = fakeSpan('hunter2', { 'exception.message': 'hunter2' })
+    Object.defineProperty(span, 'status', { writable: false })
 
     expect(() => end(span, true)).not.toThrow()
 
-    expect(span.events[1]?.attributes).toEqual({})
+    expect(span.events).toEqual([])
   })
 
-  it.each([undefined, '', 7])('does not write a status message that is %j', (message) => {
-    // Scenario: a span with no message keeps its status as it was.
-    const span = fakeSpan(message)
+  it('does not throw when neither the status nor the events take a write', () => {
+    // Scenario: nothing can be removed, and the caller of end() still must not see a failure.
+    const span = fakeSpan('hunter2', { 'exception.message': 'hunter2' })
+    Object.defineProperty(span, 'status', { writable: false })
+    Object.freeze(span.events[0])
+    Object.freeze(span.events)
+
+    expect(() => end(span, true)).not.toThrow()
+  })
+
+  it('leaves an event with no exception text as it is, frozen or not', () => {
+    // Scenario: an event that holds nothing to redact is not written.
+    const span = fakeSpan(undefined)
+    const event = Object.freeze({ attributes: { other: 'kept' } })
+    span.events.push(event)
 
     end(span, true)
 
-    expect(span.writes).toBe(0)
+    expect(span.events).toEqual([event])
+  })
+
+  it.each([false, true])(
+    'replaces a status message that is not a string (every message: %s)',
+    (everyMessage) => {
+      // Scenario: a value that is not text cannot be read for input, so none of it is kept.
+      const span = fakeSpan(['hunter2'])
+
+      end(span, everyMessage)
+
+      expect(span.status).toEqual({ code: 2, message: '[redacted]' })
+    }
+  )
+
+  it.each([undefined, ''])('does not write a status message that is %j', (message) => {
+    // Scenario: a span with no message keeps its status as it was.
+    const span = fakeSpan(message)
+    const { status } = span
+
+    end(span, true)
+
+    expect(span.status).toBe(status)
   })
 
   it('does nothing at any other step of the span', async () => {

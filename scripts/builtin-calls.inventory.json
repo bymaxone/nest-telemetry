@@ -176,7 +176,7 @@
     "class": "guarded"
   },
   "src/sdk/exception-redaction.ts|iterate|for-of": {
-    "count": 3,
+    "count": 1,
     "class": "guarded",
     "iterates": ["array"]
   },
@@ -201,7 +201,7 @@
     "class": "guarded"
   },
   "src/sdk/exception-redaction.ts|method|.startsWith": {
-    "count": 4,
+    "count": 3,
     "class": "guarded"
   },
   "src/sdk/exception-redaction.ts|method|.test": {
@@ -209,10 +209,6 @@
     "class": "guarded"
   },
   "src/sdk/exception-redaction.ts|static|Array.isArray": {
-    "count": 1,
-    "class": "guarded"
-  },
-  "src/sdk/exception-redaction.ts|static|Object.keys": {
     "count": 1,
     "class": "guarded"
   },

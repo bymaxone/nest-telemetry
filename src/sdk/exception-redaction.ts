@@ -6,7 +6,7 @@
  * Nothing here imports an OpenTelemetry package at runtime; the type imports are erased. A boot
  * with telemetry disabled loads this module, so it must not pull the SDK graph in.
  */
-import type { Attributes, AttributeValue } from '@opentelemetry/api'
+import type { Attributes, AttributeValue, SpanStatus } from '@opentelemetry/api'
 import type { SpanProcessor } from '@opentelemetry/sdk-trace'
 
 import { resolvedPromise } from './native-promise'
@@ -163,8 +163,14 @@ function isFrame(line: string): boolean {
   return line.startsWith('    at ') && FRAME_END.test(line)
 }
 
-/** A span as the ending hook receives it. */
-type EndingSpan = Parameters<NonNullable<SpanProcessor['onEnding']>>[0]
+/**
+ * What the redaction writes of a span as the ending hook receives it. The SDK types `status` as
+ * read-only for processors; replacing the object is what does not depend on how it was set.
+ */
+interface EndingSpan {
+  status: SpanStatus
+  readonly events: Parameters<NonNullable<SpanProcessor['onEnding']>>[0]['events']
+}
 
 /** Removes the quoted input from a string, or from each string of an array. */
 function redactParseErrorValue(value: AttributeValue): AttributeValue {
@@ -176,27 +182,51 @@ function redactParseErrorValue(value: AttributeValue): AttributeValue {
   ) as AttributeValue
 }
 
-/** Redacts the status message and the exception attributes of each event of a span. */
+/** What a status message becomes. One that is not text cannot be read, so none of it is kept. */
+function redactStatusMessage(message: unknown, everyMessage: boolean): string {
+  return everyMessage || typeof message !== 'string' ? REDACTED : redactParseErrorText(message)
+}
+
+/** What a stack becomes with every message asked for. Frames can be told apart only in a string. */
+function redactEveryStack(stack: AttributeValue, message: unknown): string {
+  return typeof stack === 'string' ? redactStackText(stack, message) : REDACTED
+}
+
+/** The attributes of an event with its exception message and stack redacted. */
+function redactAttributes(
+  held: Attributes,
+  stack: AttributeValue | undefined,
+  recorded: AttributeValue | undefined,
+  everyMessage: boolean
+): Attributes {
+  const next: Attributes = { ...held }
+  if (stack !== undefined) {
+    next['exception.stacktrace'] = everyMessage
+      ? redactEveryStack(stack, recorded)
+      : redactParseErrorValue(stack)
+  }
+  if (recorded !== undefined) {
+    next['exception.message'] = everyMessage ? REDACTED : redactParseErrorValue(recorded)
+  }
+  return next
+}
+
+/**
+ * Redacts the status message and the exception attributes of each event of a span. A new object
+ * takes the place of the old one, so neither `setStatus` nor a write to what is held is relied on.
+ */
 function redactSpanText(span: EndingSpan, everyMessage: boolean): void {
   const { code, message } = span.status
-  if (typeof message === 'string' && message !== '') {
-    span.setStatus({ code, message: everyMessage ? REDACTED : redactParseErrorText(message) })
+  if (message !== undefined && message !== '') {
+    span.status = { code, message: redactStatusMessage(message, everyMessage) }
   }
-  for (const { attributes } of span.events) {
-    if (attributes === undefined) continue
-    const recorded = attributes['exception.message']
-    const stack = attributes['exception.stacktrace']
-    // The stack is read against the recorded message, so it is redacted before the message is.
-    if (stack !== undefined) {
-      if (!everyMessage) attributes['exception.stacktrace'] = redactParseErrorValue(stack)
-      else {
-        // Frames can be told apart only in a string.
-        attributes['exception.stacktrace'] =
-          typeof stack === 'string' ? redactStackText(stack, recorded) : REDACTED
-      }
-    }
-    if (recorded === undefined) continue
-    attributes['exception.message'] = everyMessage ? REDACTED : redactParseErrorValue(recorded)
+  for (const event of span.events) {
+    const held = event.attributes
+    if (held === undefined) continue
+    const stack = held['exception.stacktrace']
+    const recorded = held['exception.message']
+    if (stack === undefined && recorded === undefined) continue
+    event.attributes = redactAttributes(held, stack, recorded, everyMessage)
   }
 }
 
@@ -209,27 +239,23 @@ function attempt(step: () => void): void {
   }
 }
 
-/** Fails closed: replaces the status message and removes every exception attribute. */
+/** Fails closed: replaces the status message and removes every event. */
 function dropExceptionText(span: EndingSpan): void {
-  // Written to the status itself, because `setStatus` may be what failed.
   attempt(() => {
-    span.status.message = REDACTED
+    const { code } = span.status
+    span.status = { code, message: REDACTED }
   })
-  for (const event of span.events) {
-    attempt(() => {
-      const held: Attributes = event.attributes ?? {}
-      for (const key of Object.keys(held)) {
-        if (key.startsWith('exception.')) delete held[key]
-      }
-    })
-  }
+  // All at once: reading the events one by one may be what failed.
+  attempt(() => {
+    span.events.length = 0
+  })
 }
 
 /**
  * Creates the span processor that redacts the exception text of every span as it ends: the status
  * message and the `exception.message` and `exception.stacktrace` of each event. The type of the
  * exception is not touched. When the redaction itself fails, the status message is replaced and
- * every `exception.*` attribute is removed.
+ * every event of the span is removed. A span altered to refuse those two writes keeps what it held.
  *
  * It uses `onEnding`, which `@opentelemetry/sdk-trace` marks experimental.
  *
