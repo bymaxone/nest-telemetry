@@ -101,6 +101,7 @@ export function readEachOption(options: TelemetryOptions): Record<keyof Telemetr
     ignoreIncomingRequest: read('ignoreIncomingRequest'),
     instrumentations: read('instrumentations'),
     extraRedactedQueryParams: read('extraRedactedQueryParams'),
+    redactExceptionText: read('redactExceptionText'),
     unsafe: read('unsafe'),
     shutdownTimeoutMs: read('shutdownTimeoutMs'),
     env: read('env')

@@ -30,6 +30,7 @@ import type { InstrumentationInputs, ServiceIdentity } from './assembly'
 import { emitWarning } from './emit-warning'
 import { readRatioSampler, readSamplerNearMiss, readTelemetryEnvironment } from './environment'
 import type { TelemetryEnvironment } from './environment'
+import { createExceptionTextRedactor } from './exception-redaction'
 import { warnOnExportFailure } from './export-failure'
 import { guardExports } from './export-guard'
 import {
@@ -383,6 +384,8 @@ function buildSdk(
     ),
     spanProcessors: [
       // Ordered before the batch processor, so each span is redacted in place before it is exported.
+      // The exception text redactor has no opt-out: the input of a parse error is never exported.
+      createExceptionTextRedactor(options.redactExceptionText === true),
       ...(unsafe?.disableUrlRedaction === true ? [] : [createUrlQueryRedactor()]),
       new sdkTrace.BatchSpanProcessor({
         exporter: warnOnExportFailure(

@@ -175,6 +175,35 @@
     "count": 1,
     "class": "guarded"
   },
+  "src/sdk/exception-redaction.ts|iterate|for-of": {
+    "count": 1,
+    "class": "guarded",
+    "iterates": ["array"]
+  },
+  "src/sdk/exception-redaction.ts|method|.includes": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/exception-redaction.ts|method|.indexOf": {
+    "count": 2,
+    "class": "guarded"
+  },
+  "src/sdk/exception-redaction.ts|method|.slice": {
+    "count": 2,
+    "class": "guarded"
+  },
+  "src/sdk/exception-redaction.ts|method|.split": {
+    "count": 3,
+    "class": "guarded"
+  },
+  "src/sdk/exception-redaction.ts|method|.startsWith": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/exception-redaction.ts|method|.test": {
+    "count": 2,
+    "class": "guarded"
+  },
   "src/sdk/export-failure.ts|static|Symbol.for": {
     "count": 1,
     "class": "guarded"
