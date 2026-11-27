@@ -148,7 +148,7 @@
     "class": "guarded"
   },
   "src/sdk/environment.ts|method|.includes": {
-    "count": 2,
+    "count": 5,
     "class": "guarded"
   },
   "src/sdk/environment.ts|method|.map": {
@@ -172,6 +172,43 @@
     "class": "guarded"
   },
   "src/sdk/environment.ts|static|Number.isFinite": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/exception-redaction.ts|iterate|for-of": {
+    "count": 1,
+    "class": "guarded",
+    "iterates": ["array"]
+  },
+  "src/sdk/exception-redaction.ts|method|.includes": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/exception-redaction.ts|method|.indexOf": {
+    "count": 9,
+    "class": "guarded"
+  },
+  "src/sdk/exception-redaction.ts|method|.map": {
+    "count": 1,
+    "class": "guarded"
+  },
+  "src/sdk/exception-redaction.ts|method|.slice": {
+    "count": 4,
+    "class": "guarded"
+  },
+  "src/sdk/exception-redaction.ts|method|.split": {
+    "count": 3,
+    "class": "guarded"
+  },
+  "src/sdk/exception-redaction.ts|method|.startsWith": {
+    "count": 3,
+    "class": "guarded"
+  },
+  "src/sdk/exception-redaction.ts|method|.test": {
+    "count": 2,
+    "class": "guarded"
+  },
+  "src/sdk/exception-redaction.ts|static|Array.isArray": {
     "count": 1,
     "class": "guarded"
   },

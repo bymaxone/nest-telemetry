@@ -192,9 +192,10 @@ describe('startTelemetry', () => {
       expect(options['metricReaders']).toEqual([])
       expect(options['logRecordProcessors']).toEqual([])
       const processors = options['spanProcessors'] as { onEnding?: unknown; kind?: string }[]
-      expect(processors).toHaveLength(2)
+      expect(processors).toHaveLength(3)
       expect(typeof processors[0]?.onEnding).toBe('function')
-      expect(processors[1]).toEqual({ kind: 'batch' })
+      expect(typeof processors[1]?.onEnding).toBe('function')
+      expect(processors[2]).toEqual({ kind: 'batch' })
       expect(mockSdkInstance.start).toHaveBeenCalledTimes(1)
     })
 
@@ -213,7 +214,11 @@ describe('startTelemetry', () => {
       const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
       await startTelemetry({ serviceName: 'api', unsafe: { disableUrlRedaction: true }, env: {} })
       const [options] = mockNodeSdk.mock.calls[0] as unknown as [Record<string, unknown>]
-      expect(options['spanProcessors']).toEqual([{ kind: 'batch' }])
+      // Only the exception text redactor, which has no opt-out, stays ahead of the batch processor.
+      expect(options['spanProcessors']).toEqual([
+        expect.objectContaining({ onEnding: expect.any(Function) }),
+        { kind: 'batch' }
+      ])
       expect(emitWarning).toHaveBeenCalledTimes(1)
     })
 

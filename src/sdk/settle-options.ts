@@ -39,6 +39,7 @@ export function settleOptions(options: TelemetryOptions): TelemetryOptions {
       'extraRedactedQueryParams',
       read.extraRedactedQueryParams
     ),
+    redactExceptionText: requireBoolean('redactExceptionText', read.redactExceptionText),
     unsafe: isGiven(read.unsafe) ? settleUnsafe(read.unsafe) : undefined,
     shutdownTimeoutMs: read.shutdownTimeoutMs,
     env: requireObject('env', read.env)

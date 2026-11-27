@@ -239,8 +239,8 @@ describe('startTelemetry reads each option once', () => {
       )
       expect(redactionWarnings).toHaveLength(0)
       expect(sdkOptions.resourceDetectors[2]?.detect().attributes).not.toHaveProperty(['host.id'])
-      // The URL redactor stays ahead of the batch processor.
-      expect(sdkOptions.spanProcessors).toHaveLength(2)
+      // Both redactors stay ahead of the batch processor.
+      expect(sdkOptions.spanProcessors).toHaveLength(3)
       expect(reads).toBe(1)
     })
 
@@ -378,7 +378,7 @@ describe('startTelemetry reads each option once', () => {
         ]
         const exportsHostId =
           'host.id' in (sdkOptions.resourceDetectors[2]?.detect().attributes ?? {})
-        const redactorLeftOut = sdkOptions.spanProcessors.length === 1
+        const redactorLeftOut = sdkOptions.spanProcessors.length === 2
         expect(warned(/Host id redaction is disabled/)).toBe(exportsHostId)
         expect(warned(/URL redaction is disabled/)).toBe(redactorLeftOut)
         swept += 1

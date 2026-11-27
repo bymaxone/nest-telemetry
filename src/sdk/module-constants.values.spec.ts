@@ -318,3 +318,54 @@ describe('the path an override error names', () => {
     expect(refused).toMatchObject({ option: 'instrumentations.overrides[]' })
   })
 })
+
+describe('the words and patterns of the exception text redaction', () => {
+  it('recognises a quoting parse error by its ending and its token', async () => {
+    // Scenario: a whole message, a cut one and a text with no such words, read by a copy loaded here.
+    const { redactParseErrorText } = await import('./exception-redaction')
+    expect(redactParseErrorText('Unexpected token \'x\', "secret" is not valid JSON')).toBe(
+      '[redacted] is not valid JSON'
+    )
+    expect(redactParseErrorText("Unexpected token 'x', \"sec")).toBe('[redacted]')
+    expect(redactParseErrorText("no rows for 'a', 'b'")).toBe("no rows for 'a', 'b'")
+    expect(redactParseErrorText("Unexpected token 'abc' here")).toBe("Unexpected token 'abc' here")
+  })
+
+  it('keeps a class name only when it heads the text', async () => {
+    // Scenario: a name of several letters, the bare `Error`, and a name that comes after other words.
+    const { redactStackText } = await import('./exception-redaction')
+    const frame = '    at a (f:1:1)'
+    expect(redactStackText(`TypeError: m\n${frame}`, 'm')).toBe(`TypeError: [redacted]\n${frame}`)
+    expect(redactStackText(`Error: m\n${frame}`, 'm')).toBe(`Error: [redacted]\n${frame}`)
+    expect(redactStackText(`boom TypeError: m\n${frame}`, 'm')).toBe(`[redacted]\n${frame}`)
+  })
+
+  it('takes as a frame only a line that ends in a position or in a place V8 names', async () => {
+    // Scenario: positions of two digits, with and without parentheses, an index of two digits, and a
+    // line that only holds a position in its middle.
+    const { redactStackText } = await import('./exception-redaction')
+    const frames = [
+      '    at f (/a/b.js:12:34)',
+      '    at async Promise.all (index 12)',
+      '    at file:///x.js:56:78'
+    ].join('\n')
+    expect(redactStackText(`Error: boom\n    at 10:30:00 the secret\n${frames}`, undefined)).toBe(
+      `Error: [redacted]\n${frames}`
+    )
+  })
+})
+
+describe('the words that set the exception text redaction in the environment', () => {
+  it('turns it on for two words, leaves it off for three, and marks any other', async () => {
+    // Scenario: each accepted word, read by a copy loaded here, then one that is not accepted.
+    const { readTelemetryEnvironment } = await import('./environment')
+    const read = (value: string): [boolean, boolean] => {
+      const found = readTelemetryEnvironment({ BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT: value })
+      return [found.redactExceptionText, found.redactExceptionTextUnknown]
+    }
+    for (const value of ['true', '1']) expect(read(value)).toEqual([true, false])
+    for (const value of ['', 'false', '0']) expect(read(value)).toEqual([false, false])
+    expect(read('Stryker was here!')).toEqual([false, true])
+    expect(read('yes')).toEqual([false, true])
+  })
+})

@@ -101,6 +101,7 @@ export function readEachOption(options: TelemetryOptions): Record<keyof Telemetr
     ignoreIncomingRequest: read('ignoreIncomingRequest'),
     instrumentations: read('instrumentations'),
     extraRedactedQueryParams: read('extraRedactedQueryParams'),
+    redactExceptionText: read('redactExceptionText'),
     unsafe: read('unsafe'),
     shutdownTimeoutMs: read('shutdownTimeoutMs'),
     env: read('env')
@@ -453,6 +454,24 @@ export function warnAboutSamplerName(meant: string | undefined): void {
   reportWarning({
     code: 'BYMAX_TELEMETRY_SAMPLER_NAME_UNKNOWN',
     text: `OTEL_TRACES_SAMPLER differs from "${meant}" only in letter case or whitespace. The SDK compares the name exactly, so it ignores the value and samples every trace. Write it as "${meant}".`
+  })
+}
+
+/**
+ * Warns when `BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT` holds an unknown value that would have decided,
+ * which is when the host gave no `redactExceptionText`. The value is not repeated.
+ *
+ * @param option - The option of the call.
+ * @param env - The parsed environment.
+ */
+export function warnAboutRedactExceptionText(
+  option: boolean | undefined,
+  env: TelemetryEnvironment
+): void {
+  if (option !== undefined || !env.redactExceptionTextUnknown) return
+  reportWarning({
+    code: 'BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT_UNKNOWN',
+    text: 'BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT is not "true", "1", "false" or "0", so it is off and only the input a JSON parse error quotes is redacted. Set it to "true" or "1" to redact every exception message.'
   })
 }
 

@@ -89,6 +89,14 @@ export interface TelemetryOptions {
   readonly instrumentations?: InstrumentationOptions
   /** Query-parameter names redacted from outgoing request URLs, added to the library's list. */
   readonly extraRedactedQueryParams?: readonly string[]
+  /**
+   * Replaces the text of every recorded exception: the span status message and the
+   * `exception.message` of each event become `[redacted]`, and `exception.stacktrace` keeps its
+   * frames under a redacted header. `exception.type` stays. Off by default; without it only the
+   * input a `JSON.parse` message quotes is removed. When the option is not given,
+   * `BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT` set to `true` or `1` turns it on.
+   */
+  readonly redactExceptionText?: boolean
   /** Explicit opt-outs from redaction. */
   readonly unsafe?: UnsafeOptions
   /**
