@@ -50,8 +50,18 @@ export function redactParseErrorText(text: string): string {
   const parts = text.split(PARSE_ERROR_END)
   if (parts.length === 1) return named ? `${classHead(text)}${REDACTED}` : text
   const rest = parts[parts.length - 1] as string
-  const kept = !named || rest.startsWith('\n    at ') ? rest : ''
+  const kept = named ? leadingFrames(rest) : rest
   return `${classHead(text)}${REDACTED} ${PARSE_ERROR_END}${kept}`
+}
+
+/** The unbroken run of frame lines that starts on the line after the first one, or nothing. */
+function leadingFrames(text: string): string {
+  const lines = text.split('\n')
+  let frames = ''
+  for (let at = 1; lines[0] === '' && at < lines.length && isFrame(lines[at] as string); at += 1) {
+    frames += `\n${lines[at] as string}`
+  }
+  return frames
 }
 
 /**

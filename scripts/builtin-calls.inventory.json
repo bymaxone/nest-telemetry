@@ -193,11 +193,11 @@
     "class": "guarded"
   },
   "src/sdk/exception-redaction.ts|method|.split": {
-    "count": 2,
+    "count": 3,
     "class": "guarded"
   },
   "src/sdk/exception-redaction.ts|method|.startsWith": {
-    "count": 3,
+    "count": 2,
     "class": "guarded"
   },
   "src/sdk/exception-redaction.ts|method|.test": {

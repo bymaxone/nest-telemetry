@@ -101,6 +101,17 @@ describe('redactParseErrorText', () => {
     expect(redactParseErrorText(text)).toBe('[redacted] is not valid JSON')
   })
 
+  it.each([
+    ['\n    at hunter2', ''],
+    ['\n    at a (b.js:1:2)\nhunter2', '\n    at a (b.js:1:2)'],
+    ['\n    at a (b.js:1:2)\n    at hunter2\n    at c (d.js:3:4)', '\n    at a (b.js:1:2)']
+  ])('keeps only the frame lines right after a token message: %j', (rest, frames) => {
+    // Scenario: the input of a cut message imitates the start of a stack.
+    expect(redactParseErrorText(`Unexpected token 'x', "x is not valid JSON${rest}`)).toBe(
+      `[redacted] is not valid JSON${frames}`
+    )
+  })
+
   it('keeps what follows the ending of a message that names no token', () => {
     // Scenario: V8 quotes a whole short source without naming a token.
     expect(redactParseErrorText('"[object Object]" is not valid JSON (config)')).toBe(
@@ -206,6 +217,13 @@ describe('redactStackText, with a message that also occurs in a frame', () => {
       )
     }
   )
+
+  it('counts the header line even when it starts like a frame', () => {
+    // Scenario: a stack with no class name, whose message is two lines that imitate frames.
+    const message = '    at q\n    at hunter2:1:1'
+
+    expect(redactStackText(`${message}\n${frames}`, message)).toBe(`[redacted]\n${frames}`)
+  })
 
   it('cuts after a later copy of the message that is not a frame', () => {
     // Scenario: the stack repeats the message under its header, imitation line included.
