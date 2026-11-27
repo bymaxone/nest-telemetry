@@ -37,7 +37,7 @@ const FRAME_END = /(?::\d{1,10}:\d{1,10}|<anonymous>|native|index \d{1,10})\)?$/
 const SEARCHED_STACK_LIMIT = 32_768
 
 /**
- * The longest class name behind which a cut message is looked for. Each `: ` of the header is tried,
+ * The longest class name behind which a cut message is looked for. Each `: ` up to there is tried,
  * and each try can cost the length of the stack.
  */
 const CLASS_NAME_LIMIT = 256
@@ -96,7 +96,7 @@ function leadingFrames(text: string): string {
  * the stack, outside the frame lines, nothing up to the end of its last such copy can count as a
  * frame, so a message that imitates one goes too. A copy inside a frame, such as a function or a
  * file named like the message, is the frame's own text. A stack over {@link SEARCHED_STACK_LIMIT}
- * with a message to look for keeps no frames, nor does a stack that ends inside its message.
+ * with a message to look for keeps no frames, nor does a stack found cut in its message.
  *
  * @param stack - The recorded stack.
  * @param message - The recorded message, when it is a string.

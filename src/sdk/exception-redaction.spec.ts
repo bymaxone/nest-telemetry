@@ -268,7 +268,7 @@ describe('redactStackText, with a stack cut short inside its message', () => {
   it.each([
     [256, '[redacted]'],
     [257, '[redacted]\n    at hunter2:1:2']
-  ])('looks for the message behind a class name of %i characters', (length, expected) => {
+  ])('reads a cut stack under a class name of %i characters', (length, expected) => {
     // Scenario: the search is bounded, so a longer name is not recognised as a header.
     const stack = `${'N'.repeat(length)}: x\n    at hunter2:1:2`
 
