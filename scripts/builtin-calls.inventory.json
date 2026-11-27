@@ -185,19 +185,19 @@
     "class": "guarded"
   },
   "src/sdk/exception-redaction.ts|method|.indexOf": {
-    "count": 2,
+    "count": 6,
     "class": "guarded"
   },
   "src/sdk/exception-redaction.ts|method|.slice": {
-    "count": 2,
-    "class": "guarded"
-  },
-  "src/sdk/exception-redaction.ts|method|.split": {
     "count": 3,
     "class": "guarded"
   },
+  "src/sdk/exception-redaction.ts|method|.split": {
+    "count": 2,
+    "class": "guarded"
+  },
   "src/sdk/exception-redaction.ts|method|.startsWith": {
-    "count": 1,
+    "count": 3,
     "class": "guarded"
   },
   "src/sdk/exception-redaction.ts|method|.test": {

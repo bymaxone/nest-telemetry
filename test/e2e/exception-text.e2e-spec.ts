@@ -249,6 +249,17 @@ describe('parse-error text through the real SDK', () => {
     expect(spans.get('driver')?.event['exception.stacktrace']).toMatch(/^error: \[redacted\]/)
   })
 
+  it('keeps every frame when the message is a word the frames hold too', async () => {
+    // Scenario: "node" is in the path of the frames, which are not the message.
+    const error = new Error('node')
+    const frames = (error.stack as string).slice('Error: node'.length)
+    expect(frames).toContain('node')
+
+    const spans = await exported({ redactExceptionText: true }, { word: error })
+
+    expect(spans.get('word')?.event['exception.stacktrace']).toBe(`Error: [redacted]${frames}`)
+  })
+
   it.each([
     ['with the default', false],
     ['with redactExceptionText', true]

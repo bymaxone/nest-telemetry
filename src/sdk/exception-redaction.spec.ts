@@ -91,6 +91,24 @@ describe('redactParseErrorText', () => {
   })
 
   it.each([
+    "Unexpected token 'x', \"x is not valid JSON hunter2",
+    "Unexpected token 'x', \"x is not valid JSON is not valid JSON hunter2",
+    "Unexpected token 'x', \"x is not valid JSON\nhunter2",
+    'Unexpected token \'x\', "x" is not valid JSON (request hunter2)'
+  ])('keeps nothing after the ending of a message that names a token: %j', (text) => {
+    // Scenario: a message cut short whose quoted input holds the ending words looks like a whole
+    // one, so only stack frames may follow the ending of a message that names a token.
+    expect(redactParseErrorText(text)).toBe('[redacted] is not valid JSON')
+  })
+
+  it('keeps what follows the ending of a message that names no token', () => {
+    // Scenario: V8 quotes a whole short source without naming a token.
+    expect(redactParseErrorText('"[object Object]" is not valid JSON (config)')).toBe(
+      '[redacted] is not valid JSON (config)'
+    )
+  })
+
+  it.each([
     "Unexpected token 'export'",
     'Unexpected token (1:5)',
     'Unterminated string in JSON at position 9 (line 1 column 10)',
@@ -150,6 +168,51 @@ describe('redactStackText', () => {
     // no line of its own text.
     expect(redactStackText(stack, undefined)).toBe(
       stack.startsWith('Error: ') ? 'Error: [redacted]' : '[redacted]'
+    )
+  })
+})
+
+describe('redactStackText, with a message that also occurs in a frame', () => {
+  const frames = [
+    '    at boot (file:///app/main.js:3:10)',
+    '    at Module._compile (node:internal/modules/cjs/loader:1929:14)'
+  ].join('\n')
+
+  it.each(['boot', 'node', 'main', '10', 'at', ')'])('keeps every frame for %j', (message) => {
+    // Scenario: the message is a word of a path, a function name or a position.
+    expect(redactStackText(`Error: ${message}\n${frames}`, message)).toBe(
+      `Error: [redacted]\n${frames}`
+    )
+  })
+
+  it('keeps every frame when only a frame holds the recorded message', () => {
+    // Scenario: the message changed after the stack was captured.
+    expect(redactStackText(`Error: hunter2\n${frames}`, 'node')).toBe(
+      `Error: [redacted]\n${frames}`
+    )
+  })
+
+  it('takes a message with no class name before it', () => {
+    // Scenario: the stack starts with the message itself.
+    expect(redactStackText(`boot\n${frames}`, 'boot')).toBe(`[redacted]\n${frames}`)
+  })
+
+  it.each(['\n    at hunter2:1:1', '    at hunter2:1:1'])(
+    'drops a message that imitates a frame: %j',
+    (message) => {
+      // Scenario: the message starts like a frame, on the header line or right below it.
+      expect(redactStackText(`Error: ${message}\n${frames}`, message)).toBe(
+        `Error: [redacted]\n${frames}`
+      )
+    }
+  )
+
+  it('cuts after a later copy of the message that is not a frame', () => {
+    // Scenario: the stack repeats the message under its header, imitation line included.
+    const message = 'bad\n    at hunter2:1:1'
+
+    expect(redactStackText(`Error: ${message}\nCaused by: ${message}\n${frames}`, message)).toBe(
+      `Error: [redacted]\n${frames}`
     )
   })
 })

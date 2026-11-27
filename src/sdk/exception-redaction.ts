@@ -34,42 +34,67 @@ const FRAME_END = /(?::\d{1,10}:\d{1,10}|<anonymous>|native|index \d{1,10})\)?$/
  *
  * Everything up to the last `is not valid JSON` goes, whatever shape it has: the quoted input may
  * hold quotes, newlines and those very words, and a shape this library does not know must not be
- * kept. Only a leading class name, the ending and what follows it remain. A quoting message cut
- * short before its ending is redacted whole, but for the class name.
+ * kept. A leading class name and the ending remain. What follows the ending remains too, except
+ * after a message that names a token: cut short, with those words in its input, it looks like a
+ * whole one, so only stack frames are kept. A token message cut before any ending is redacted
+ * whole, but for the class name.
  *
  * @param text - A status message, an exception message or a stack.
  * @returns The text without the quoted input, or the same text when it quotes none.
  */
 export function redactParseErrorText(text: string): string {
-  const parts = text.split(PARSE_ERROR_END)
-  if (parts.length > 1) {
-    return `${classHead(text)}${REDACTED} ${PARSE_ERROR_END}${parts[parts.length - 1] as string}`
-  }
   const token = text.indexOf(TOKEN_START)
   // The token is one character, two UTF-16 units at most, so its end is found right after it.
   const after = token + TOKEN_START.length
-  const cut = token >= 0 && text.slice(after + 1, after + 5).includes(TOKEN_END)
-  return cut ? `${classHead(text)}${REDACTED}` : text
+  const named = token >= 0 && text.slice(after + 1, after + 5).includes(TOKEN_END)
+  const parts = text.split(PARSE_ERROR_END)
+  if (parts.length === 1) return named ? `${classHead(text)}${REDACTED}` : text
+  const rest = parts[parts.length - 1] as string
+  const kept = !named || rest.startsWith('\n    at ') ? rest : ''
+  return `${classHead(text)}${REDACTED} ${PARSE_ERROR_END}${kept}`
 }
 
 /**
  * Removes the message from a stack and keeps the frames under a redacted header.
  *
  * The frames are the unbroken run of frame lines at the end. When the recorded message is found in
- * the stack, nothing up to its end can count as a frame, so a message that imitates one goes too.
+ * the stack, outside the frame lines, nothing up to the end of its last such copy can count as a
+ * frame, so a message that imitates one goes too. A copy inside a frame, such as a function or a
+ * file named like the message, is the frame's own text.
  *
  * @param stack - The recorded stack.
  * @param message - The recorded message, when it is a string.
  * @returns The class name of the stack, when it has one, `[redacted]`, and the frames.
  */
 export function redactStackText(stack: string, message: unknown): string {
-  const parts = typeof message === 'string' && message !== '' ? stack.split(message) : [stack]
-  const lines = (parts[parts.length - 1] as string).split('\n')
+  let rest = stack
+  if (typeof message === 'string' && message !== '') {
+    const at = lastOutsideFrames(stack, message)
+    if (at >= 0) rest = stack.slice(at + message.length)
+  }
+  const lines = rest.split('\n')
   let first = lines.length
   while (first > 1 && isFrame(lines[first - 1] as string)) first -= 1
   let redacted = `${classHead(stack)}${REDACTED}`
   for (let at = first; at < lines.length; at += 1) redacted += `\n${lines[at] as string}`
   return redacted
+}
+
+/** Where the last copy of the message that does not start on a frame line is, or -1. */
+function lastOutsideFrames(stack: string, message: string): number {
+  let last = -1
+  // The start of the line that holds the copy, and the end of that line.
+  let line = 0
+  let newline = stack.indexOf('\n')
+  for (let at = stack.indexOf(message); at >= 0; at = stack.indexOf(message, at + 1)) {
+    while (newline >= 0 && newline < at) {
+      line = newline + 1
+      newline = stack.indexOf('\n', line)
+    }
+    // The first line is the header of the stack, whatever it looks like.
+    if (line === 0 || !stack.startsWith('    at ', line)) last = at
+  }
+  return last
 }
 
 /** The class name a stack or a message starts with, its colon included, or nothing. */
