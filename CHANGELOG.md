@@ -27,7 +27,7 @@ heading here.
   to those words; there is no opt-out. If the redaction itself fails, the status message becomes `[redacted]`
   and the `exception.*` attributes are removed. Apply: nothing to configure; an alert that matches the quoted
   text of a parse error must match `[redacted] is not valid JSON` instead.
-- Size: the bundles that hold the start logic grow by about 1.2 KiB compressed, which is this redaction;
+- Size: the bundles that hold the start logic grow by about 1.3 KiB compressed, which is this redaction;
   their size budgets were raised by that much.
 
 ## [1.0.14] - 2026-11-26

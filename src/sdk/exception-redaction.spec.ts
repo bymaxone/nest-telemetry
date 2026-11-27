@@ -238,6 +238,25 @@ describe('redactStackText, with a message that also occurs in a frame', () => {
   })
 })
 
+describe('redactStackText, with a stack cut short inside its message', () => {
+  const message = 'x\n    at hunter2:1:2\nand the rest of the message'
+
+  it.each([
+    ['after a line written like a frame', 'Error: x\n    at hunter2:1:2'],
+    ['in the middle of that line', 'Error: x\n    at hunter2:1:2)']
+  ])('keeps no line of a stack cut %s', (_where, stack) => {
+    // Scenario: a length limit cuts message and stack, so the stack no longer holds the message.
+    expect(redactStackText(stack, `${stack.slice('Error: '.length)}\nand the rest`)).toBe(
+      'Error: [redacted]'
+    )
+  })
+
+  it('keeps no line when only the stack was cut', () => {
+    // Scenario: a limit longer than the message but shorter than the header plus the message.
+    expect(redactStackText('Error: x\n    at hunter2:1:2', message)).toBe('Error: [redacted]')
+  })
+})
+
 describe('redactStackText, with a long stack', () => {
   const header = 'Error: hunter2'
   const frame = '    at boot (file:///app/main.js:3:10)'

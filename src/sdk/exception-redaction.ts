@@ -90,7 +90,7 @@ function leadingFrames(text: string): string {
  * the stack, outside the frame lines, nothing up to the end of its last such copy can count as a
  * frame, so a message that imitates one goes too. A copy inside a frame, such as a function or a
  * file named like the message, is the frame's own text. A stack over {@link SEARCHED_STACK_LIMIT}
- * with a message to look for keeps no frames.
+ * with a message to look for keeps no frames, nor does a stack that ends inside its message.
  *
  * @param stack - The recorded stack.
  * @param message - The recorded message, when it is a string.
@@ -99,7 +99,9 @@ function leadingFrames(text: string): string {
 export function redactStackText(stack: string, message: unknown): string {
   let rest = stack
   if (typeof message === 'string' && message !== '') {
-    if (stack.length > SEARCHED_STACK_LIMIT) return `${classHead(stack)}${REDACTED}`
+    if (stack.length > SEARCHED_STACK_LIMIT || cutInMessage(stack, message)) {
+      return `${classHead(stack)}${REDACTED}`
+    }
     const at = lastOutsideFrames(stack, message)
     if (at >= 0) rest = stack.slice(at + message.length)
   }
@@ -109,6 +111,14 @@ export function redactStackText(stack: string, message: unknown): string {
   let redacted = `${classHead(stack)}${REDACTED}`
   for (let at = first; at < lines.length; at += 1) redacted += `\n${lines[at] as string}`
   return redacted
+}
+
+/**
+ * Whether a stack ends inside its message, as a length limit leaves it: what follows its header is
+ * a start of the message, and a line there written like a frame is still message.
+ */
+function cutInMessage(stack: string, message: string): boolean {
+  return message.startsWith(stack.slice(stack.indexOf(': ') + 2))
 }
 
 /** Where the last copy of the message that does not start on a frame line is, or -1. */

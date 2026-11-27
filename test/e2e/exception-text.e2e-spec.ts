@@ -315,6 +315,22 @@ describe('values and failures the SDK lets through', () => {
     expect(leaked()).toEqual([])
   })
 
+  it('keeps no line of a message cut by the length limit with redactExceptionText', async () => {
+    // Scenario: the SDK cuts message and stack apart, right after a line written like a frame.
+    const imitation = `x\n    at ${SECRET}:1:2`
+    process.env['OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT'] = String(`Error: ${imitation}`.length)
+    try {
+      const started = await startTelemetry({ env: {}, redactExceptionText: true })
+      record('cut', new Error(`${imitation}\nand the rest of the message`))
+      await started.shutdown()
+    } finally {
+      delete process.env['OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT']
+    }
+
+    expect(collector.bodies.join('\n')).toContain('"Error: [redacted]"')
+    expect(leaked()).toEqual([])
+  })
+
   it('keeps no frame of a very long stack with redactExceptionText', async () => {
     // Scenario: searching a very long stack for its message could stall the host.
     const started = await startTelemetry({ env: {}, redactExceptionText: true })
