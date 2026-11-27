@@ -37,6 +37,12 @@ const FRAME_END = /(?::\d{1,10}:\d{1,10}|<anonymous>|native|index \d{1,10})\)?$/
 const SEARCHED_STACK_LIMIT = 32_768
 
 /**
+ * The longest class name behind which a cut message is looked for. Each `: ` of the header is tried,
+ * and each try can cost the length of the stack.
+ */
+const CLASS_NAME_LIMIT = 256
+
+/**
  * Removes the input that a `JSON.parse` message quotes.
  *
  * Everything up to the last `is not valid JSON` goes, whatever shape it has: the quoted input may
@@ -115,10 +121,19 @@ export function redactStackText(stack: string, message: unknown): string {
 
 /**
  * Whether a stack ends inside its message, as a length limit leaves it: what follows its header is
- * a start of the message, and a line there written like a frame is still message.
+ * a start of the message, and a line there written like a frame is still message. The class name may
+ * hold `: ` itself, so the message is looked for after each one that a name of up to
+ * {@link CLASS_NAME_LIMIT} characters can end at.
  */
 function cutInMessage(stack: string, message: string): boolean {
-  return message.startsWith(stack.slice(stack.indexOf(': ') + 2))
+  for (
+    let at = stack.indexOf(': ');
+    at >= 0 && at <= CLASS_NAME_LIMIT;
+    at = stack.indexOf(': ', at + 1)
+  ) {
+    if (message.startsWith(stack.slice(at + 2))) return true
+  }
+  return false
 }
 
 /** Where the last copy of the message that does not start on a frame line is, or -1. */
@@ -196,8 +211,9 @@ function attempt(step: () => void): void {
 
 /** Fails closed: replaces the status message and removes every exception attribute. */
 function dropExceptionText(span: EndingSpan): void {
+  // Written to the status itself, because `setStatus` may be what failed.
   attempt(() => {
-    span.setStatus({ code: span.status.code, message: REDACTED })
+    span.status.message = REDACTED
   })
   for (const event of span.events) {
     attempt(() => {

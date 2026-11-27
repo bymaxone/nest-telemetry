@@ -216,17 +216,17 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 //     (about 0.17 KiB: the Nest logger entry as its own method, the process warning and the absorbing catch).
 //   - the exception text redactor, with the `redactExceptionText` option and its environment variable
 //     for the preload, is about 1.3 KiB in each bundle that holds the start logic: input quoted by a
-//     `JSON.parse` message must not reach an exported span. Measured sdk 14,124 B, register 14,273 B, sdk
-//     CommonJS 14,161 B; budgets measured + 30 B: 14,154 B, 14,303 B and 14,191 B (the KiB column is rounded
+//     `JSON.parse` message must not reach an exported span. Measured sdk 14,140 B, register 14,299 B, sdk
+//     CommonJS 14,179 B; budgets measured + 30 B: 14,170 B, 14,329 B and 14,209 B (the KiB column is rounded
 //     up to four places).
 //   A budget is re-derived from the built artifact with modest headroom, never nudged, and never
 //   met by shortening the text of a warning.
 const BUDGETS = [
-  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 13.8223 * 1024 },
-  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 13.9678 * 1024 },
+  { name: 'sdk (programmatic start)', path: 'dist/sdk/index.mjs', brotli: 13.8379 * 1024 },
+  { name: 'register (node --import)', path: 'dist/register/index.mjs', brotli: 13.9932 * 1024 },
   { name: 'nest (module + shutdown)', path: 'dist/nest/index.mjs', brotli: 2.825 * 1024 },
   { name: 'observability (metrics)', path: 'dist/observability/index.mjs', brotli: 0.89 * 1024 },
-  { name: 'sdk (CommonJS)', path: 'dist/sdk/index.cjs', brotli: 13.8584 * 1024 },
+  { name: 'sdk (CommonJS)', path: 'dist/sdk/index.cjs', brotli: 13.876 * 1024 },
   { name: 'register (CommonJS)', path: 'dist/register/index.cjs', brotli: 0.2 * 1024 },
   { name: 'nest (CommonJS)', path: 'dist/nest/index.cjs', brotli: 2.82 * 1024 },
   { name: 'observability (CommonJS)', path: 'dist/observability/index.cjs', brotli: 0.91 * 1024 }

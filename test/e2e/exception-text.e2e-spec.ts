@@ -370,7 +370,8 @@ describe('values and failures the SDK lets through', () => {
       const body = collector.bodies.join('\n')
       expect(body).toContain('kept-value')
       expect(body).not.toContain('exception.message')
-      expect(body.includes('plain words')).toBe(failures === 2)
+      expect(body).not.toContain('plain words')
+      expect(body).toContain('"message":"[redacted]"')
       expect(leaked()).toEqual([])
     }
   )

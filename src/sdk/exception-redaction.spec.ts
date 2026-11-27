@@ -253,7 +253,26 @@ describe('redactStackText, with a stack cut short inside its message', () => {
 
   it('keeps no line when only the stack was cut', () => {
     // Scenario: a limit longer than the message but shorter than the header plus the message.
-    expect(redactStackText('Error: x\n    at hunter2:1:2', message)).toBe('Error: [redacted]')
+    const whole = 'x\n    at hunter2:1:2\nz'
+
+    expect(redactStackText('Error: x\n    at hunter2:1:2', whole)).toBe('Error: [redacted]')
+  })
+
+  it('keeps no line of a cut stack whose error name holds a colon and a space', () => {
+    // Scenario: the first `: ` of the header is part of the name, so the message starts later.
+    const stack = 'Foo: Bar: x\n    at hunter2:1:2'
+
+    expect(redactStackText(stack, 'x\n    at hunter2:1:2\nand the rest')).toBe('[redacted]')
+  })
+
+  it.each([
+    [256, '[redacted]'],
+    [257, '[redacted]\n    at hunter2:1:2']
+  ])('looks for the message behind a class name of %i characters', (length, expected) => {
+    // Scenario: the search is bounded, so a longer name is not recognised as a header.
+    const stack = `${'N'.repeat(length)}: x\n    at hunter2:1:2`
+
+    expect(redactStackText(stack, 'x\n    at hunter2:1:2\nand the rest')).toBe(expected)
   })
 })
 
@@ -395,10 +414,23 @@ describe('createExceptionTextRedactor', () => {
     expect(span.events[1]?.attributes).toEqual({})
   })
 
+  it('replaces the status message when setting the status throws', () => {
+    // Scenario: `setStatus` is what failed, so the fallback cannot use it.
+    const span = fakeSpan('hunter2')
+    span.setStatus = (): void => {
+      throw new Error('unwritable')
+    }
+
+    expect(() => end(span, true)).not.toThrow()
+
+    expect(span.status).toEqual({ code: 2, message: '[redacted]' })
+  })
+
   it('still drops the exception attributes when the status cannot be written', () => {
     // Scenario: the failure is the span itself, and one event cannot be changed either.
     const frozen = Object.freeze({ 'exception.message': 'hunter2' })
     const span = fakeSpan('hunter2', frozen, { 'exception.message': 'hunter2' })
+    span.status = Object.freeze({ code: 2, message: 'hunter2' })
     span.setStatus = (): void => {
       throw new Error('unwritable')
     }
