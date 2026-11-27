@@ -43,15 +43,27 @@ const FRAME_END = /(?::\d{1,10}:\d{1,10}|<anonymous>|native|index \d{1,10})\)?$/
  * @returns The text without the quoted input, or the same text when it quotes none.
  */
 export function redactParseErrorText(text: string): string {
-  const token = text.indexOf(TOKEN_START)
-  // The token is one character, two UTF-16 units at most, so its end is found right after it.
-  const after = token + TOKEN_START.length
-  const named = token >= 0 && text.slice(after + 1, after + 5).includes(TOKEN_END)
+  const named = namesToken(text)
   const parts = text.split(PARSE_ERROR_END)
   if (parts.length === 1) return named ? `${classHead(text)}${REDACTED}` : text
   const rest = parts[parts.length - 1] as string
   const kept = named ? leadingFrames(rest) : rest
   return `${classHead(text)}${REDACTED} ${PARSE_ERROR_END}${kept}`
+}
+
+/** Whether any part of a text is the start of a message that quotes a token. */
+function namesToken(text: string): boolean {
+  let named = false
+  for (
+    let at = text.indexOf(TOKEN_START);
+    at >= 0 && !named;
+    at = text.indexOf(TOKEN_START, at + 1)
+  ) {
+    // The token is one character, two UTF-16 units at most, so its end is found right after it.
+    const after = at + TOKEN_START.length
+    named = text.slice(after + 1, after + 5).includes(TOKEN_END)
+  }
+  return named
 }
 
 /** The unbroken run of frame lines that starts on the line after the first one, or nothing. */

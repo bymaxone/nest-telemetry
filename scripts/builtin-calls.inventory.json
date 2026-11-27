@@ -185,7 +185,7 @@
     "class": "guarded"
   },
   "src/sdk/exception-redaction.ts|method|.indexOf": {
-    "count": 6,
+    "count": 7,
     "class": "guarded"
   },
   "src/sdk/exception-redaction.ts|method|.slice": {

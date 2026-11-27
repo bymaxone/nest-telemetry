@@ -84,7 +84,8 @@ describe('redactParseErrorText', () => {
   it.each([
     "Unexpected token 'p', \"password=hunter2",
     "Failed: Unexpected token '{', ...\"hunter2",
-    "Unexpected token '😀', \"😀hunter2"
+    "Unexpected token '😀', \"😀hunter2",
+    "Unexpected token 'export'\nUnexpected token 'p', \"password=hunter2"
   ])('redacts a message cut before its ending: %j', (text) => {
     // Scenario: a host shortened the message, so only its start identifies it.
     expect(redactParseErrorText(text)).toBe('[redacted]')
@@ -94,7 +95,8 @@ describe('redactParseErrorText', () => {
     "Unexpected token 'x', \"x is not valid JSON hunter2",
     "Unexpected token 'x', \"x is not valid JSON is not valid JSON hunter2",
     "Unexpected token 'x', \"x is not valid JSON\nhunter2",
-    'Unexpected token \'x\', "x" is not valid JSON (request hunter2)'
+    'Unexpected token \'x\', "x" is not valid JSON (request hunter2)',
+    "Unexpected token 'export'; Unexpected token 'x', \"x is not valid JSON hunter2"
   ])('keeps nothing after the ending of a message that names a token: %j', (text) => {
     // Scenario: a message cut short whose quoted input holds the ending words looks like a whole
     // one, so only stack frames may follow the ending of a message that names a token.
