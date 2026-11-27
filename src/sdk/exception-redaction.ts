@@ -70,7 +70,7 @@ function namesToken(text: string): boolean {
 function leadingFrames(text: string): string {
   const lines = text.split('\n')
   let frames = ''
-  for (let at = 1; lines[0] === '' && at < lines.length && isFrame(lines[at] as string); at += 1) {
+  for (let at = 1; at < lines.length && isFrame(lines[at] as string); at += 1) {
     frames += `\n${lines[at] as string}`
   }
   return frames

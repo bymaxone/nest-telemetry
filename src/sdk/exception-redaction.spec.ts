@@ -106,7 +106,8 @@ describe('redactParseErrorText', () => {
   it.each([
     ['\n    at hunter2', ''],
     ['\n    at a (b.js:1:2)\nhunter2', '\n    at a (b.js:1:2)'],
-    ['\n    at a (b.js:1:2)\n    at hunter2\n    at c (d.js:3:4)', '\n    at a (b.js:1:2)']
+    ['\n    at a (b.js:1:2)\n    at hunter2\n    at c (d.js:3:4)', '\n    at a (b.js:1:2)'],
+    [' hunter2\n    at a (b.js:1:2)', '\n    at a (b.js:1:2)']
   ])('keeps only the frame lines right after a token message: %j', (rest, frames) => {
     // Scenario: the input of a cut message imitates the start of a stack.
     expect(redactParseErrorText(`Unexpected token 'x', "x is not valid JSON${rest}`)).toBe(
