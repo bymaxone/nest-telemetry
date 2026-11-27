@@ -8,7 +8,7 @@ The `release.yml` workflow extracts the section matching the pushed `vX.Y.Z` tag
 as the GitHub Release body, so each released version needs a matching `## [X.Y.Z]`
 heading here.
 
-## [Unreleased]
+## [1.0.15] - 2026-11-27
 
 ### Added
 
@@ -29,6 +29,13 @@ heading here.
   text of a parse error must match `[redacted] is not valid JSON` instead.
 - Size: the bundles that hold the start logic grow by about 1.3 KiB compressed, which is this redaction;
   their size budgets were raised by that much.
+
+### Apply to a derived backend
+
+Nothing has to change to compile or start: `TelemetryOptions` gains `redactExceptionText`, which is optional. To
+also keep other exception messages out of the spans, pass `redactExceptionText: true` to `startTelemetry`, or set
+`BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT=true` for an application on the `./register` preload. By default, an alert
+on quoted `JSON.parse` error text must match `[redacted] is not valid JSON` instead.
 
 ## [1.0.14] - 2026-11-26
 
@@ -703,6 +710,7 @@ First release.
 - Verification from the packed tarball: real `node --import` processes in a CommonJS and a native-ESM
   application, with planted secrets absent from the exported body and negative controls.
 
+[1.0.15]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.15
 [1.0.14]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.14
 [1.0.13]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.13
 [1.0.12]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.12
