@@ -69,6 +69,7 @@ const NOT_BOOLEANS: [string, unknown][] = [
 
 const BOOLEAN_OPTIONS: [string, (value: unknown) => unknown][] = [
   ['enabled', (value) => ({ enabled: value })],
+  ['redactExceptionText', (value) => ({ redactExceptionText: value })],
   ['instrumentations.sendLogs', (value) => ({ instrumentations: { sendLogs: value } })],
   ['instrumentations.fs', (value) => ({ instrumentations: { fs: value } })],
   ['unsafe.disableUrlRedaction', (value) => ({ unsafe: { disableUrlRedaction: value } })],

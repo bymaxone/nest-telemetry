@@ -271,6 +271,46 @@ describe('redactStackText, with a stack cut short inside its message', () => {
   })
 })
 
+describe('where redactStackText and redactParseErrorText look', () => {
+  it.each([["Unexpected token 'abc' in list 'a', 'b'"], ["Unexpected token ', expected a name"]])(
+    'does not take %j for a message that names a token',
+    (text) => {
+      // Scenario: the comma that ends a quoted token comes right after it, not before or far from it.
+      expect(redactParseErrorText(text)).toBe(text)
+    }
+  )
+
+  it('takes a stack as cut in its message only after a `: ` of its header', () => {
+    // Scenario: with no `: ` in the stack, a later part of its first line is not a message start.
+    const stack = 'XXopen the file\n    at f (a:1:1)'
+
+    expect(redactStackText(stack, 'open the file\n    at f (a:1:1) for a user')).toBe(
+      '[redacted]\n    at f (a:1:1)'
+    )
+  })
+
+  it('finds a cut message behind an empty class name', () => {
+    // Scenario: the `: ` that starts the message is the first thing in the stack.
+    const stack = ': open the\n    at f (a:1:1)'
+
+    expect(redactStackText(stack, 'open the\n    at f (a:1:1) file')).toBe('[redacted]')
+  })
+
+  it('reads an indented first line as the header and not as a frame', () => {
+    // Scenario: the message starts on a first line that looks like a frame, and imitates one below.
+    const stack = '     at SECRET\n    at hidden (a:1:1)\n    at real (a:1:1)'
+
+    expect(redactStackText(stack, 'SECRET\n    at hidden (a:1:1)')).toBe(
+      '[redacted]\n    at real (a:1:1)'
+    )
+  })
+
+  it('keeps a frame that holds the message under an empty header line', () => {
+    // Scenario: a function named like the message, in a stack whose first line is empty.
+    expect(redactStackText('\n    at open (a:1:1)', 'open')).toBe('[redacted]\n    at open (a:1:1)')
+  })
+})
+
 describe('redactStackText, with a long stack', () => {
   const header = 'Error: hunter2'
   const frame = '    at boot (file:///app/main.js:3:10)'
@@ -297,6 +337,23 @@ describe('redactStackText, with a long stack', () => {
 })
 
 describe('createExceptionTextRedactor', () => {
+  it.each([false, true])(
+    'redacts a stack recorded without a message (every message: %p)',
+    (every) => {
+      // Scenario: an event written by hand holds a stack alone; no message attribute is added to it.
+      const span = fakeSpan(undefined, {
+        'exception.stacktrace': `SyntaxError: ${QUOTED}\n${FRAMES}`
+      })
+
+      end(span, every)
+
+      const kept = every ? 'SyntaxError: [redacted]' : 'SyntaxError: [redacted] is not valid JSON'
+      expect(span.events[0]?.attributes).toStrictEqual({
+        'exception.stacktrace': `${kept}\n${FRAMES}`
+      })
+    }
+  )
+
   it('redacts the parse error of the status and of each event, and nothing else', () => {
     // Scenario: a span with two exceptions, one of which is not a parse error.
     const span = fakeSpan(
