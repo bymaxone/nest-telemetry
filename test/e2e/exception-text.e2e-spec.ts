@@ -367,6 +367,28 @@ describe('values and failures the SDK lets through', () => {
     expect(leaked()).toEqual([])
   })
 
+  it('adds no status message to a span with no status when the redaction throws', async () => {
+    // Scenario: the span never failed, so the export gains no status message, only loses the event.
+    const started = await startTelemetry({ env: {} })
+    const span = trace.getTracer('e2e').startSpan('unfailed')
+    span.addEvent('exception', { 'exception.message': SECRET })
+    const [event] = (span as unknown as { events: { attributes: object }[] }).events
+    Object.defineProperty(event?.attributes, 'exception.stacktrace', {
+      enumerable: true,
+      get: () => {
+        throw new Error('unreadable')
+      }
+    })
+
+    span.end()
+    await started.shutdown()
+
+    const body = collector.bodies.join('\n')
+    expect(body).toContain('unfailed')
+    expect(body).not.toContain('[redacted]')
+    expect(leaked()).toEqual([])
+  })
+
   it('exports the redacted text of a span whose setStatus ignores the call', async () => {
     // Scenario: something wrapped setStatus after the status was set.
     const started = await startTelemetry({ env: {}, redactExceptionText: true })

@@ -182,6 +182,11 @@ function redactParseErrorValue(value: AttributeValue): AttributeValue {
   ) as AttributeValue
 }
 
+/**
+ * `SpanStatusCode.ERROR`, written as a number so that this module imports no OpenTelemetry package.
+ */
+const ERROR_STATUS: SpanStatus['code'] = 2
+
 /** What a status message becomes. One that is not text cannot be read, so none of it is kept. */
 function redactStatusMessage(message: unknown, everyMessage: boolean): string {
   return everyMessage || typeof message !== 'string' ? REDACTED : redactParseErrorText(message)
@@ -239,11 +244,14 @@ function attempt(step: () => void): void {
   }
 }
 
-/** Fails closed: replaces the status message and removes every event. */
+/**
+ * Fails closed: removes every event and the text of the status. An error status says `[redacted]`
+ * in place of its message; any other status is left without one.
+ */
 function dropExceptionText(span: EndingSpan): void {
   attempt(() => {
     const { code } = span.status
-    span.status = { code, message: REDACTED }
+    span.status = code === ERROR_STATUS ? { code, message: REDACTED } : { code }
   })
   // All at once: reading the events one by one may be what failed.
   attempt(() => {
@@ -254,8 +262,8 @@ function dropExceptionText(span: EndingSpan): void {
 /**
  * Creates the span processor that redacts the exception text of every span as it ends: the status
  * message and the `exception.message` and `exception.stacktrace` of each event. The type of the
- * exception is not touched. When the redaction itself fails, the status message is replaced and
- * every event of the span is removed. A span altered to refuse those two writes keeps what it held.
+ * exception is not touched. When the redaction itself fails, every event of the span is removed,
+ * the message of an error status is replaced and any other status loses its message. A span altered to refuse those two writes keeps what it held.
  *
  * It uses `onEnding`, which `@opentelemetry/sdk-trace` marks experimental.
  *

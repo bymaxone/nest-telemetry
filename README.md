@@ -207,7 +207,7 @@ BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT=true node --import @bymax-one/nest-telemet
 
 Only `true` and `1`, written exactly, turn it on. Unset, empty, `false` and `0` leave it off, and any other value leaves it off with a `BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT_UNKNOWN` warning. The option wins when both are given: `false` keeps it off with the variable set, and `true` turns it on whatever the variable holds.
 
-The default reads arrays of text too. If the redaction itself fails, the span still ends, the status message becomes `[redacted]` and every event of the span is removed. A span that code in the process altered to refuse those two writes keeps what it held.
+The default reads arrays of text too. If the redaction itself fails, the span still ends and every event of the span is removed; the message of an error status becomes `[redacted]`, and any other status loses its message. A span that code in the process altered to refuse those two writes keeps what it held.
 
 One limit of the default: when `OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT` cuts a text before `is not valid JSON`, it is recognised only by `Unexpected token 'x', `. Another text that quotes data that way, written by your code, a library or a later engine, is exported as cut; `redactExceptionText` covers it.
 
