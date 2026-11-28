@@ -17,7 +17,6 @@ function exportedNames(subpath: string): string[] {
   const entry = join(ROOT, 'src', subpath, 'index.ts')
   const program = ts.createProgram([entry], {
     strict: true,
-    skipLibCheck: true,
     experimentalDecorators: true,
     esModuleInterop: true,
     moduleResolution: ts.ModuleResolutionKind.Bundler,

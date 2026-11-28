@@ -105,7 +105,7 @@ export default [
       'no-undef': 'off',
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': [
-        'warn',
+        'error',
         {
           argsIgnorePattern: '^_',
           varsIgnorePattern: '^_',
@@ -123,13 +123,13 @@ export default [
           fixStyle: 'separate-type-imports'
         }
       ],
-      '@typescript-eslint/no-empty-function': 'warn',
+      '@typescript-eslint/no-empty-function': 'error',
 
       // Code quality
       'prefer-const': 'error',
       'no-var': 'error',
       'no-empty': ['error', { allowEmptyCatch: true }],
-      'no-console': ['warn', { allow: ['warn', 'error'] }],
+      'no-console': ['error', { allow: ['warn', 'error'] }],
 
       // Security — block dynamic code evaluation
       'no-eval': 'error',

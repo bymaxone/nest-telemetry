@@ -43,7 +43,6 @@ import {
   registerHandle,
   setPendingStart
 } from './handle'
-import type { RunningHandle } from './handle'
 import {
   absorbHost,
   absorbOwned,
@@ -363,7 +362,7 @@ function buildSdk(
 ): SdkNode.NodeSDK {
   const { sdkNode, sdkTrace, autoInstrumentations, exporter, resources } = packages
   const signals = planSignals(env)
-  const { instrumentations, unsafe, service } = read
+  const { unsafe, service } = read
   // No prototype: the SDK reads serviceName, sampler, idGenerator, textMapPropagator and its providers from
   // this object, and a name that a polluted root prototype holds must not be one of them.
   const configuration = Object.assign(Object.create(null) as object, {
