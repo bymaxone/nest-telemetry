@@ -80,11 +80,11 @@ jobs:
       version: ${{ steps.pack.outputs.version }}
     steps:
       - name: Harden runner
-        # Egress is blocked: a step that needs a host missing below fails until the host is listed
+        # Egress is blocked: a connection to a host that is not listed below is refused
         # (https://github.com/step-security/harden-runner). The harden-runner agent's own endpoints are
         # always allowed, and the githubapp, actions and blob hosts serve GitHub Actions itself.
         # github.com serves the checkout and the registry serves the install. The hosts after the
-        # registry are the ones README.md links to, which the link check requests.
+        # registry are the ones README.md links to; the link check only notes a host it cannot reach.
         uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
         with:
           egress-policy: block
@@ -247,11 +247,11 @@ jobs:
       PACKAGE_NAME: '@bymax-one/nest-telemetry'
     steps:
       - name: Harden runner
-        # Egress is blocked: a step that needs a host missing below fails until the host is listed
+        # Egress is blocked: a connection to a host that is not listed below is refused
         # (https://github.com/step-security/harden-runner). The harden-runner agent's own endpoints are
         # always allowed, and the githubapp, actions and blob hosts serve GitHub Actions itself.
-        # api.github.com creates the Release, the registry takes the package, and Fulcio and Rekor
-        # sign and log its provenance.
+        # api.github.com serves the GitHub calls, the Release included; the registry takes the package,
+        # and Fulcio and Rekor sign and log its provenance.
         uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
         with:
           egress-policy: block
