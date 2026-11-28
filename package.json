@@ -91,7 +91,7 @@
     "clean": "rm -rf dist coverage",
     "check:socket-gate": "node scripts/check-socket-gate.mjs",
     "check:spec-headers": "node scripts/check-spec-headers.mjs",
-    "lint": "eslint src scripts test '*.config.ts' '*.config.mjs' '*.config.cjs' && pnpm check:socket-gate && pnpm check:spec-headers && node --test scripts/check-spec-headers.test.mjs scripts/check-dist-fresh.test.mjs scripts/check-size-wiring.test.mjs scripts/check-release-egress.test.mjs scripts/check-ci-gate.test.mjs scripts/check-mutation-directives.test.mjs",
+    "lint": "eslint --max-warnings 0 src scripts test '*.config.ts' '*.config.mjs' '*.config.cjs' && pnpm check:socket-gate && pnpm check:spec-headers && node --test scripts/check-spec-headers.test.mjs scripts/check-dist-fresh.test.mjs scripts/check-size-wiring.test.mjs scripts/check-release-egress.test.mjs scripts/check-ci-gate.test.mjs scripts/check-mutation-directives.test.mjs",
     "format:check": "prettier --check .",
     "lint:fix": "eslint src scripts test '*.config.ts' '*.config.mjs' '*.config.cjs' --fix",
     "mutation": "stryker run",
