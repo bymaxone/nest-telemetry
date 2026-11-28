@@ -17,16 +17,18 @@ the report hidden, and `Array.prototype.at` adds a built-in call that
 
 Guards on prototype access in `src/sdk`:
 
-- configuration records keyed by instrumentation names are made with no prototype (`assembly.ts`);
-- an option is read through `readOwnOrClass`, which ignores a value planted on the root prototype
+- the configuration records `assembly.ts` merges by instrumentation name have no prototype;
+- `readOwnOrClass` ignores a value planted on the root prototype, except behind a Proxy
   (`option-kinds.ts`);
 - list entries are read behind an own-property check (`option-kinds.ts`);
-- `pollutedNames` makes telemetry refuse to start or to export beside a polluted `Object.prototype`
-  (`prototype-guard.ts`).
+- `pollutedNames` makes telemetry refuse to start, and its OTLP exporters refuse to send, beside a
+  polluted `Object.prototype` (`prototype-guard.ts`).
 
 The specs in `src/sdk` plant names and test those guards.
 
 ## `security/detect-non-literal-regexp` — off where a host's expression is copied
+
+The rule is configured for the sources under `src/`, not for specs or scripts.
 
 `src/sdk/ignore-paths.ts` and `src/sdk/option-kinds.ts` copy a regular expression that the host gave,
 so that its `lastIndex` and later changes stay outside the library. The

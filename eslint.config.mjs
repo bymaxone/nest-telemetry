@@ -276,7 +276,7 @@ export default [
     }
   },
 
-  // Test files — Jest + Node globals, with the type rules of the production block.
+  // Test files — Jest + Node globals.
   {
     // `**/*.spec.ts` does not match `foo.e2e-spec.ts` — a glob needs the literal
     // `.spec.ts`, and the hyphen breaks it. Unmatched, those files reach no block
