@@ -46,10 +46,30 @@ describe('TelemetryOptionError', () => {
 
 describe('the checks of one option', () => {
   it.each([
-    ['requireBoolean', (value: unknown) => requireBoolean('x', value), 'a boolean', 'yes'],
-    ['requireString', (value: unknown) => requireString('x', value), 'a string', 5],
-    ['requireFunction', (value: unknown) => requireFunction('x', value), 'a function', {}],
-    ['requireObject', (value: unknown) => requireObject('x', value), 'an object', []]
+    [
+      'requireBoolean',
+      (value: unknown): boolean | undefined => requireBoolean('x', value),
+      'a boolean',
+      'yes'
+    ],
+    [
+      'requireString',
+      (value: unknown): string | undefined => requireString('x', value),
+      'a string',
+      5
+    ],
+    [
+      'requireFunction',
+      (value: unknown): ((...args: never[]) => unknown) | undefined => requireFunction('x', value),
+      'a function',
+      {}
+    ],
+    [
+      'requireObject',
+      (value: unknown): object | undefined => requireObject('x', value),
+      'an object',
+      []
+    ]
   ])('%s refuses another kind with a message that names %s', (_name, check, expected, wrong) => {
     // Scenario: each check refuses a value of another kind, and says what the option must be.
     expect((thrown(() => check(wrong)) as Error).message).toBe(
@@ -200,7 +220,7 @@ describe('settleOverrides, for the settings of an entry', () => {
       enabled: true,
       other: { nested: 1 },
       gone: undefined,
-      get disableLogSending() {
+      get disableLogSending(): boolean {
         reads += 1
         return false
       }
@@ -234,25 +254,25 @@ describe('settleOverrides, for a map or an entry whose keys sit on a prototype w
   const plainEntryParent = (): object => ({ enabled: false })
 
   it.each([
-    ['the map', () => Object.create(base()) as object, 'x'],
+    ['the map', (): object => Object.create(base()) as object, 'x'],
     [
       'the map, when its parent is an ordinary object',
-      () => Object.create(plainParent()) as object,
+      (): object => Object.create(plainParent()) as object,
       'x'
     ],
     [
       'an entry, when its parent is an ordinary object',
-      () => ({ pino: Object.create(plainEntryParent()) as object }),
+      (): { pino: object } => ({ pino: Object.create(plainEntryParent()) as object }),
       'instrumentations.overrides[]'
     ],
     [
       'an entry of the map',
-      () => ({ pino: Object.create(entryBase()) as object }),
+      (): { pino: object } => ({ pino: Object.create(entryBase()) as object }),
       'instrumentations.overrides[]'
     ],
     [
       'a class chain ending in one',
-      () => Object.create(Object.create(base()) as object) as object,
+      (): object => Object.create(Object.create(base()) as object) as object,
       'x'
     ]
   ])('refuses %s, so a setting is not dropped in silence', (_where, make, option) => {
@@ -415,7 +435,7 @@ describe('settleOverrides, for a map or an entry whose keys sit on a prototype w
   it('does not refuse a Proxy whose answer for its prototype is a holder of settings', () => {
     // Scenario: a Proxy is read for what it answers, so what its prototype trap says is not judged.
     const bare = Object.create(null, { pino: { value: {}, enumerable: true } }) as object
-    const proxy = new Proxy({}, { getPrototypeOf: () => bare })
+    const proxy = new Proxy({}, { getPrototypeOf: (): object => bare })
     expect(settleOverrides('x', proxy)).toEqual({})
   })
 
@@ -426,7 +446,7 @@ describe('settleOverrides, for a map or an entry whose keys sit on a prototype w
     const loop: object = new Proxy(
       {},
       {
-        getPrototypeOf: () => {
+        getPrototypeOf: (): object | null => {
           calls += 1
           return calls <= 1 ? null : loop
         }
@@ -512,7 +532,7 @@ describe('requireObject, for a value of a kind that is not a plain object', () =
     ['an ArrayBuffer', new ArrayBuffer(1)],
     ['a DataView', new DataView(new ArrayBuffer(1))],
     ['an iterator of a Map', new Map().keys()],
-    ['a generator object', (function* gen() {})()]
+    ['a generator object', (function* gen(): Generator<never, void, unknown> {})()]
   ])('refuses %s as the wrong kind, by the brand Node reports', (_what, value) => {
     // Scenario: an object of a brand Node reports cannot hold settings, so it is refused whatever its prototype.
     expect(thrown(() => requireObject('x', value))).toBeInstanceOf(TelemetryOptionError)
@@ -624,8 +644,12 @@ describe('settleRegExpList', () => {
   it('refuses an empty copy whose keys hold the largest array index', () => {
     // Scenario: 4294967294 is an array index, so a list that reads empty but has it hides an entry.
     const list = new Proxy([] as RegExp[], {
-      ownKeys: () => ['4294967294'],
-      getOwnPropertyDescriptor: () => ({ value: /a/, enumerable: true, configurable: true })
+      ownKeys: (): string[] => ['4294967294'],
+      getOwnPropertyDescriptor: (): { value: RegExp; enumerable: true; configurable: true } => ({
+        value: /a/,
+        enumerable: true,
+        configurable: true
+      })
     })
     expect(thrown(() => settleRegExpList('x', list))).toBeInstanceOf(TelemetryOptionError)
   })

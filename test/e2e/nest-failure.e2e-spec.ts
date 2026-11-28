@@ -16,7 +16,7 @@ import { reportWarning } from '../../src/sdk/warning-sink'
 const mockShutdown = jest.fn<Promise<void>, []>()
 jest.mock('../../src/sdk/handle', () => ({
   ...jest.requireActual<typeof import('../../src/sdk/handle')>('../../src/sdk/handle'),
-  shutdownTelemetry: () => mockShutdown()
+  shutdownTelemetry: (): Promise<void> => mockShutdown()
 }))
 
 /** The whole object the Nest logger gets for a failed flush that carries `code`. */
@@ -110,7 +110,7 @@ describe('TelemetryModule when the flush fails, in a real Nest application', () 
       {
         provide: TELEMETRY_LOGGER,
         useValue: {
-          errorStructured: () => {
+          errorStructured: (): never => {
             throw new Error('logger failed')
           }
         }

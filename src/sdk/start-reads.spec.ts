@@ -18,31 +18,39 @@ const mockOtlpExporter = jest.fn((..._args: unknown[]) => ({
   kind: 'exporter',
   export: jest.fn((_spans: unknown, done: (result: { code: number }) => void) => done({ code: 1 }))
 }))
-const mockAutoInstrumentations = jest.fn((..._args: unknown[]) => [{ getConfig: () => ({}) }])
+const mockAutoInstrumentations = jest.fn((..._args: unknown[]) => [{ getConfig: (): {} => ({}) }])
 const mockResourceFromAttributes = jest.fn((..._args: unknown[]) => ({ kind: 'resource' }))
 const mockWinstonTransportCheck = jest.fn((..._args: unknown[]) => undefined)
 
 jest.mock('./winston-transport', () => ({
-  warnAboutMissingWinstonTransport: (...args: unknown[]) => mockWinstonTransportCheck(...args)
+  warnAboutMissingWinstonTransport: (...args: unknown[]): undefined =>
+    mockWinstonTransportCheck(...args)
 }))
 
 jest.mock('@opentelemetry/sdk-node', () => ({
-  NodeSDK: function (...args: unknown[]) {
+  NodeSDK: function (...args: unknown[]): {
+    start: jest.Mock<void, [], unknown>
+    shutdown: jest.Mock<Promise<void>, [], unknown>
+  } {
     return mockNodeSdk(...args)
   }
 }))
 jest.mock('@opentelemetry/sdk-trace', () => ({
-  BatchSpanProcessor: function (...args: unknown[]) {
+  BatchSpanProcessor: function (...args: unknown[]): { kind: string } {
     return mockBatchSpanProcessor(...args)
   }
 }))
 jest.mock('@opentelemetry/exporter-trace-otlp-http', () => ({
-  OTLPTraceExporter: function (...args: unknown[]) {
+  OTLPTraceExporter: function (...args: unknown[]): {
+    kind: string
+    export: jest.Mock<void, [_spans: unknown, done: (result: { code: number }) => void], unknown>
+  } {
     return mockOtlpExporter(...args)
   }
 }))
 jest.mock('@opentelemetry/auto-instrumentations-node', () => ({
-  getNodeAutoInstrumentations: (...args: unknown[]) => mockAutoInstrumentations(...args)
+  getNodeAutoInstrumentations: (...args: unknown[]): { getConfig: () => {} }[] =>
+    mockAutoInstrumentations(...args)
 }))
 jest.mock('@opentelemetry/resources', () => {
   const detector = (name: string): { name: string; detect: () => { attributes: object } } => ({
@@ -56,7 +64,8 @@ jest.mock('@opentelemetry/resources', () => {
     })
   })
   return {
-    resourceFromAttributes: (...args: unknown[]) => mockResourceFromAttributes(...args),
+    resourceFromAttributes: (...args: unknown[]): { kind: string } =>
+      mockResourceFromAttributes(...args),
     envDetector: detector('env'),
     hostDetector: detector('host'),
     osDetector: detector('os'),
@@ -168,7 +177,7 @@ describe('startTelemetry reads each option once', () => {
       const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
       let reads = 0
       const unsafe = {
-        get exportHostId() {
+        get exportHostId(): true | undefined {
           reads += 1
           return reads === 1 ? undefined : (true as const)
         }
@@ -191,7 +200,7 @@ describe('startTelemetry reads each option once', () => {
       const emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
       let reads = 0
       const unsafe = {
-        get exportHostId() {
+        get exportHostId(): true | undefined {
           reads += 1
           return reads === 1 ? (true as const) : undefined
         }
@@ -247,7 +256,7 @@ describe('startTelemetry reads each option once', () => {
     it.each([
       ['instrumentations', { sendLogs: false }],
       ['extraRedactedQueryParams', ['sid']],
-      ['ignoreIncomingRequest', () => false]
+      ['ignoreIncomingRequest', (): false => false]
     ])('reads the %s option once in a start', async (key, value) => {
       // Scenario: an option that is a getter answers differently on each read. The warning about a
       // missing winston transport and the instrumentation config both need `instrumentations`, and the
@@ -291,21 +300,21 @@ describe('startTelemetry reads each option once', () => {
       }
       const wrap = <T extends object>(target: T): T =>
         new Proxy(target, {
-          get(t, key, receiver) {
+          get(t, key, receiver): unknown {
             const value: unknown = Reflect.get(t, key, receiver)
             if (!hit()) return value
             if (behaviour === 'throw') return fail()
             return typeof value === 'boolean' ? !value : value
           },
-          has(t, key) {
+          has(t, key): boolean {
             if (hit() && behaviour === 'throw') fail()
             return Reflect.has(t, key)
           },
-          ownKeys(t) {
+          ownKeys(t): (string | symbol)[] {
             if (hit() && behaviour === 'throw') fail()
             return Reflect.ownKeys(t)
           },
-          getOwnPropertyDescriptor(t, key) {
+          getOwnPropertyDescriptor(t, key): PropertyDescriptor | undefined {
             if (hit() && behaviour === 'throw') fail()
             return Reflect.getOwnPropertyDescriptor(t, key)
           }

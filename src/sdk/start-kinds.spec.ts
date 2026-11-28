@@ -13,24 +13,28 @@ const mockSdkInstance = {
   shutdown: jest.fn<Promise<void>, []>()
 }
 const mockNodeSdk = jest.fn((..._args: unknown[]) => mockSdkInstance)
-const mockAutoInstrumentations = jest.fn((..._args: unknown[]) => [{ getConfig: () => ({}) }])
+const mockAutoInstrumentations = jest.fn((..._args: unknown[]) => [{ getConfig: (): {} => ({}) }])
 
 jest.mock('@opentelemetry/sdk-node', () => ({
-  NodeSDK: function (...args: unknown[]) {
+  NodeSDK: function (...args: unknown[]): {
+    start: jest.Mock<void, [], unknown>
+    shutdown: jest.Mock<Promise<void>, [], unknown>
+  } {
     return mockNodeSdk(...args)
   }
 }))
-jest.mock('@opentelemetry/sdk-trace', () => ({ BatchSpanProcessor: function () {} }))
+jest.mock('@opentelemetry/sdk-trace', () => ({ BatchSpanProcessor: function (): void {} }))
 jest.mock('@opentelemetry/exporter-trace-otlp-http', () => ({
-  OTLPTraceExporter: function () {
+  OTLPTraceExporter: function (): { export: jest.Mock } {
     return { export: jest.fn() }
   }
 }))
 jest.mock('@opentelemetry/auto-instrumentations-node', () => ({
-  getNodeAutoInstrumentations: (...args: unknown[]) => mockAutoInstrumentations(...args)
+  getNodeAutoInstrumentations: (...args: unknown[]): { getConfig: () => {} }[] =>
+    mockAutoInstrumentations(...args)
 }))
 jest.mock('@opentelemetry/resources', () => ({
-  resourceFromAttributes: () => ({ kind: 'resource' }),
+  resourceFromAttributes: (): { kind: string } => ({ kind: 'resource' }),
   envDetector: {},
   hostDetector: {},
   osDetector: {},
@@ -68,17 +72,43 @@ const NOT_BOOLEANS: [string, unknown][] = [
 ]
 
 const BOOLEAN_OPTIONS: [string, (value: unknown) => unknown][] = [
-  ['enabled', (value) => ({ enabled: value })],
-  ['redactExceptionText', (value) => ({ redactExceptionText: value })],
-  ['instrumentations.sendLogs', (value) => ({ instrumentations: { sendLogs: value } })],
-  ['instrumentations.fs', (value) => ({ instrumentations: { fs: value } })],
-  ['unsafe.disableUrlRedaction', (value) => ({ unsafe: { disableUrlRedaction: value } })],
+  ['enabled', (value): { enabled: unknown } => ({ enabled: value })],
+  [
+    'redactExceptionText',
+    (value): { redactExceptionText: unknown } => ({ redactExceptionText: value })
+  ],
+  [
+    'instrumentations.sendLogs',
+    (value): { instrumentations: { sendLogs: unknown } } => ({
+      instrumentations: { sendLogs: value }
+    })
+  ],
+  [
+    'instrumentations.fs',
+    (value): { instrumentations: { fs: unknown } } => ({ instrumentations: { fs: value } })
+  ],
+  [
+    'unsafe.disableUrlRedaction',
+    (value): { unsafe: { disableUrlRedaction: unknown } } => ({
+      unsafe: { disableUrlRedaction: value }
+    })
+  ],
   [
     'unsafe.disableRedisArgumentRedaction',
-    (value) => ({ unsafe: { disableRedisArgumentRedaction: value } })
+    (value): { unsafe: { disableRedisArgumentRedaction: unknown } } => ({
+      unsafe: { disableRedisArgumentRedaction: value }
+    })
   ],
-  ['unsafe.exportProcessCommandArgs', (value) => ({ unsafe: { exportProcessCommandArgs: value } })],
-  ['unsafe.exportHostId', (value) => ({ unsafe: { exportHostId: value } })]
+  [
+    'unsafe.exportProcessCommandArgs',
+    (value): { unsafe: { exportProcessCommandArgs: unknown } } => ({
+      unsafe: { exportProcessCommandArgs: value }
+    })
+  ],
+  [
+    'unsafe.exportHostId',
+    (value): { unsafe: { exportHostId: unknown } } => ({ unsafe: { exportHostId: value } })
+  ]
 ]
 
 describe('startTelemetry refuses an option of the wrong kind', () => {

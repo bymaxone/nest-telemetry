@@ -99,7 +99,12 @@ describe("a flag looser than the fresh realm's", () => {
       >
       descriptors['toString'] = { ...descriptors['toString'], ...flags }
       jest.doMock('node:vm', () => ({
-        runInNewContext: () => ({
+        runInNewContext: (): {
+          objects: readonly object[]
+          descriptors: Record<string, PropertyDescriptor>
+          sourceOf: (value: unknown) => string
+          promiseSource: string
+        } => ({
           objects: readBuiltins(),
           descriptors,
           sourceOf: (value: unknown): string => Function.prototype.toString.call(value),
@@ -140,7 +145,12 @@ describe('a value that is not a function in the fresh realm', () => {
       >
       descriptors['toString'] = { ...descriptors['toString'], value: 5 }
       jest.doMock('node:vm', () => ({
-        runInNewContext: () => ({
+        runInNewContext: (): {
+          objects: readonly object[]
+          descriptors: Record<string, PropertyDescriptor>
+          sourceOf: (value: unknown) => string
+          promiseSource: string
+        } => ({
           objects: readBuiltins(),
           descriptors,
           sourceOf: (value: unknown): string => Function.prototype.toString.call(value),

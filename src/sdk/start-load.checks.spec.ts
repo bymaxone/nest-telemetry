@@ -8,12 +8,14 @@ let mockPlantOnLoad = false
 let mockCallsAtPlant = -1
 const mockPolluted = jest.fn((): number => (mockPlanted ? 1 : 0))
 
-jest.mock('./prototype-guard', () => ({ pollutedNames: () => mockPolluted() }))
-jest.mock('@opentelemetry/sdk-node', () => ({ NodeSDK: function () {} }))
-jest.mock('@opentelemetry/sdk-trace', () => ({ BatchSpanProcessor: function () {} }))
-jest.mock('@opentelemetry/exporter-trace-otlp-http', () => ({ OTLPTraceExporter: function () {} }))
+jest.mock('./prototype-guard', () => ({ pollutedNames: (): number => mockPolluted() }))
+jest.mock('@opentelemetry/sdk-node', () => ({ NodeSDK: function (): void {} }))
+jest.mock('@opentelemetry/sdk-trace', () => ({ BatchSpanProcessor: function (): void {} }))
+jest.mock('@opentelemetry/exporter-trace-otlp-http', () => ({
+  OTLPTraceExporter: function (): void {}
+}))
 jest.mock('@opentelemetry/auto-instrumentations-node', () => ({
-  getNodeAutoInstrumentations: () => []
+  getNodeAutoInstrumentations: (): never[] => []
 }))
 jest.mock('@opentelemetry/resources', () => {
   if (mockPlantOnLoad) {

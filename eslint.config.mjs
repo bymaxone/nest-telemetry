@@ -154,8 +154,13 @@ export default [
       ],
 
       // Security plugin rules
-      'security/detect-object-injection': 'warn',
-      'security/detect-non-literal-regexp': 'warn',
+      //
+      // `detect-object-injection` is off: it reports every `object[name]` access, has no option and
+      // recognizes no form as safe, and the plugin's own README says its reports need human triage
+      // (https://github.com/eslint-community/eslint-plugin-security). What guards prototype access
+      // instead is listed in docs/lint-exceptions.md.
+      'security/detect-object-injection': 'off',
+      'security/detect-non-literal-regexp': 'error',
       'security/detect-possible-timing-attacks': 'error',
 
       // Import ordering — node: → external → internal → parent/sibling
@@ -200,13 +205,9 @@ export default [
         ...globals.node
       }
     },
-    plugins: {
-      security
-    },
     rules: {
       'no-eval': 'error',
-      'no-new-func': 'error',
-      'security/detect-object-injection': 'warn'
+      'no-new-func': 'error'
     }
   },
 
@@ -229,13 +230,9 @@ export default [
         ...globals.node
       }
     },
-    plugins: {
-      security
-    },
     rules: {
       'no-eval': 'error',
-      'no-new-func': 'error',
-      'security/detect-object-injection': 'warn'
+      'no-new-func': 'error'
       //
       // The crypto guard-rail the ESM config block carries is deliberately NOT
       // repeated here. `no-restricted-imports` only sees `import` — measured, a
@@ -260,9 +257,6 @@ export default [
         ...globals.node
       }
     },
-    plugins: {
-      security
-    },
     rules: {
       'no-eval': 'error',
       'no-new-func': 'error',
@@ -278,12 +272,11 @@ export default [
             { name: 'crypto-js', message: 'Use node:crypto instead.' }
           ]
         }
-      ],
-      'security/detect-object-injection': 'warn'
+      ]
     }
   },
 
-  // Test files — Jest + Node globals, relaxed rules.
+  // Test files — Jest + Node globals.
   {
     // `**/*.spec.ts` does not match `foo.e2e-spec.ts` — a glob needs the literal
     // `.spec.ts`, and the hyphen breaks it. Unmatched, those files reach no block
@@ -305,14 +298,24 @@ export default [
         ...globals.node
       }
     },
+    plugins: { '@typescript-eslint': tsPlugin },
+    // The core `no-undef` and `no-unused-vars` stay off for TypeScript, as typescript-eslint
+    // documents: the compiler reports the first, and the extension rule replaces the second.
     rules: {
-      '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/explicit-function-return-type': 'off',
-      '@typescript-eslint/explicit-module-boundary-types': 'off',
-      '@typescript-eslint/no-unused-vars': 'off',
-      'no-unused-vars': 'off',
       'no-undef': 'off',
-      'no-console': 'off'
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_'
+        }
+      ],
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/explicit-function-return-type': 'error',
+      '@typescript-eslint/explicit-module-boundary-types': 'error',
+      'no-console': ['error', { allow: ['warn', 'error'] }]
     }
   },
 
@@ -372,12 +375,17 @@ export default [
     }
   },
 
+  // The two files that copy a regular expression the host gave. `detect-non-literal-regexp` reports
+  // a `new RegExp` whose source is not static, and a copy has the host's source by definition:
+  // it cannot be written as a literal, and escaping it would change what it matches
+  // (https://github.com/eslint-community/eslint-plugin-security/blob/main/docs/rules/detect-non-literal-regexp.md).
+  // See docs/lint-exceptions.md.
+  {
+    files: ['src/sdk/ignore-paths.ts', 'src/sdk/option-kinds.ts'],
+    rules: { 'security/detect-non-literal-regexp': 'off' }
+  },
+
   // Formatting is an ERROR, on every path the lint invocation reaches.
-  //
-  // `'error'` and not `--max-warnings 0`: that flag raises EVERY warning, and
-  // `security/detect-object-injection` is a warning on purpose in the scripts and
-  // spec blocks. Formatting has to be able to fail the build without dragging an
-  // unrelated rule up with it.
   //
   // The rule has to cover every path `pnpm lint` passes — a rule declared for a
   // path the invocation never reaches gates nothing. `pnpm format:check` covers

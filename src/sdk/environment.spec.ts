@@ -7,6 +7,7 @@
 import { getBooleanFromEnv } from '@opentelemetry/core'
 
 import { readRatioSampler, readSamplerNearMiss, readTelemetryEnvironment } from './environment'
+import type { TelemetryEnvironment } from './environment'
 
 describe('readRatioSampler', () => {
   it.each(['traceidratio', 'parentbased_traceidratio'])(
@@ -356,7 +357,7 @@ describe('readTelemetryEnvironment', () => {
 })
 
 describe('BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT', () => {
-  const read = (value: string | undefined) =>
+  const read = (value: string | undefined): TelemetryEnvironment =>
     readTelemetryEnvironment({ BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT: value })
 
   it.each(['true', '1'])('turns the exception text redaction on for %p', (value) => {
@@ -388,7 +389,7 @@ describe('BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT', () => {
 })
 
 describe('a variable of the environment that is not a string', () => {
-  const NON_STRINGS = [5, true, null, {}, [], () => 'x', Symbol('x'), 10n] as const
+  const NON_STRINGS = [5, true, null, {}, [], (): string => 'x', Symbol('x'), 10n] as const
   const READ_BY_TELEMETRY_ENVIRONMENT = [
     'OTEL_SDK_DISABLED',
     'OTEL_SERVICE_NAME',

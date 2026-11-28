@@ -15,21 +15,24 @@ const mockSdkInstance = {
 const mockNodeSdk = jest.fn((..._args: unknown[]) => mockSdkInstance)
 
 jest.mock('@opentelemetry/sdk-node', () => ({
-  NodeSDK: function (...args: unknown[]) {
+  NodeSDK: function (...args: unknown[]): {
+    start: jest.Mock<void, [], unknown>
+    shutdown: jest.Mock<Promise<void>, [], unknown>
+  } {
     return mockNodeSdk(...args)
   }
 }))
-jest.mock('@opentelemetry/sdk-trace', () => ({ BatchSpanProcessor: function () {} }))
+jest.mock('@opentelemetry/sdk-trace', () => ({ BatchSpanProcessor: function (): void {} }))
 jest.mock('@opentelemetry/exporter-trace-otlp-http', () => ({
-  OTLPTraceExporter: function () {
+  OTLPTraceExporter: function (): { export: jest.Mock } {
     return { export: jest.fn() }
   }
 }))
 jest.mock('@opentelemetry/auto-instrumentations-node', () => ({
-  getNodeAutoInstrumentations: () => [{ getConfig: () => ({}) }]
+  getNodeAutoInstrumentations: (): { getConfig: () => {} }[] => [{ getConfig: (): {} => ({}) }]
 }))
 jest.mock('@opentelemetry/resources', () => ({
-  resourceFromAttributes: () => ({ kind: 'resource' }),
+  resourceFromAttributes: (): { kind: string } => ({ kind: 'resource' }),
   envDetector: {},
   hostDetector: {},
   osDetector: {},

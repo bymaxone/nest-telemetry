@@ -241,7 +241,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
     collector = await startCollector()
     const exporter = new OTLPTraceExporter({
       url: `${collector.endpoint}/v1/traces`,
-      headers: () => Promise.resolve({ 'x-host': 'yes' })
+      headers: (): Promise<{ 'x-host': string }> => Promise.resolve({ 'x-host': 'yes' })
     })
     guardExports(exporter)
     exporter.export([], () => undefined)
@@ -288,7 +288,9 @@ function unplant(): void {
 /** An exporter whose transport holds one metadata provider, as a gRPC one does, armed by an export; returns it as wrapped. */
 function wrapped(provider: () => unknown): () => unknown {
   class Plain {
-    _delegate = { _transport: { send: () => undefined, _parameters: { metadata: provider } } }
+    _delegate = {
+      _transport: { send: (): undefined => undefined, _parameters: { metadata: provider } }
+    }
     export(_items: unknown, done: (result: { code: number }) => void): void {
       done({ code: 0 })
     }

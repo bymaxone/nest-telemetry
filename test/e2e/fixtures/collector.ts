@@ -44,7 +44,7 @@ export async function startCollector(failFirst = 0): Promise<Collector> {
     endpoint: `http://127.0.0.1:${port}`,
     bodies,
     headers,
-    waitForBodies: async (count, timeoutMs) => {
+    waitForBodies: async (count, timeoutMs): Promise<string[]> => {
       const deadline = Date.now() + timeoutMs
       while (bodies.length < count) {
         if (Date.now() > deadline) {

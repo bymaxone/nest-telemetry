@@ -24,7 +24,7 @@ import {
 /** A module reference whose `get` answers with the given logger, or throws as Nest does for a missing token. */
 function moduleRef(logger?: object): IProviderLookup {
   return {
-    get: (token) => {
+    get: (token): object => {
       if (logger !== undefined && token === TELEMETRY_LOGGER) return logger
       throw new Error('Nest could not find the provider')
     }
@@ -168,7 +168,7 @@ describe('TelemetryShutdownHook', () => {
       [
         'a code object whose toString throws',
         {
-          toString: () => {
+          toString: (): never => {
             throw new Error('boom')
           }
         }

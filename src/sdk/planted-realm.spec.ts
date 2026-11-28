@@ -15,7 +15,6 @@ import type { TelemetryOptions } from './types'
 
 const HTTP = '@opentelemetry/instrumentation-http'
 const FS = '@opentelemetry/instrumentation-fs'
-const NAME = 'OTEL_PLANTED_FOR_THE_TEST'
 
 /** Plants a name on the root prototype while `run` executes. */
 function planted<T>(name: string, value: unknown, run: () => T): T {
@@ -118,7 +117,7 @@ describe('severFromRootPrototype', () => {
     // Scenario: a hook a polluted realm planted is not found by an instrumentation at the time of a request.
     const instrumentation = {
       config: { enabled: true },
-      getConfig() {
+      getConfig(): { enabled: boolean } {
         return this.config
       }
     }
@@ -142,7 +141,10 @@ describe('severFromRootPrototype', () => {
 describe('a Proxy as a group of options', () => {
   it('is read through what it answers, whatever traps it has', () => {
     // Scenario: a Proxy with only a get trap has no own key to find; its answer is the host's value.
-    const group = new Proxy({}, { get: (_target, key) => (key === 'flag' ? true : undefined) })
+    const group = new Proxy(
+      {},
+      { get: (_target, key): true | undefined => (key === 'flag' ? true : undefined) }
+    )
     expect(readOwnOrClass(group, 'flag')).toBe(true)
     expect(readOwnOrClass(group, 'other')).toBeUndefined()
   })
@@ -153,7 +155,7 @@ describe('a Proxy as a group of options', () => {
     expect(settleOptions(options)).toEqual(expect.objectContaining({ serviceName: 'api' }))
     const getOnly = new Proxy(
       {},
-      { get: (_t, key) => (key === 'serviceName' ? 'api' : undefined) }
+      { get: (_t, key): 'api' | undefined => (key === 'serviceName' ? 'api' : undefined) }
     ) as TelemetryOptions
     expect(settleOptions(getOnly)).toEqual(expect.objectContaining({ serviceName: 'api' }))
   })
@@ -322,7 +324,7 @@ describe('a setting that the host nests in an override', () => {
       return inner
     }
     const refused = (setting: unknown): Error =>
-      (() => {
+      ((): Error => {
         try {
           settle(setting)
         } catch (error) {
