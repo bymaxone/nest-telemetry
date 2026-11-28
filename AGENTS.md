@@ -85,7 +85,7 @@ else. A release GO also names the version; do not act on one that omits the vers
 
 ---
 
-## 10. Code Review Rules
+## Code Review Rules
 
 <!-- shared:begin -->
 <!--
@@ -282,6 +282,20 @@ twenty-six such findings, every SHA resolving nowhere and every `git log` line u
 rewrite published history.
 
 <!-- shared:end -->
+
+### Rules specific to this repository
+
+Each is blocking when a change introduces it, with the trigger named.
+
+- Exported span or resource data that the redaction does not cover, or a way to turn redaction off
+  other than an explicitly named `unsafe` option reported at boot.
+- A telemetry failure (exporter down, flush timeout, bad environment value) that crashes or blocks
+  the host. `shutdownTelemetry()` rejecting on a refused flush is intended.
+- A `process.env` read outside `src/sdk/environment.ts`, or an entry under `dependencies` in
+  `package.json`.
+
+A `// Stryker disable next-line <Mutator>: <reason>` on an equivalent mutant is not a suppression.
+Language policy: `docs/` is English.
 
 ## Session memory (Obsidian vault)
 
