@@ -32,7 +32,7 @@ the finding count per severity.
 
 ## Do not report
 
-- Anything CI already enforces: lint, formatting, type errors, test coverage, mutation score,
+- Anything CI already enforces: lint, formatting, type errors, test coverage,
   bundle size, export-map types.
 - Lockfiles, generated output (`dist/`, `coverage/`, `reports/`) and vendored code.
 - Test code that breaks a production rule on purpose.
@@ -50,8 +50,8 @@ the finding count per severity.
 - `process.env` is read only in `src/sdk/environment.ts`.
 - `package.json` gains no entry under `dependencies`; a runtime requirement is a peer dependency,
   and every `@opentelemetry/*` package is an optional one.
-- A class or injection token used by two subpaths is not copied into both bundles by a relative
-  import: the two copies are different tokens.
+- A class or injection token the host injects or compares by identity is not bundled into a second
+  subpath through a relative import: the two copies are different tokens.
 - Providers use `Symbol()` tokens with an explicit `@Inject(TOKEN)`.
 - Everything published is English, `docs/` included, and carries no AI attribution.
 - Comments state what holds now: no history, phase, task or review-round references.
