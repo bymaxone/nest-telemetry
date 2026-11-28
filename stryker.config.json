@@ -15,7 +15,7 @@
     "prioritizePerformanceOverAccuracy": true
   },
   "disableTypeChecks": "src/**/*.ts",
-  "ignoreStatic": true,
+  "ignoreStatic": false,
   "mutate": [
     "src/**/*.ts",
     "!src/**/*.spec.ts",
