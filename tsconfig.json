@@ -21,7 +21,7 @@
     "resolveJsonModule": true,
     "outDir": "./dist",
     "rootDir": "./src",
-    "skipLibCheck": true,
+    "skipLibCheck": false,
     "paths": {
       "@bymax-one/nest-telemetry": ["./src/sdk/index.ts"],
       "@bymax-one/nest-telemetry/register": ["./src/register/index.ts"],
