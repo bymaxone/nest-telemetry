@@ -23,20 +23,9 @@ jobs:
   ci:
     uses: bymaxone/.github/.github/workflows/node-lib-ci.yml@v1
     with:
-      # No `format:check` script exists, so the shared job has nothing to call.
-      #
-      # Formatting of CODE is gated by lint instead: `prettier/prettier` is an
-      # error on every path `pnpm lint` passes — src, unit and e2e specs, bench,
-      # scripts and the root config files — so a badly formatted source file fails
-      # the Lint job.
-      #
-      # What that does NOT cover, stated because the gap is the reason this input
-      # stays `false` rather than a claim that nothing is missing: Markdown, JSON
-      # and YAML are formatted by prettier through lint-staged at commit time and
-      # by nothing in CI. `README.md` and `CHANGELOG.md` ship in the package, so
-      # closing that needs a real `format:check` script and this input flipped to
-      # `true`, not a wider eslint glob — eslint does not format those file types.
-      run-format-check: false
+      # `pnpm lint` format-checks only the code it passes to eslint; this job covers every file
+      # Prettier knows, README.md and CHANGELOG.md included, which ship in the package.
+      run-format-check: true
       run-build: false # build + integrity + size verified in the `verify` job below
       unit-command: pnpm test:cov:all
       run-mutation: true
@@ -137,11 +126,13 @@ jobs:
       - name: Bundle size budget
         run: pnpm size
 
+  # Dependency review runs on a public repository, or on a private one with a paid licence,
+  # which is not purchased.
   security:
     if: github.event_name == 'pull_request' && github.event.repository.visibility == 'public'
     uses: bymaxone/.github/.github/workflows/security.yml@v1
     with:
-      fail-on-severity: high
+      fail-on-severity: low
 
   # Single check the org ruleset can require, in every repo, under one name.
   #
@@ -152,14 +143,13 @@ jobs:
   # repository created from now on inherit the gate without being configured.
   #
   # `always()` is what makes this a gate rather than decoration: without it the
-  # job is skipped the moment a dependency fails, and a skipped check reports
-  # neutral — the pull request would look unblocked precisely when it is broken.
-  # `cancelled` is named explicitly for the same reason; a cancelled job is not
-  # a passing one, and a queue timeout produces exactly that.
+  # job is skipped the moment a dependency fails, and a skipped job reports
+  # success to a required check, so the pull request would look unblocked
+  # precisely when it is broken.
+  # https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-jobs-with-conditions
   #
-  # A skipped dependency is accepted on purpose: jobs here are conditional on the
-  # event, and failing on skip would break every push that legitimately runs a
-  # subset.
+  # For the same reason each unconditional job must have succeeded. Only
+  # `security`, conditional on the event and the repository visibility, may skip.
   ci-pass:
     name: CI passed
     if: always()
@@ -182,8 +172,11 @@ jobs:
             echo "$NEEDS" | jq -r 'to_entries[] | "| \(.key) | \(.value.result) |"' | sort
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
-      # Named for what the condition does: `skipped` is deliberately not a failure
-      # here, so "did not succeed" would describe a stricter gate than this is.
-      - name: Fail when any dependency failed or was cancelled
-        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
-        run: exit 1
+      - name: Fail unless every required job succeeded
+        env:
+          CI_RESULT: ${{ needs.ci.result }}
+          VERIFY_RESULT: ${{ needs.verify.result }}
+          SECURITY_RESULT: ${{ needs.security.result }}
+        run: |
+          [[ "$CI_RESULT" == success && "$VERIFY_RESULT" == success ]] || exit 1
+          [[ "$SECURITY_RESULT" == success || "$SECURITY_RESULT" == skipped ]] || exit 1
