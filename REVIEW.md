@@ -26,8 +26,11 @@ Treat these as 🔴 Important even though they look stylistic:
 - A comment that narrates history or names a phase, task, ticket or review round; a test title
   naming behavior no assertion checks.
 - Published text that is not English, or that attributes authorship to an AI assistant or tool.
-- A change that adds a function over 50 lines, nesting deeper than four levels, a source file over
-  800 lines, a non-trivial source file without a header, or an export without a doc comment.
+- In source and test directories, a change that adds a function over 50 lines or nesting deeper
+  than four levels, or pushes one past the limit; a new or materially grown file over 800 lines; a
+  new non-trivial source file without a header, or a new export without a doc comment. A `describe`
+  or `context` block or a table of cases is not a function. Markdown, generated output and
+  lockfiles have no length limit.
 
 ## Cap the nits
 
