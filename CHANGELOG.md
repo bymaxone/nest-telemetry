@@ -8,6 +8,19 @@ The `release.yml` workflow extracts the section matching the pushed `vX.Y.Z` tag
 as the GitHub Release body, so each released version needs a matching `## [X.Y.Z]`
 heading here.
 
+## [1.0.16] - 2026-11-27
+
+### Fixed
+
+- When the redaction of a span's exception text fails, a span whose status is not an error no longer gets the
+  status message `[redacted]`: it keeps its status code with no message. An error status says `[redacted]`
+  as before, and the events of the span are removed as before.
+
+### Documentation
+
+- The README states three more limits of the exception text redaction: a status code that cannot be read,
+  values that are not strings, and the time the redaction takes.
+
 ## [1.0.15] - 2026-11-27
 
 ### Added
@@ -710,6 +723,7 @@ First release.
 - Verification from the packed tarball: real `node --import` processes in a CommonJS and a native-ESM
   application, with planted secrets absent from the exported body and negative controls.
 
+[1.0.16]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.16
 [1.0.15]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.15
 [1.0.14]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.14
 [1.0.13]: https://github.com/bymaxone/nest-telemetry/releases/tag/v1.0.13
