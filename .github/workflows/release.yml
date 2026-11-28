@@ -80,11 +80,29 @@ jobs:
       version: ${{ steps.pack.outputs.version }}
     steps:
       - name: Harden runner
-        # Egress is audited, not blocked: the report lists every host the job reached, which is how a
-        # new outbound call from a dependency shows up.
+        # Egress is blocked: only the endpoints below, taken from the audit reports of the releases
+        # 1.0.8 to 1.0.16, can be reached (https://github.com/step-security/harden-runner). The
+        # harden-runner agent's own endpoints are always allowed.
+        # The hosts after the registry are the ones README.md links to, which the link check requests.
         uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            *.githubapp.com:443
+            *.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+            registry.npmjs.org:443
+            www.npmjs.com:443
+            jestjs.io:443
+            nestjs.com:443
+            nodejs.org:443
+            opentelemetry.io:443
+            pnpm.io:443
+            scorecard.dev:443
+            stryker-mutator.io:443
+            tsup.egoist.dev:443
+            www.typescriptlang.org:443
 
       - name: Require a version tag
         run: |
@@ -228,11 +246,20 @@ jobs:
       PACKAGE_NAME: '@bymax-one/nest-telemetry'
     steps:
       - name: Harden runner
-        # Egress is audited, not blocked: the report lists every host the job reached, which is how a
-        # new outbound call from a dependency shows up.
+        # Egress is blocked: only the endpoints below, taken from the audit reports of the releases
+        # 1.0.8 to 1.0.16, can be reached (https://github.com/step-security/harden-runner). The
+        # harden-runner agent's own endpoints are always allowed.
         uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            registry.npmjs.org:443
+            fulcio.sigstore.dev:443
+            rekor.sigstore.dev:443
+            *.githubapp.com:443
+            *.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
 
       # No checkout and no install in this job: nothing from the package runs while the token exists.
       - name: Setup Node.js

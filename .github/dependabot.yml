@@ -68,10 +68,11 @@ updates:
         update-types: [version-update:semver-major]
       - dependency-name: '@opentelemetry/*'
         update-types: [version-update:semver-major]
-      # TypeScript 6 and ESLint 10 are known to break the lint/typecheck gate and
-      # are intentionally held back until revisited.
+      # Held for the whole 1.x line: a major here is a dependency migration, and those are taken
+      # in 2.0.
       - dependency-name: typescript
         update-types: [version-update:semver-major]
+      # ESLint 10 breaks the lint gate: eslint-plugin-import accepts eslint up to 9.
       - dependency-name: eslint
         update-types: [version-update:semver-major]
       # `@types/node` majors track the Node release line. `engines` declares
@@ -123,7 +124,3 @@ updates:
       bymax-agents-sync:
         patterns:
           - 'bymaxone/.github/.github/workflows/agents-sync.yml'
-    ignore:
-      # A new major is a deliberate migration, never an automatic bump.
-      - dependency-name: 'bymaxone/.github*'
-        update-types: ['version-update:semver-major']
