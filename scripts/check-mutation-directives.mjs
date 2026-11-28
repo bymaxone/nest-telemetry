@@ -27,8 +27,13 @@
  * is happening, which on this repo is post-merge — too late to block the change.
  *
  * The mutator list is read from the installed Stryker. It lives behind an internal
- * path, so a failure to load it downgrades that single check to a notice rather than
- * failing the build on a Stryker upgrade.
+ * path, and a failure to load it fails the gate: without the list a directive that
+ * silences nothing would pass.
+ *
+ * The list is version-specific and is read from the Stryker installed in the tree under
+ * inspection. Instrumenter releases add and rename mutators, so the same directive can be
+ * valid in one repository and silence nothing in another; only that tree's own Stryker
+ * can say which.
  */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
@@ -61,24 +66,28 @@ const TOOL_DIRECTIVE_RE =
 /**
  * Resolves the mutator names the installed Stryker knows about.
  *
- * @returns {Promise<readonly string[] | null>} The names, or `null` when the internal
- *   module cannot be loaded — the caller then skips the name check.
+ * @returns {Promise<readonly string[]>} The names.
+ * @throws {Error} When the internal module cannot be loaded or exports no mutator.
  */
 async function loadMutatorNames() {
-  try {
-    const require = createRequire(import.meta.url)
-    // The instrumenter is a transitive dependency, so under pnpm's strict layout it is
-    // reachable from `core`'s own directory rather than from this package's root. `paths`
-    // entries are directories to start the `node_modules` walk from, hence the `dirname`.
-    const core = dirname(require.resolve('@stryker-mutator/core'))
-    const entry = require.resolve('@stryker-mutator/instrumenter', { paths: [core] })
-    const mutators = join(dirname(entry), 'mutators', 'index.js')
-    const module = await import(pathToFileURL(mutators).href)
-    const names = module.allMutators?.map((/** @type {{ name: string }} */ m) => m.name)
-    return Array.isArray(names) && names.length > 0 ? names : null
-  } catch {
-    return null
+  // Resolved from the tree being inspected, not from this file. The two differ the
+  // moment the script is run against another checkout, and then the mutator list
+  // comes from the wrong Stryker: a directive naming a mutator its own Stryker has
+  // and this one does not is reported as silencing nothing, which is a false
+  // positive of the most expensive kind -- acting on it deletes a working directive.
+  const require = createRequire(join(process.cwd(), 'package.json'))
+  // The instrumenter is a transitive dependency, so under pnpm's strict layout it is
+  // reachable from `core`'s own directory rather than from this package's root. `paths`
+  // entries are directories to start the `node_modules` walk from, hence the `dirname`.
+  const core = dirname(require.resolve('@stryker-mutator/core'))
+  const entry = require.resolve('@stryker-mutator/instrumenter', { paths: [core] })
+  const mutators = join(dirname(entry), 'mutators', 'index.js')
+  const module = await import(pathToFileURL(mutators).href)
+  const names = module.allMutators?.map((/** @type {{ name: string }} */ m) => m.name)
+  if (!Array.isArray(names) || names.length === 0) {
+    throw new Error('The installed Stryker instrumenter exports no mutator names.')
   }
+  return names
 }
 
 /**
@@ -103,8 +112,8 @@ function sourceFiles(dir) {
  * Collects every grammar violation in one file.
  *
  * @param {string} file Path to inspect.
- * @param {ReadonlySet<string> | null} knownMutators Lowercased mutator names Stryker accepts,
- *   or `null` to skip that check. A set, so the lookup does not rescan the list per directive.
+ * @param {ReadonlySet<string>} knownMutators Lowercased mutator names Stryker accepts.
+ *   A set, so the lookup does not rescan the list per directive.
  * @returns {Array<{ file: string, line: number, problem: string, hint: string }>} Violations found.
  */
 function inspect(file, knownMutators) {
@@ -137,7 +146,7 @@ function inspect(file, knownMutators) {
         })
         continue
       }
-      if (mutator === WILDCARD || !knownMutators) continue
+      if (mutator === WILDCARD) continue
       if (!knownMutators.has(mutator.toLowerCase())) {
         problems.push({
           ...at,
@@ -175,11 +184,7 @@ function inspect(file, knownMutators) {
 }
 
 const mutatorNames = await loadMutatorNames()
-if (!mutatorNames) {
-  console.log('• mutator names unavailable from the installed Stryker — skipping that check')
-}
-
-const knownMutators = mutatorNames ? new Set(mutatorNames.map((name) => name.toLowerCase())) : null
+const knownMutators = new Set(mutatorNames.map((name) => name.toLowerCase()))
 
 const problems = sourceFiles('src').flatMap((file) => inspect(file, knownMutators))
 
@@ -188,7 +193,7 @@ if (problems.length > 0) {
     console.error(`✖ ${file}:${line} — ${problem}`)
     console.error(`  ${hint}`)
   }
-  if (mutatorNames && problems.some(({ problem }) => problem.startsWith('unknown mutator'))) {
+  if (problems.some(({ problem }) => problem.startsWith('unknown mutator'))) {
     console.error(`\nMutators Stryker accepts: ${mutatorNames.join(', ')}`)
   }
   console.error(`\n${problems.length} malformed Stryker directive(s).`)
