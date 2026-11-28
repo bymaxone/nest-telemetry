@@ -379,10 +379,9 @@ export default [
   // spec blocks. Formatting has to be able to fail the build without dragging an
   // unrelated rule up with it.
   //
-  // `ci.yml` passes `run-format-check: false` and points here for the guarantee,
-  // so this rule is the only thing gating formatting in CI. It has to cover every
-  // path `pnpm lint` passes — a rule declared for a path the invocation never
-  // reaches gates nothing.
+  // The rule has to cover every path `pnpm lint` passes — a rule declared for a
+  // path the invocation never reaches gates nothing. `pnpm format:check` covers
+  // the file types eslint does not read.
   //
   // Options stay in `.prettierrc`; passing them here would let the two disagree.
   {
