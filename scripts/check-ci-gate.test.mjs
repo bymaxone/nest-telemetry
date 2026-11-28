@@ -40,6 +40,13 @@ function decide(results) {
 }
 
 describe('CI aggregate', () => {
+  // A condition on the job or on the deciding step would stop the script below from running at all.
+  it('always runs, and so does its deciding step', () => {
+    assert.match(JOB, /\n {4}if: always\(\)\n/)
+    const step = JOB.split(/\n {6}- /).at(-1)
+    assert.doesNotMatch(step, /^ {8}if:|^if:/m)
+  })
+
   // A job added to `needs` without a result variable would be waited for and never judged.
   it('reads the result of every job it needs', () => {
     assert.ok(NEEDS.length > 1, 'the needs list was found')

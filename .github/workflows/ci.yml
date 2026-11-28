@@ -126,8 +126,8 @@ jobs:
       - name: Bundle size budget
         run: pnpm size
 
-  # Dependency review needs the dependency graph: a public repository, or a private one with a
-  # paid licence, which is not purchased.
+  # Dependency review runs on a public repository, or on a private one with a paid licence,
+  # which is not purchased.
   security:
     if: github.event_name == 'pull_request' && github.event.repository.visibility == 'public'
     uses: bymaxone/.github/.github/workflows/security.yml@v1

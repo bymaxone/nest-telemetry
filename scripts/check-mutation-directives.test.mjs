@@ -1,6 +1,9 @@
 /**
- * Drives `check-mutation-directives.mjs` as a child process over throwaway source trees, and asserts
- * its exit status: the gate has to fail when it cannot check a directive, not only when one is wrong.
+ * @fileoverview Tests for the mutation-directive gate: it has to fail when it cannot check a
+ * directive, not only when one is wrong.
+ * @layer scripts
+ *
+ * Each case runs the real command against a throwaway source tree and reads its exit status.
  */
 
 import assert from 'node:assert/strict'
@@ -35,6 +38,25 @@ function project(mutators, { installed = true } = {}) {
   return root
 }
 
+/**
+ * A tree with stand-in Stryker packages whose mutator module is `mutators`, so a case can choose what
+ * the script reads from it.
+ */
+function projectWithStubStryker(mutators) {
+  const root = project('StringLiteral', { installed: false })
+  for (const [name, file, source] of [
+    ['core', 'index.js', ''],
+    ['instrumenter', 'index.js', ''],
+    ['instrumenter', 'mutators/index.js', mutators]
+  ]) {
+    const dir = join(root, 'node_modules', '@stryker-mutator', name)
+    mkdirSync(join(dir, 'mutators'), { recursive: true })
+    writeFileSync(join(dir, 'package.json'), '{ "type": "module", "main": "index.js" }')
+    writeFileSync(join(dir, file), source)
+  }
+  return root
+}
+
 /** Runs the script with `root` as the working directory. */
 function run(root) {
   const result = spawnSync(process.execPath, [SCRIPT], { cwd: root, encoding: 'utf8' })
@@ -64,3 +86,14 @@ test('fails when the mutator names cannot be loaded', () => {
   assert.equal(status, 1, output)
   assert.match(output, /Cannot find module '@stryker-mutator\/core'/)
 })
+
+for (const [shape, source] of [
+  ['an empty list', 'export const allMutators = []\n'],
+  ['no list', 'export const other = 1\n']
+]) {
+  test(`fails when the instrumenter exports ${shape} of mutators`, () => {
+    const { status, output } = run(projectWithStubStryker(source))
+    assert.equal(status, 1, output)
+    assert.match(output, /exports no mutator names/)
+  })
+}
