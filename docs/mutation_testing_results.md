@@ -36,7 +36,7 @@ call, a swapped literal). It is **killed** when a test fails because of it, and 
 the whole suite still passes.
 
 - **Static mutants** are changes to code that runs once at module load, such as a constant table.
-  Stryker cannot attribute a test to them, so it runs the whole suite for each one.
+  Stryker cannot attribute a test to them.
   `stryker.config.json` sets `ignoreStatic: false`, so they are judged like any other mutant. The
   run reported above had it on: its 81 ignored static mutants are counted there, not judged.
 - **Compile errors** are mutants the TypeScript checker rejects. They cannot run, so they are
