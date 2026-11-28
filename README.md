@@ -213,6 +213,12 @@ One limit of the default: when `OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT` cuts a text b
 
 Neither reaches other span attributes (`error.message`, `grpc.error_message`, SQL text), link attributes, span names or log records.
 
+Other limits of the redaction:
+
+- When the redaction fails and the status code of the span cannot be read, the status stays as it was, message included, in either mode; the events are still removed. This takes code in the process that replaced the status of the span object.
+- A status message that is not a string never passes `setStatus`, which drops it; one written onto the span object becomes `[redacted]` in either mode. By default, an `exception.message` or `exception.stacktrace` that is neither a string nor a list is exported as recorded.
+- The redaction runs as the span ends and has no time budget: its cost grows with the length of the recorded texts. With `redactExceptionText` on, a message is searched for only in a stack of up to 32,768 characters, and that search can cost the product of the two lengths.
+
 `ignoreIncomingRequest` must be synchronous, because the HTTP instrumentation reads its answer at once:
 
 - A promise, or any other object with a `then` method, does not ignore the request, whatever it settles with. Its rejection is absorbed, and the first one emits the `BYMAX_TELEMETRY_IGNORE_HOOK_ASYNC` warning.
