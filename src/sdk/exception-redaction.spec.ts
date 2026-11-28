@@ -297,7 +297,7 @@ describe('where redactStackText and redactParseErrorText look', () => {
   })
 
   it('reads an indented first line as the header and not as a frame', () => {
-    // Scenario: the message starts on a first line that looks like a frame, and imitates one below.
+    // Scenario: a first line a frame can be read in only from its second character, and one below.
     const stack = '     at SECRET\n    at hidden (a:1:1)\n    at real (a:1:1)'
 
     expect(redactStackText(stack, 'SECRET\n    at hidden (a:1:1)')).toBe(
@@ -462,6 +462,24 @@ describe('createExceptionTextRedactor', () => {
     expect(span.status).toEqual({ code: 2, message: '[redacted]' })
     expect(span.events).toEqual([])
   })
+
+  it.each([0, 1])(
+    'writes no status message on a status of code %p when the redaction fails',
+    (code) => {
+      // Scenario: only an error status says why; an unset or ok status gains no marker and keeps no text.
+      const span = fakeSpan(undefined, {
+        get 'exception.message'(): string {
+          throw new Error('unreadable')
+        }
+      })
+      span.status = { code, message: 'hunter2' } as SpanStatus
+
+      end(span, true)
+
+      expect(span.status).toStrictEqual({ code })
+      expect(span.events).toEqual([])
+    }
+  )
 
   it.each([
     [
