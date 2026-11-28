@@ -63,11 +63,13 @@ function run(root) {
   return { status: result.status, output: result.stdout + result.stderr }
 }
 
+// Scenario: a known mutator name with a reason is accepted.
 test('passes a directive that names a mutator the installed Stryker has', () => {
   const { status, output } = run(project('StringLiteral'))
   assert.equal(status, 0, output)
 })
 
+// Scenario: an unknown name silences nothing, so the gate fails and prints the accepted ones.
 test('fails a directive that names no known mutator, and lists the ones Stryker has', () => {
   const { status, output } = run(project('NoSuchMutator'))
   assert.equal(status, 1)
@@ -75,12 +77,14 @@ test('fails a directive that names no known mutator, and lists the ones Stryker 
   assert.match(output, /Mutators Stryker accepts: .*StringLiteral/)
 })
 
+// Scenario: a trailing comma leaves an empty entry in the list.
 test('fails a mutator list with a dangling comma', () => {
   const { status, output } = run(project('StringLiteral,'))
   assert.equal(status, 1)
   assert.match(output, /empty entry in the mutator list/)
 })
 
+// Scenario: a tree without Stryker gives no names to check against.
 test('fails when the mutator names cannot be loaded', () => {
   const { status, output } = run(project('StringLiteral', { installed: false }))
   assert.equal(status, 1, output)
@@ -91,6 +95,7 @@ for (const [shape, source] of [
   ['an empty list', 'export const allMutators = []\n'],
   ['no list', 'export const other = 1\n']
 ]) {
+  // Scenario: an instrumenter that yields no names would let every directive through unchecked.
   test(`fails when the instrumenter exports ${shape} of mutators`, () => {
     const { status, output } = run(projectWithStubStryker(source))
     assert.equal(status, 1, output)
