@@ -20,8 +20,8 @@ allowBuilds:
 overrides:
   # qs: minimum secure 6.16.1. Four advisories (GHSA-q8mj-m7cp-5q26, GHSA-x5fp-wj9c-mxmx,
   # GHSA-4mjr-xmp4-gh2g, GHSA-6pq8-jhm2-2vcw), the last of which sets the floor. Needed for one
-  # chain: @stryker-mutator/core asks typed-rest-client ~2.3.0, and typed-rest-client 2.3.1, the newest
-  # 2.3, pins qs 6.15.1 exactly. Recheck when Stryker widens that range (3.1.1 asks a fixed qs).
+  # chain: @stryker-mutator/core asks typed-rest-client ~2.3.0, which resolves to 2.3.1, and 2.3.1
+  # pins qs 6.15.1 exactly. Recheck when Stryker widens that range.
   # https://pnpm.io/settings/dependency-resolution#overrides
   # Dev-only: `dependencies` is empty and `files` ships only dist, LICENSE, README.md and
   # CHANGELOG.md.
