@@ -234,8 +234,6 @@ describe('redactStackText, with a message that also occurs in a frame', () => {
 })
 
 describe('redactStackText, with a stack cut short inside its message', () => {
-  const message = 'x\n    at hunter2:1:2\nand the rest of the message'
-
   it.each([
     ['after a line written like a frame', 'Error: x\n    at hunter2:1:2'],
     ['in the middle of that line', 'Error: x\n    at hunter2:1:2)']

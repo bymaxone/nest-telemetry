@@ -209,7 +209,11 @@ describe('enabling and disabling', () => {
     // Scenario: a second copy of the library registered its own handle under the same symbol;
     // shutting this SDK down must not clear that registration.
     const key = Symbol.for('@bymax-one/nest-telemetry/handle')
-    const other = { enabled: true, stopping: false, shutdown: () => Promise.resolve() }
+    const other = {
+      enabled: true,
+      stopping: false,
+      shutdown: (): Promise<void> => Promise.resolve()
+    }
     const store = globalThis as typeof globalThis & { [key]?: typeof other }
     const handle = await startTelemetry({ env: {} })
     store[key] = other

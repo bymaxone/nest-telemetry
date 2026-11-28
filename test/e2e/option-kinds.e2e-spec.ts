@@ -118,7 +118,7 @@ describe('startTelemetry in the real library, for an option of the wrong kind', 
   it.each([
     [
       'nested more than 16 levels deep',
-      () => {
+      (): unknown => {
         let inner: unknown = {}
         for (let level = 0; level < 17; level++) inner = { next: inner }
         return inner
@@ -127,22 +127,23 @@ describe('startTelemetry in the real library, for an option of the wrong kind', 
     ],
     [
       'holding more than 10,000 objects and lists',
-      () => Array.from({ length: 11 }, () => Array.from({ length: 999 }, () => ({}))),
+      (): {}[][] => Array.from({ length: 11 }, () => Array.from({ length: 999 }, () => ({}))),
       'at most 10,000 objects and lists in all'
     ],
     [
       'a list of more than 1000 entries',
-      () => ({ list: new Array(1001).fill(0) }),
+      (): { list: unknown[] } => ({ list: new Array(1001).fill(0) }),
       'a list of at most 1000'
     ],
     [
       'an object of more than 1000 entries',
-      () => Object.fromEntries(Array.from({ length: 1001 }, (_, i) => [`k${i}`, 0])),
+      (): { [k: string]: number } =>
+        Object.fromEntries(Array.from({ length: 1001 }, (_, i) => [`k${i}`, 0])),
       'an object of at most 1000 entries'
     ],
     [
       'a __proto__ key one level down',
-      () => JSON.parse('{"a":{"__proto__":1}}'),
+      (): unknown => JSON.parse('{"a":{"__proto__":1}}'),
       'free of a __proto__ key'
     ]
   ])('refuses a setting of an override %s', async (_label, build, words) => {

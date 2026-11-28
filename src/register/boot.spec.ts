@@ -191,7 +191,10 @@ describe('bootFromEnvironment', () => {
 
   describe('when the SDK cannot be started', () => {
     it.each([
-      ['rejects', () => Promise.reject(new Error('exporter initialization failed'))],
+      [
+        'rejects',
+        (): Promise<never> => Promise.reject(new Error('exporter initialization failed'))
+      ],
       [
         'throws before returning a promise',
         (): Promise<TelemetryHandle> => {

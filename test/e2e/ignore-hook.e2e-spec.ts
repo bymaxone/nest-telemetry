@@ -114,15 +114,16 @@ describe('the hook the instrumentation is configured with', () => {
   )
 
   it.each([
-    ['a promise', () => Promise.reject(new Error('rejected'))],
-    ['a thenable object', () => ({ then: (): void => undefined })],
+    ['a promise', (): Promise<never> => Promise.reject(new Error('rejected'))],
+    ['a thenable object', (): { then: () => void } => ({ then: (): void => undefined })],
     [
       'a thenable function',
-      () => Object.assign((): void => undefined, { then: (): void => undefined })
+      (): (() => void) & { then: () => void } =>
+        Object.assign((): void => undefined, { then: (): void => undefined })
     ],
     [
       'a thenable whose then throws',
-      () => ({
+      (): { then: () => never } => ({
         then: (): never => {
           throw new Error('broken')
         }
@@ -130,7 +131,7 @@ describe('the hook the instrumentation is configured with', () => {
     ],
     [
       'a thenable whose then is async and rejects',
-      () => ({
+      (): { then(): Promise<never> } => ({
         async then(): Promise<never> {
           throw new Error('rejected')
         }

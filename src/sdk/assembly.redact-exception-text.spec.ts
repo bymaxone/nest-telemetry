@@ -5,6 +5,7 @@
  */
 import { warnAboutRedactExceptionText } from './assembly'
 import { readTelemetryEnvironment } from './environment'
+import type { TelemetryEnvironment } from './environment'
 
 describe('warnAboutRedactExceptionText', () => {
   let emitWarning: jest.SpyInstance
@@ -13,7 +14,7 @@ describe('warnAboutRedactExceptionText', () => {
     emitWarning = jest.spyOn(process, 'emitWarning').mockImplementation(() => undefined)
   })
 
-  const env = (value: string) =>
+  const env = (value: string): TelemetryEnvironment =>
     readTelemetryEnvironment({ BYMAX_TELEMETRY_REDACT_EXCEPTION_TEXT: value })
 
   it('warns once for an unknown value that decides, without repeating it', () => {

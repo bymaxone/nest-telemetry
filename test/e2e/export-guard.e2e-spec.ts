@@ -99,7 +99,7 @@ describe('the export of the real exporter while a name is planted', () => {
     let count: number | undefined
     jest.isolateModules(() => {
       jest.doMock('node:vm', () => ({
-        runInNewContext: () => {
+        runInNewContext: (): never => {
           throw new Error('SECRET-FROM-THE-VM')
         }
       }))

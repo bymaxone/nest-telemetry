@@ -58,7 +58,7 @@ describe('a start whose packages or prototypes cannot be trusted', () => {
     // Scenario: the import of a package is compiled to Promise.resolve().then(...); with Promise.resolve replaced
     // the answer is not a native promise, so there is nothing to trust a value from and no SDK is built.
     const original = Promise.resolve
-    Promise.resolve = (() => ({ then: () => ({}) })) as unknown as typeof Promise.resolve
+    Promise.resolve = (() => ({ then: (): {} => ({}) })) as unknown as typeof Promise.resolve
     try {
       const handle = await startTelemetry({ env: {} })
       expect(handle.enabled).toBe(false)
@@ -120,7 +120,7 @@ describe('a guarded send that throws', () => {
         _delegate: { _transport: { _transport: { send: () => unknown } } }
       }
     )._delegate._transport._transport
-    inner.send = () => {
+    inner.send = (): never => {
       throw new Error('send threw')
     }
     guardExports(exporter)
@@ -139,7 +139,7 @@ describe('a guarded send that throws', () => {
         _delegate: { _transport: { _transport: { send: () => unknown } } }
       }
     )._delegate._transport._transport
-    inner.send = () => ({ status: 'success' })
+    inner.send = (): { status: string } => ({ status: 'success' })
     guardExports(exporter)
     const result = await new Promise<{ code: number }>((resolve) => exporter.export([], resolve))
     expect(result.code).toBe(0)
@@ -154,7 +154,9 @@ describe('a guarded send that throws', () => {
         _delegate: { _transport: { _transport: { _parameters: { headers: () => unknown } } } }
       }
     )._delegate._transport._transport._parameters
-    parameters.headers = () => ({
+    parameters.headers = (): {
+      then: (resolve: (value: Record<string, string>) => void) => void
+    } => ({
       then: (resolve: (value: Record<string, string>) => void): void => resolve({ 'x-host': 'yes' })
     })
     guardExports(exporter)
@@ -362,7 +364,8 @@ describe('a guarded send and its providers beside a promise that cannot be consu
     // answer is dropped with the pollution error and nothing of it is used.
     const exporter = new OTLPTraceExporter({ url: 'http://127.0.0.1:1/v1/traces' })
     const transport = transportOf(exporter)
-    transport._parameters['headers'] = () => unconsumablePromise<unknown>((resolve) => resolve({}))
+    transport._parameters['headers'] = (): Promise<unknown> =>
+      unconsumablePromise<unknown>((resolve) => resolve({}))
     guardExports(exporter)
     exporter.export([], () => undefined)
     const answer = transport._parameters['headers']?.() as Promise<unknown>
@@ -374,7 +377,8 @@ describe('a guarded send and its providers beside a promise that cannot be consu
     // constructor of its own before it waits, so the getter is not read and the transport's result arrives.
     const exporter = new OTLPTraceExporter({ url: 'http://127.0.0.1:1/v1/traces' })
     const transport = transportOf(exporter)
-    transport.send = () => unconsumablePromise<unknown>((resolve) => resolve({ status: 'success' }))
+    transport.send = (): Promise<unknown> =>
+      unconsumablePromise<unknown>((resolve) => resolve({ status: 'success' }))
     guardExports(exporter)
     exporter.export([], () => undefined)
     const result = (await transport.send('data', 1)) as { status: string }
@@ -386,7 +390,8 @@ describe('a guarded send and its providers beside a promise that cannot be consu
     // the `then` captured at load, and the transport's result arrives.
     const exporter = new OTLPTraceExporter({ url: 'http://127.0.0.1:1/v1/traces' })
     const transport = transportOf(exporter)
-    transport.send = () => Object.freeze(Promise.resolve({ status: 'success' }))
+    transport.send = (): Readonly<Promise<{ status: string }>> =>
+      Object.freeze(Promise.resolve({ status: 'success' }))
     guardExports(exporter)
     exporter.export([], () => undefined)
     const result = (await transport.send('data', 1)) as { status: string }
@@ -398,7 +403,7 @@ describe('a guarded send and its providers beside a promise that cannot be consu
     // tagged or awaited natively, so it is waited for through the `then` captured at load, and its result arrives.
     const exporter = new OTLPTraceExporter({ url: 'http://127.0.0.1:1/v1/traces' })
     const transport = transportOf(exporter)
-    transport.send = () =>
+    transport.send = (): Readonly<Promise<{ status: string }>> =>
       Object.freeze(
         Object.defineProperty(Promise.resolve({ status: 'success' }), 'constructor', {
           value: function Other(): void {}
@@ -415,7 +420,7 @@ describe('a guarded send and its providers beside a promise that cannot be consu
     // it cannot be tagged and cannot be waited for, so the send rejects with the pollution error and nothing of it is used.
     const exporter = new OTLPTraceExporter({ url: 'http://127.0.0.1:1/v1/traces' })
     const transport = transportOf(exporter)
-    transport.send = () => {
+    transport.send = (): Promise<{ status: string }> => {
       const sent = Promise.resolve({ status: 'success' })
       Object.defineProperty(sent, 'constructor', {
         get: (): never => {
@@ -436,7 +441,7 @@ describe('a guarded send and its providers beside a promise that cannot be consu
     // turns the result into the refusal.
     const exporter = new OTLPTraceExporter({ url: 'http://127.0.0.1:1/v1/traces' })
     const transport = transportOf(exporter)
-    transport.send = () =>
+    transport.send = (): Promise<unknown> =>
       new Promise((resolve) => {
         setTimeout(() => {
           Object.defineProperty(Object.prototype, 'zzPlantedLate', {

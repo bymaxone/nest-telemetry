@@ -4,6 +4,7 @@
  * @layer e2e
  */
 import { context, propagation, SpanStatusCode, trace } from '@opentelemetry/api'
+import type { Span } from '@opentelemetry/api'
 
 import { shutdownTelemetry, startTelemetry } from '@bymax-one/nest-telemetry'
 import type { TelemetryOptions } from '@bymax-one/nest-telemetry'
@@ -394,7 +395,7 @@ describe('values and failures the SDK lets through', () => {
     const started = await startTelemetry({ env: {}, redactExceptionText: true })
     const span = trace.getTracer('e2e').startSpan('wrapped')
     span.setStatus({ code: SpanStatusCode.ERROR, message: SECRET })
-    span.setStatus = () => span
+    span.setStatus = (): Span => span
 
     span.end()
     await started.shutdown()

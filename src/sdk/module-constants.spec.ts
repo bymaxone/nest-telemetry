@@ -5,11 +5,13 @@
  */
 import type { Attributes } from '@opentelemetry/api'
 
-jest.mock('@opentelemetry/sdk-node', () => ({ NodeSDK: function () {} }))
-jest.mock('@opentelemetry/sdk-trace', () => ({ BatchSpanProcessor: function () {} }))
-jest.mock('@opentelemetry/exporter-trace-otlp-http', () => ({ OTLPTraceExporter: function () {} }))
+jest.mock('@opentelemetry/sdk-node', () => ({ NodeSDK: function (): void {} }))
+jest.mock('@opentelemetry/sdk-trace', () => ({ BatchSpanProcessor: function (): void {} }))
+jest.mock('@opentelemetry/exporter-trace-otlp-http', () => ({
+  OTLPTraceExporter: function (): void {}
+}))
 jest.mock('@opentelemetry/auto-instrumentations-node', () => ({
-  getNodeAutoInstrumentations: () => []
+  getNodeAutoInstrumentations: (): never[] => []
 }))
 jest.mock('@opentelemetry/resources', () => ({}))
 
@@ -84,7 +86,7 @@ function shapedExporter(): { exporter: object; base: object; transport: object }
 describe('the constants of the export guard', () => {
   it('marks the wrapped base class and the armed transport under their registry symbols', async () => {
     // Scenario: a second copy of the library finds the first one's work through these two symbols alone.
-    jest.doMock('./prototype-guard', () => ({ pollutedNames: () => 0 }))
+    jest.doMock('./prototype-guard', () => ({ pollutedNames: (): 0 => 0 }))
     const { guardExports } = await import('./export-guard')
     const { exporter, base, transport } = shapedExporter()
     guardExports(exporter)
@@ -95,7 +97,7 @@ describe('the constants of the export guard', () => {
 
   it('drops a batch with the message that names the change', async () => {
     // Scenario: the batch is dropped while the process is polluted, and the failure says why in these exact words.
-    jest.doMock('./prototype-guard', () => ({ pollutedNames: () => 1 }))
+    jest.doMock('./prototype-guard', () => ({ pollutedNames: (): 1 => 1 }))
     const { guardExports } = await import('./export-guard')
     const { exporter } = shapedExporter()
     guardExports(exporter)

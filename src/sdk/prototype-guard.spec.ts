@@ -31,7 +31,7 @@ describe('pollutedNames', () => {
       { value: 1, enumerable: true, writable: true }
     ],
     ['a name that is not enumerable', { value: 1, writable: true }],
-    ['an accessor', { get: () => 1 }],
+    ['an accessor', { get: (): 1 => 1 }],
     ['a read-only name', { value: 1 }]
   ])('counts a planted name: %s', (_label, descriptor) => {
     // Scenario: any string name the engine does not define counts once, whatever its flags.
@@ -445,7 +445,8 @@ describe('the built-ins that the SDK calls on a decision path', () => {
           ...original,
           value: function Host(): void {}
         })
-        return () => Object.defineProperty(Promise.prototype, 'constructor', original)
+        return (): Promise<unknown> =>
+          Object.defineProperty(Promise.prototype, 'constructor', original)
       })
       expect(count).toBeGreaterThan(0)
     })
@@ -458,7 +459,8 @@ describe('the built-ins that the SDK calls on a decision path', () => {
         const host = function Host(): void {}
         host.prototype = Promise.prototype
         Object.defineProperty(Promise.prototype, 'constructor', { ...original, value: host })
-        return () => Object.defineProperty(Promise.prototype, 'constructor', original)
+        return (): Promise<unknown> =>
+          Object.defineProperty(Promise.prototype, 'constructor', original)
       })
       expect(count).toBeGreaterThan(0)
     })
@@ -469,7 +471,8 @@ describe('the built-ins that the SDK calls on a decision path', () => {
       const original = slot()
       const count = countedAfterLoad(() => {
         Reflect.deleteProperty(Promise.prototype, 'constructor')
-        return () => Object.defineProperty(Promise.prototype, 'constructor', original)
+        return (): Promise<unknown> =>
+          Object.defineProperty(Promise.prototype, 'constructor', original)
       })
       expect(count).toBeGreaterThan(0)
     })
@@ -481,7 +484,7 @@ describe('the built-ins that the SDK calls on a decision path', () => {
       class Zoneish extends (real as unknown as new (executor: () => void) => object) {}
       const count = countedAfterLoad(() => {
         globalThis.Promise = Zoneish as unknown as PromiseConstructor
-        return () => {
+        return (): void => {
           globalThis.Promise = real
         }
       })

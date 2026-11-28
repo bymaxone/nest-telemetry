@@ -26,31 +26,39 @@ const mockOtlpExporter = jest.fn((..._args: unknown[]) => ({
   kind: 'exporter',
   export: jest.fn((_spans: unknown, done: (result: { code: number }) => void) => done({ code: 1 }))
 }))
-const mockAutoInstrumentations = jest.fn((..._args: unknown[]) => [{ getConfig: () => ({}) }])
+const mockAutoInstrumentations = jest.fn((..._args: unknown[]) => [{ getConfig: (): {} => ({}) }])
 const mockResourceFromAttributes = jest.fn((..._args: unknown[]) => ({ kind: 'resource' }))
 const mockWinstonTransportCheck = jest.fn((..._args: unknown[]) => undefined)
 
 jest.mock('./winston-transport', () => ({
-  warnAboutMissingWinstonTransport: (...args: unknown[]) => mockWinstonTransportCheck(...args)
+  warnAboutMissingWinstonTransport: (...args: unknown[]): undefined =>
+    mockWinstonTransportCheck(...args)
 }))
 
 jest.mock('@opentelemetry/sdk-node', () => ({
-  NodeSDK: function (...args: unknown[]) {
+  NodeSDK: function (...args: unknown[]): {
+    start: jest.Mock<void, [], unknown>
+    shutdown: jest.Mock<Promise<void>, [], unknown>
+  } {
     return mockNodeSdk(...args)
   }
 }))
 jest.mock('@opentelemetry/sdk-trace', () => ({
-  BatchSpanProcessor: function (...args: unknown[]) {
+  BatchSpanProcessor: function (...args: unknown[]): { kind: string } {
     return mockBatchSpanProcessor(...args)
   }
 }))
 jest.mock('@opentelemetry/exporter-trace-otlp-http', () => ({
-  OTLPTraceExporter: function (...args: unknown[]) {
+  OTLPTraceExporter: function (...args: unknown[]): {
+    kind: string
+    export: jest.Mock<void, [_spans: unknown, done: (result: { code: number }) => void], unknown>
+  } {
     return mockOtlpExporter(...args)
   }
 }))
 jest.mock('@opentelemetry/auto-instrumentations-node', () => ({
-  getNodeAutoInstrumentations: (...args: unknown[]) => mockAutoInstrumentations(...args)
+  getNodeAutoInstrumentations: (...args: unknown[]): { getConfig: () => {} }[] =>
+    mockAutoInstrumentations(...args)
 }))
 jest.mock('@opentelemetry/resources', () => {
   const detector = (name: string): { name: string; detect: () => { attributes: object } } => ({
@@ -64,7 +72,8 @@ jest.mock('@opentelemetry/resources', () => {
     })
   })
   return {
-    resourceFromAttributes: (...args: unknown[]) => mockResourceFromAttributes(...args),
+    resourceFromAttributes: (...args: unknown[]): { kind: string } =>
+      mockResourceFromAttributes(...args),
     envDetector: detector('env'),
     hostDetector: detector('host'),
     osDetector: detector('os'),

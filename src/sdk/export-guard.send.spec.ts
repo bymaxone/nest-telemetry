@@ -207,7 +207,7 @@ describe('the settling of a guarded send', () => {
     // Scenario: a provider answers with a thenable that is not a promise; the guard adopts it into a promise it made,
     // which has its own constructor, so a throwing getter on the prototype is not reached and the value arrives.
     const guarded = exporterSending(() => ({ status: 'success' }), {
-      headers: () => ({ then: (resolve: (value: unknown) => void) => resolve({ a: '1' }) })
+      headers: () => ({ then: (resolve: (value: unknown) => void): void => resolve({ a: '1' }) })
     })
     const settled = whileConstructorThrows(() => guarded._parameters['headers']?.())
     await expect(settled).resolves.toEqual({ a: '1' })
@@ -248,7 +248,7 @@ describe('the settling of a guarded send', () => {
   it('hands back a provider answer that the transport awaits after the constructor was replaced', async () => {
     // Scenario: the request awaits the headers the guarded provider returned for a thenable, under the replaced slot.
     const guarded = exporterSending(() => ({ status: 'success' }), {
-      headers: () => ({ then: (resolve: (value: unknown) => void) => resolve({ a: '1' }) })
+      headers: () => ({ then: (resolve: (value: unknown) => void): void => resolve({ a: '1' }) })
     })
     const answer = guarded._parameters['headers']?.() as Promise<unknown>
     await expect(awaitedWhileConstructorThrows(answer)).resolves.toEqual({ a: '1' })

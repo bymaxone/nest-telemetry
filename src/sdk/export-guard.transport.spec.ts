@@ -245,7 +245,7 @@ describe('a transport behind a guarded exporter', () => {
     // Scenario: a mark that is an accessor, or a data property holding anything but true, does not say the class is
     // wrapped, so the class is wrapped.
     for (const mark of [
-      { get: () => true, configurable: true },
+      { get: (): boolean => true, configurable: true },
       { value: 'yes', configurable: true },
       { value: false, configurable: true }
     ]) {
@@ -289,7 +289,9 @@ describe('a transport behind a guarded exporter', () => {
     /** An exporter whose transport holds one provider, armed by an export, and that provider as the guard wrapped it. */
     function armed(provider: (...args: unknown[]) => unknown): () => unknown {
       class Base {
-        _delegate = { _transport: { send: () => undefined, _parameters: { headers: provider } } }
+        _delegate = {
+          _transport: { send: (): undefined => undefined, _parameters: { headers: provider } }
+        }
         export(_items: unknown, done: Done): void {
           done({ code: 0 })
         }

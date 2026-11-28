@@ -21,7 +21,9 @@ function countedWith(promiseSource: (planted: unknown) => string, plant: () => (
   try {
     jest.isolateModules(() => {
       const planted = Object.getOwnPropertyDescriptor(Promise.prototype, 'constructor')?.value
-      jest.doMock('node:vm', () => ({ runInNewContext: () => real(promiseSource(planted)) }))
+      jest.doMock('node:vm', () => ({
+        runInNewContext: (): object => real(promiseSource(planted))
+      }))
       const guard = require('./prototype-guard') as { pollutedNames: typeof PollutedNames }
       count = guard.pollutedNames()
     })
@@ -42,7 +44,7 @@ describe('the check of Promise.prototype.constructor', () => {
     expect(
       countedWith(
         () => engineSource,
-        () => () => undefined
+        () => (): undefined => undefined
       )
     ).toBe(0)
   })
@@ -53,7 +55,7 @@ describe('the check of Promise.prototype.constructor', () => {
     expect(
       countedWith(
         () => 'function Promise() { [tampered] }',
-        () => () => undefined
+        () => (): undefined => undefined
       )
     ).toBe(1)
   })

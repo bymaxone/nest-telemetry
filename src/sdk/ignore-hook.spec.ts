@@ -111,9 +111,9 @@ describe('guardIgnoreHook', () => {
   type Settle = (value: unknown) => void
 
   it.each<[string, (onValue: Settle, onReason: Settle) => unknown]>([
-    ['returns from its then', () => Promise.reject(new Error('returned'))],
-    ['resolves with', (onValue) => onValue(Promise.reject(new Error('resolved')))],
-    ['rejects with', (_onValue, onReason) => onReason(Promise.reject(new Error('reason')))]
+    ['returns from its then', (): Promise<never> => Promise.reject(new Error('returned'))],
+    ['resolves with', (onValue): void => onValue(Promise.reject(new Error('resolved')))],
+    ['rejects with', (_onValue, onReason): void => onReason(Promise.reject(new Error('reason')))]
   ])('takes the rejection of a promise that a thenable %s', async (_how, then) => {
     // Scenario: the thenable only does this because the guard called its then, so the guard takes it.
     const unhandled = jest.fn()

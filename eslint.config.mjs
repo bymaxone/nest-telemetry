@@ -283,7 +283,7 @@ export default [
     }
   },
 
-  // Test files — Jest + Node globals, relaxed rules.
+  // Test files — Jest + Node globals, with the type rules of the production block.
   {
     // `**/*.spec.ts` does not match `foo.e2e-spec.ts` — a glob needs the literal
     // `.spec.ts`, and the hyphen breaks it. Unmatched, those files reach no block
@@ -305,14 +305,24 @@ export default [
         ...globals.node
       }
     },
+    plugins: { '@typescript-eslint': tsPlugin },
+    // The core `no-undef` and `no-unused-vars` stay off for TypeScript, as typescript-eslint
+    // documents: the compiler reports the first, and the extension rule replaces the second.
     rules: {
-      '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/explicit-function-return-type': 'off',
-      '@typescript-eslint/explicit-module-boundary-types': 'off',
-      '@typescript-eslint/no-unused-vars': 'off',
-      'no-unused-vars': 'off',
       'no-undef': 'off',
-      'no-console': 'off'
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_'
+        }
+      ],
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/explicit-function-return-type': 'error',
+      '@typescript-eslint/explicit-module-boundary-types': 'error',
+      'no-console': ['error', { allow: ['warn', 'error'] }]
     }
   },
 

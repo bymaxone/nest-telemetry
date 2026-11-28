@@ -26,13 +26,13 @@ function fakeExporter(): {
   }
   return {
     exporter,
-    get next() {
+    get next(): ExportOutcome {
       return state.next
     },
     set next(value: ExportOutcome) {
       state.next = value
     },
-    get calls() {
+    get calls(): number {
       return state.calls
     }
   }

@@ -6,7 +6,7 @@
 import { codeOf, describeFailure } from './error-code'
 
 const throwing = {
-  toString: () => {
+  toString: (): never => {
     throw new Error('boom')
   }
 }
@@ -27,7 +27,7 @@ describe('codeOf', () => {
     ['a code object without a prototype', { code: Object.create(null) }, 'UNKNOWN'],
     [
       'a code object that converts to a valid token',
-      { code: { toString: () => 'ECONNREFUSED' } },
+      { code: { toString: (): string => 'ECONNREFUSED' } },
       'UNKNOWN'
     ],
     ['no code', {}, 'UNKNOWN']
@@ -82,7 +82,7 @@ describe('describeFailure', () => {
     ['an object with a message that is not text', { message: 42 }],
     [
       'an object whose message is not text but prints as a package name',
-      { message: { toString: () => '@opentelemetry/api' } }
+      { message: { toString: (): string => '@opentelemetry/api' } }
     ],
     [
       'an object whose message getter throws',
