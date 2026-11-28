@@ -27,8 +27,8 @@
  * is happening, which on this repo is post-merge — too late to block the change.
  *
  * The mutator list is read from the installed Stryker. It lives behind an internal
- * path, so a failure to load it downgrades that single check to a notice rather than
- * failing the build on a Stryker upgrade.
+ * path, so a Stryker upgrade can move it. The gate then fails: without the list it cannot
+ * tell a directive that silences nothing from one that works.
  */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
@@ -62,7 +62,7 @@ const TOOL_DIRECTIVE_RE =
  * Resolves the mutator names the installed Stryker knows about.
  *
  * @returns {Promise<readonly string[] | null>} The names, or `null` when the internal
- *   module cannot be loaded — the caller then skips the name check.
+ *   module cannot be loaded — the caller then fails the gate.
  */
 async function loadMutatorNames() {
   try {
@@ -103,8 +103,8 @@ function sourceFiles(dir) {
  * Collects every grammar violation in one file.
  *
  * @param {string} file Path to inspect.
- * @param {ReadonlySet<string> | null} knownMutators Lowercased mutator names Stryker accepts,
- *   or `null` to skip that check. A set, so the lookup does not rescan the list per directive.
+ * @param {ReadonlySet<string>} knownMutators Lowercased mutator names Stryker accepts. A set,
+ *   so the lookup does not rescan the list per directive.
  * @returns {Array<{ file: string, line: number, problem: string, hint: string }>} Violations found.
  */
 function inspect(file, knownMutators) {
@@ -137,7 +137,7 @@ function inspect(file, knownMutators) {
         })
         continue
       }
-      if (mutator === WILDCARD || !knownMutators) continue
+      if (mutator === WILDCARD) continue
       if (!knownMutators.has(mutator.toLowerCase())) {
         problems.push({
           ...at,
@@ -176,10 +176,11 @@ function inspect(file, knownMutators) {
 
 const mutatorNames = await loadMutatorNames()
 if (!mutatorNames) {
-  console.log('• mutator names unavailable from the installed Stryker — skipping that check')
+  console.error('✖ mutator names unavailable from the installed Stryker — cannot check directives')
+  process.exit(1)
 }
 
-const knownMutators = mutatorNames ? new Set(mutatorNames.map((name) => name.toLowerCase())) : null
+const knownMutators = new Set(mutatorNames.map((name) => name.toLowerCase()))
 
 const problems = sourceFiles('src').flatMap((file) => inspect(file, knownMutators))
 
@@ -188,7 +189,7 @@ if (problems.length > 0) {
     console.error(`✖ ${file}:${line} — ${problem}`)
     console.error(`  ${hint}`)
   }
-  if (mutatorNames && problems.some(({ problem }) => problem.startsWith('unknown mutator'))) {
+  if (problems.some(({ problem }) => problem.startsWith('unknown mutator'))) {
     console.error(`\nMutators Stryker accepts: ${mutatorNames.join(', ')}`)
   }
   console.error(`\n${problems.length} malformed Stryker directive(s).`)
