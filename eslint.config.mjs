@@ -376,7 +376,7 @@ export default [
   },
 
   // The two files that copy a regular expression the host gave. `detect-non-literal-regexp` reports
-  // any `new RegExp` whose source is not a literal, and a copy has the host's source by definition:
+  // a `new RegExp` whose source is not static, and a copy has the host's source by definition:
   // it cannot be written as a literal, and escaping it would change what it matches
   // (https://github.com/eslint-community/eslint-plugin-security/blob/main/docs/rules/detect-non-literal-regexp.md).
   // See docs/lint-exceptions.md.
